@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Plus, LayoutGrid, List, Search } from 'lucide-react'
 import { clsx } from 'clsx'
 import { CardGrid } from '@/components/content/CardGrid'
 import { CardList } from '@/components/content/CardList'
-import { CardModal } from '@/components/content/CardModal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createClient } from '@/lib/supabase/client'
@@ -27,11 +27,12 @@ const STATUS_FILTERS: { value: ContentStatus | 'all'; label: string }[] = [
 
 const SEARCH_PLACEHOLDER = '\uCF58\uD150\uCE20 \uAC80\uC0C9...'
 const NEW_CONTENT_LABEL = '\uC0C8 \uCF58\uD150\uCE20'
+const PREVIEW_LABEL = '\uC5D0\uB514\uD130 \uBBF8\uB9AC\uBCF4\uAE30'
 
 export default function ContentPage() {
+  const router = useRouter()
   const [view, setView] = useState<ViewMode>('grid')
   const [cards, setCards] = useState<ContentCard[]>([])
-  const [selectedCard, setSelectedCard] = useState<ContentCard | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContentStatus | 'all'>('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -57,9 +58,8 @@ export default function ContentPage() {
     return matchStatus && matchSearch
   })
 
-  const handleCardUpdate = (updated: ContentCard) => {
-    setCards((prev) => prev.map((card) => (card.id === updated.id ? updated : card)))
-    setSelectedCard(updated)
+  const openDetail = (card: ContentCard) => {
+    router.push(`/content/${card.id}`)
   }
 
   return (
@@ -152,18 +152,26 @@ export default function ContentPage() {
         <div className="flex items-center justify-center rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] py-24">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
+      ) : cards.length === 0 ? (
+        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-20 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
+            +
+          </div>
+          <p className="text-sm font-medium text-[var(--color-text-primary)]">콘텐츠가 없습니다</p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            목록은 비어 있지만, 글 작성 화면 shell은 바로 미리볼 수 있습니다.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <Button size="sm" onClick={() => router.push('/content/preview')}>
+              {PREVIEW_LABEL}
+            </Button>
+          </div>
+        </div>
       ) : view === 'grid' ? (
-        <CardGrid cards={filtered} onCardClick={setSelectedCard} />
+        <CardGrid cards={filtered} onCardClick={openDetail} />
       ) : (
-        <CardList cards={filtered} onCardClick={setSelectedCard} />
+        <CardList cards={filtered} onCardClick={openDetail} />
       )}
-
-      <CardModal
-        card={selectedCard}
-        isOpen={!!selectedCard}
-        onClose={() => setSelectedCard(null)}
-        onUpdate={handleCardUpdate}
-      />
     </div>
   )
 }
