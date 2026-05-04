@@ -22,12 +22,12 @@ export function Input({ label, error, className, id, ...props }: InputProps) {
           'outline-none transition-[background-color,border-color,color,box-shadow]',
           'focus-visible:border-[var(--color-accent)] focus-visible:[box-shadow:var(--focus-ring)]',
           'disabled:cursor-not-allowed disabled:bg-[var(--color-bg-subtle)] disabled:text-[var(--color-text-muted)]',
-          error && 'border-red-300 focus-visible:border-red-400 focus-visible:[box-shadow:0_0_0_2px_rgb(248_113_113_/_0.15)]',
+          error && 'border-[var(--color-danger)] focus-visible:border-[var(--color-danger-hover)] focus-visible:[box-shadow:0_0_0_2px_color-mix(in_srgb,var(--color-danger)_16%,transparent)]',
           className
         )}
         {...props}
       />
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-[var(--color-danger)]">{error}</p>}
     </div>
   )
 }
