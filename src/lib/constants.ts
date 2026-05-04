@@ -21,10 +21,10 @@ export const STATUS_COLORS: Record<ContentStatus, string> = {
 export const STATUS_LABELS: Record<ContentStatus, string> = {
   idea: '\uC544\uC774\uB514\uC5B4',
   planning: '\uAE30\uD68D\uC911',
-  writing: '\uC791\uC131\uC911',
+  writing: '\uC784\uC2DC\uC800\uC7A5',
   review: '\uAC80\uC218\uC911',
   scheduled: '\uC608\uC57D',
-  published: '\uBC1C\uD589',
+  published: '\uC644\uB8CC',
   hold: '\uBCF4\uB958',
 }
 

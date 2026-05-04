@@ -591,3 +591,9 @@ module.exports = {
 ```
 
 > **Posty Runtime Color Note:** Figma 추출 문서의 grayscale brand 설명과 별개로, 현재 Posty 런타임 token은 Airbnb 기준 색상을 사용합니다. Primary/CTA는 `#ff385c`, active는 `#e00b41`, accent soft/disabled는 `#ffd1da`를 기준으로 맞춥니다.
+## 14. Wrapper Policy
+
+의미 없는 wrapper box/card 금지.
+검색/필터/액션 버튼을 단순히 묶기 위해 큰 border box, rounded card, 배경 박스를 만들지 않는다.
+카드는 실제 콘텐츠, 패널, 모달, empty state처럼 독립된 의미가 있는 영역에만 사용한다.
+페이지 상단 toolbar는 여백과 정렬로 구분하고, 불필요한 외곽 박스를 만들지 않는다.

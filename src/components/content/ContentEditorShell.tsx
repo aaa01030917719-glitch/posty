@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckSquare,
@@ -13,18 +14,9 @@ import {
   X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import {
-  CHANNEL_COLORS,
-  STATUS_COLORS,
-  STATUS_LABELS,
-} from '@/lib/constants'
+import { CHANNEL_COLORS } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
-import type {
-  ChecklistItem,
-  ContentCard,
-  ContentStatus,
-  Script,
-} from '@/lib/types'
+import type { ChecklistItem, ContentCard, Script } from '@/lib/types'
 
 interface ContentEditorShellProps {
   cardId: string
@@ -52,16 +44,6 @@ const PREVIEW_IDS = new Set(['preview', 'demo'])
 const DEFAULT_PANEL_TITLE = '대본'
 const EDITOR_PLACEHOLDER = '원고를 작성해보세요...'
 const EMPTY_SECTION_MESSAGE = '아직 입력된 내용이 없습니다.'
-const EDITABLE_STATUSES: ContentStatus[] = [
-  'idea',
-  'planning',
-  'writing',
-  'review',
-  'scheduled',
-  'published',
-  'hold',
-]
-
 const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
   { value: 'body', label: '원고' },
   { value: 'scenes', label: '대본' },
@@ -82,10 +64,10 @@ const SAMPLE_CARD: ContentCard = {
   priority: 'normal',
   scheduled_at: '2026-05-07T09:00:00+09:00',
   published_at: null,
-  memo: '후킹 문장은 더 짧게 다듬고, 마지막 CTA는 저장 유도형으로 정리합니다.',
+  memo: '후킹 문장을 더 짧게 정리하고 마지막 CTA를 자연스럽게 마무리합니다.',
   reference_url: 'https://example.com/reference',
   checklist: [
-    { id: 'check-1', text: '후킹 문장 확정', done: true },
+    { id: 'check-1', text: '후킹 문장 정리', done: true },
     { id: 'check-2', text: '썸네일 문구 검토', done: false },
     { id: 'check-3', text: '캡션과 해시태그 정리', done: false },
   ],
@@ -107,17 +89,17 @@ const SAMPLE_SCRIPT: Script = {
   user_id: 'preview-user',
   card_id: 'preview',
   title: '인스타 릴스 0504 원고',
-  body: `요즘 들어 아침마다 더 피곤한 느낌이 있죠.
+  body: `요즘 들어 아침마다 일이 늘어나는 느낌이 있죠.
 
-물 한 잔을 마시면서 오늘 꼭 해야 할 일 세 가지만 정리해 보세요.
+무엇부터 손대야 할지 막막할 때는 해야 할 일을 세 가지로만 나눠보세요.
 
-해야 할 것, 하면 좋은 것, 하지 않을 것을 먼저 나누면 하루가 훨씬 선명해집니다.
+무조건 더 열심히 하는 것보다 먼저 하지 않을 것을 정리하면 하루가 훨씬 또렷해집니다.
 
-지금 메모장에 세 줄만 적어도 오늘의 집중력이 달라질 수 있어요.`,
+지금 메모장에 딱 세 줄만 적어도 오늘은 집중력이 달라질 수 있어요.`,
   caption:
-    '오늘 해야 할 일을 다 적으려 하지 말고, 꼭 끝낼 세 가지만 남겨보세요. 하루의 밀도가 달라집니다.',
+    '오늘 해야 할 일을 무작정 늘리지 말고, 꼭 해야 할 세 가지부터 정리해보세요. 하루의 밀도가 달라집니다.',
   hashtags: '#생산성 #업무관리 #콘텐츠기획 #릴스아이디어',
-  cta: '저장해두고 내일 아침에도 다시 꺼내보세요.',
+  cta: '저장해두고 오늘 할 일 점검에도 다시 꺼내보세요.',
   thumbnail_text: '오늘 할 일 3가지',
   panel_title: '릴스 대본',
   is_final: false,
@@ -148,12 +130,14 @@ function formatDate(value: string | null, withTime = false) {
   }
 }
 
-function toDatetimeLocal(value: string | null) {
-  if (!value) return ''
+function splitScheduledFields(value: string | null) {
+  if (!value) return { date: '', time: '' }
 
   const date = new Date(value)
 
-  if (Number.isNaN(date.getTime())) return ''
+  if (Number.isNaN(date.getTime())) {
+    return { date: '', time: '' }
+  }
 
   const year = date.getFullYear()
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -161,13 +145,18 @@ function toDatetimeLocal(value: string | null) {
   const hours = `${date.getHours()}`.padStart(2, '0')
   const minutes = `${date.getMinutes()}`.padStart(2, '0')
 
-  return `${year}-${month}-${day}T${hours}:${minutes}`
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hours}:${minutes}`,
+  }
 }
 
-function toIsoFromDatetimeLocal(value: string) {
-  if (!value) return null
+function toIsoFromScheduledFields(dateValue: string, timeValue: string) {
+  if (!dateValue) return null
 
-  const date = new Date(value)
+  const normalizedTime = timeValue || '00:00'
+  const date = new Date(`${dateValue}T${normalizedTime}`)
+
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
@@ -219,14 +208,15 @@ function getChannelBadgeLabel(card: ContentCard) {
 }
 
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
+  const router = useRouter()
   const [card, setCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(true)
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false)
   const [activeSection, setActiveSection] = useState<EditorSection>('scenes')
   const [titleDraft, setTitleDraft] = useState('')
-  const [statusDraft, setStatusDraft] = useState<ContentStatus>('idea')
-  const [scheduledDraft, setScheduledDraft] = useState('')
+  const [scheduledDateDraft, setScheduledDateDraft] = useState('')
+  const [scheduledTimeDraft, setScheduledTimeDraft] = useState('')
   const [bodyDraft, setBodyDraft] = useState('')
   const [captionDraft, setCaptionDraft] = useState('')
   const [hashtagsDraft, setHashtagsDraft] = useState('')
@@ -246,7 +236,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   useEffect(() => {
     if (saveState !== 'saved') return
 
-    const timer = window.setTimeout(() => setSaveState('idle'), 2000)
+    const timer = window.setTimeout(() => setSaveState('idle'), 1500)
     return () => window.clearTimeout(timer)
   }, [saveState])
 
@@ -256,10 +246,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     const applyState = (nextCard: ContentCard | null, nextScript: Script | null) => {
       if (cancelled) return
 
+      const nextScheduled = splitScheduledFields(
+        nextCard?.scheduled_at ?? nextCard?.published_at ?? null
+      )
+
       setCard(nextCard)
       setTitleDraft(nextCard?.title ?? '')
-      setStatusDraft(nextCard?.status ?? 'idea')
-      setScheduledDraft(toDatetimeLocal(nextCard?.scheduled_at ?? nextCard?.published_at ?? null))
+      setScheduledDateDraft(nextScheduled.date)
+      setScheduledTimeDraft(nextScheduled.time)
       setBodyDraft(nextCard?.memo ?? nextScript?.body ?? '')
       setCaptionDraft(nextScript?.caption ?? '')
       setHashtagsDraft(nextScript?.hashtags ?? '')
@@ -310,10 +304,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
   const checklistItems: ChecklistItem[] = Array.isArray(card?.checklist) ? card.checklist : []
   const channelBadgeLabel = card ? getChannelBadgeLabel(card) : null
-  const scheduledAt = card?.scheduled_at ?? card?.published_at ?? null
-  const scheduledDisplayValue = scheduledDraft
-    ? toIsoFromDatetimeLocal(scheduledDraft)
-    : scheduledAt
 
   const updateSceneDraft = (sceneId: string, key: 'title' | 'body', value: string) => {
     setSceneDrafts((prev) =>
@@ -321,7 +311,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     )
   }
 
-  const handleSave = async () => {
+  const handlePersist = async (nextStatus: 'writing' | 'published') => {
     if (isPreview || !card || saveState === 'saving') return
 
     setSaveState('saving')
@@ -330,8 +320,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const supabase = createClient()
       const payload = {
         title: titleDraft.trim() || '새 콘텐츠',
-        status: statusDraft,
-        scheduled_at: toIsoFromDatetimeLocal(scheduledDraft),
+        status: nextStatus,
+        scheduled_at: toIsoFromScheduledFields(scheduledDateDraft, scheduledTimeDraft),
         memo: bodyDraft.trim() ? bodyDraft : null,
       }
 
@@ -347,12 +337,18 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       }
 
       const nextCard = data as ContentCard
+      const nextScheduled = splitScheduledFields(
+        nextCard.scheduled_at ?? nextCard.published_at ?? null
+      )
+
       setCard(nextCard)
       setTitleDraft(nextCard.title)
-      setStatusDraft(nextCard.status)
-      setScheduledDraft(toDatetimeLocal(nextCard.scheduled_at ?? nextCard.published_at ?? null))
+      setScheduledDateDraft(nextScheduled.date)
+      setScheduledTimeDraft(nextScheduled.time)
       setBodyDraft(nextCard.memo ?? '')
+      setMemoDraft(nextCard.memo ?? '')
       setSaveState('saved')
+      router.push('/content')
     } catch (error) {
       console.error('Failed to save content card', error)
       setSaveState('error')
@@ -578,7 +574,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
               <button
                 type="button"
-                onClick={handleSave}
+                onClick={() => handlePersist('writing')}
+                disabled={isPreview || saveState === 'saving'}
+                className="inline-flex h-7 items-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+              >
+                임시저장
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePersist('published')}
                 disabled={isPreview || saveState === 'saving'}
                 className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
               >
@@ -638,20 +642,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               placeholder="콘텐츠 제목"
             />
 
-            <div className="mb-4 grid w-full max-w-[620px] grid-cols-[auto_1fr] gap-x-4 gap-y-2">
-              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">상태</span>
-              <select
-                value={statusDraft}
-                onChange={(event) => setStatusDraft(event.target.value as ContentStatus)}
-                className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-              >
-                {EDITABLE_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </select>
-
+            <div className="mb-4 grid w-full max-w-[680px] grid-cols-[auto_1fr] gap-x-4 gap-y-2">
               <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">작성일</span>
               <span className="flex h-9 items-center text-xs text-[var(--color-text-body)]">
                 {formatDate(card.created_at)}
@@ -663,12 +654,20 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </span>
 
               <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">업로드 예정일</span>
-              <input
-                type="datetime-local"
-                value={scheduledDraft}
-                onChange={(event) => setScheduledDraft(event.target.value)}
-                className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-              />
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="date"
+                  value={scheduledDateDraft}
+                  onChange={(event) => setScheduledDateDraft(event.target.value)}
+                  className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                />
+                <input
+                  type="time"
+                  value={scheduledTimeDraft}
+                  onChange={(event) => setScheduledTimeDraft(event.target.value)}
+                  className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                />
+              </div>
             </div>
 
             {isPreview && (
@@ -703,7 +702,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 </button>
               ))}
               <span className="mx-1 h-4 w-px bg-[var(--color-border-soft)]" />
-              {['왼쪽', '가운데', '오른쪽', '목록', '번호'].map((label) => (
+              {['좌측', '가운데', '오른쪽', '목록', '번호'].map((label) => (
                 <button
                   key={label}
                   type="button"
@@ -742,11 +741,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               className="min-h-[320px] w-full max-w-[620px] resize-none border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
               placeholder={EDITOR_PLACEHOLDER}
             />
-            {scheduledDisplayValue && (
-              <p className="mt-5 text-xs text-[var(--color-text-muted)]">
-                현재 업로드 예정일: {formatDate(scheduledDisplayValue, true)}
-              </p>
-            )}
           </div>
         </div>
 

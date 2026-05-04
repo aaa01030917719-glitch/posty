@@ -10,20 +10,20 @@ import { createContentCard } from '@/components/content/createContentCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createClient } from '@/lib/supabase/client'
-import { STATUS_COLORS } from '@/lib/constants'
+import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants'
 import type { ContentCard, ContentStatus } from '@/lib/types'
 
 type ViewMode = 'grid' | 'list'
 
-const STATUS_FILTERS: { value: ContentStatus | 'all'; label: string }[] = [
-  { value: 'all', label: '\uC804\uCCB4' },
-  { value: 'idea', label: '\uC544\uC774\uB514\uC5B4' },
-  { value: 'planning', label: '\uAE30\uD68D\uC911' },
-  { value: 'writing', label: '\uC791\uC131\uC911' },
-  { value: 'review', label: '\uAC80\uC218\uC911' },
-  { value: 'scheduled', label: '\uC608\uC57D' },
-  { value: 'published', label: '\uBC1C\uD589' },
-  { value: 'hold', label: '\uBCF4\uB958' },
+const STATUS_FILTERS: Array<ContentStatus | 'all'> = [
+  'all',
+  'idea',
+  'planning',
+  'writing',
+  'review',
+  'scheduled',
+  'published',
+  'hold',
 ]
 
 const SEARCH_PLACEHOLDER = '\uCF58\uD150\uCE20 \uAC80\uC0C9...'
@@ -83,7 +83,7 @@ export default function ContentPage() {
 
   return (
     <div className="flex flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
-      <section className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 md:p-5">
+      <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative w-full max-w-sm">
             <Search
@@ -136,8 +136,8 @@ export default function ContentPage() {
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-1.5 overflow-x-auto border-t border-[var(--color-border-default)] pt-4 pb-1">
-          {STATUS_FILTERS.map(({ value, label }) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {STATUS_FILTERS.map((value) => (
             <button
               key={value}
               type="button"
@@ -156,7 +156,7 @@ export default function ContentPage() {
                   : undefined
               }
             >
-              {label}
+              {value === 'all' ? '\uC804\uCCB4' : STATUS_LABELS[value]}
               {value !== 'all' && (
                 <span className="ml-1 opacity-70">
                   {cards.filter((card) => card.status === value).length}
