@@ -1,26 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-primary: #E8917E;
+  --color-primary-light: #FDF0ED;
+  --color-bg: #FAFAFA;
+  --color-surface: #FFFFFF;
+  --color-border: #F0F0F0;
+  --color-text: #1A1A1A;
+  --color-text-sub: #6B7280;
+  --color-text-muted: #9CA3AF;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-primary: #E8917E;
+  --color-primary-light: #FDF0ED;
+  --color-bg: #FAFAFA;
+  --color-surface: #FFFFFF;
+  --color-border: #F0F0F0;
+  --color-text: #1A1A1A;
+  --color-text-sub: #6B7280;
+  --color-text-muted: #9CA3AF;
+  --font-sans: 'Noto Sans KR', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+html, body {
+  background-color: #FAFAFA;
+  color: #1A1A1A;
+  font-family: 'Noto Sans KR', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #E5E7EB;
+  border-radius: 999px;
+}
+
+/* Tiptap editor */
+.ProseMirror {
+  outline: none;
+  min-height: 300px;
+}
+.ProseMirror p {
+  margin: 0 0 0.75rem 0;
+  line-height: 1.75;
+}
+.ProseMirror p:last-child {
+  margin-bottom: 0;
+}
+.ProseMirror h1, .ProseMirror h2, .ProseMirror h3 {
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0 0 0.5rem 0;
+}
+.ProseMirror h1 { font-size: 1.25rem; }
+.ProseMirror h2 { font-size: 1.1rem; }
+.ProseMirror h3 { font-size: 1rem; }
+.ProseMirror ul, .ProseMirror ol {
+  padding-left: 1.25rem;
+  margin: 0 0 0.75rem 0;
+}
+.ProseMirror li { margin-bottom: 0.25rem; }
+.ProseMirror blockquote {
+  border-left: 3px solid #F0F0F0;
+  padding-left: 1rem;
+  color: #6B7280;
+  margin: 0 0 0.75rem 0;
+}
+.ProseMirror strong { font-weight: 700; }
+.ProseMirror em { font-style: italic; }
+.ProseMirror code {
+  background: #F5F5F5;
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  font-size: 0.875em;
+  font-family: 'JetBrains Mono', monospace;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9CA3AF;
+  pointer-events: none;
+  height: 0;
 }
