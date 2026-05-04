@@ -6,6 +6,7 @@ import { Plus, LayoutGrid, List, Search } from 'lucide-react'
 import { clsx } from 'clsx'
 import { CardGrid } from '@/components/content/CardGrid'
 import { CardList } from '@/components/content/CardList'
+import { createContentCard } from '@/components/content/createContentCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createClient } from '@/lib/supabase/client'
@@ -27,6 +28,7 @@ const STATUS_FILTERS: { value: ContentStatus | 'all'; label: string }[] = [
 
 const SEARCH_PLACEHOLDER = '\uCF58\uD150\uCE20 \uAC80\uC0C9...'
 const NEW_CONTENT_LABEL = '\uC0C8 \uCF58\uD150\uCE20'
+const CREATING_LABEL = '\uC0DD\uC131 \uC911...'
 const PREVIEW_LABEL = '\uC5D0\uB514\uD130 \uBBF8\uB9AC\uBCF4\uAE30'
 
 export default function ContentPage() {
@@ -36,6 +38,7 @@ export default function ContentPage() {
   const [statusFilter, setStatusFilter] = useState<ContentStatus | 'all'>('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     const fetchCards = async () => {
@@ -60,6 +63,22 @@ export default function ContentPage() {
 
   const openDetail = (card: ContentCard) => {
     router.push(`/content/${card.id}`)
+  }
+
+  const handleCreateContent = async () => {
+    if (creating) return
+
+    setCreating(true)
+
+    try {
+      const nextId = await createContentCard()
+      router.push(`/content/${nextId}`)
+    } catch (error) {
+      console.error('Failed to create content card', error)
+      window.alert('새 콘텐츠를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -110,9 +129,9 @@ export default function ContentPage() {
               </button>
             </div>
 
-            <Button size="sm" className="shrink-0">
+            <Button size="sm" className="shrink-0" onClick={handleCreateContent} disabled={creating}>
               <Plus size={14} />
-              {NEW_CONTENT_LABEL}
+              {creating ? CREATING_LABEL : NEW_CONTENT_LABEL}
             </Button>
           </div>
         </div>

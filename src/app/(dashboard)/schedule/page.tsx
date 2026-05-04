@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { clsx } from 'clsx'
 import {
   addDays,
@@ -21,6 +21,7 @@ import {
 import { ko } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight, ListTodo, Plus, Share2 } from 'lucide-react'
 import { CardModal } from '@/components/content/CardModal'
+import { createContentCard } from '@/components/content/createContentCard'
 import { CalendarDay } from '@/components/schedule/CalendarDay'
 import { CalendarMonth } from '@/components/schedule/CalendarMonth'
 import { CalendarWeek } from '@/components/schedule/CalendarWeek'
@@ -98,11 +99,13 @@ function getViewSubtitle(view: ViewMode, currentDate: Date) {
 }
 
 export default function SchedulePage() {
+  const router = useRouter()
   const [view, setView] = useState<ViewMode>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [cards, setCards] = useState<ContentCard[]>([])
   const [selectedCard, setSelectedCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     const fetchCards = async () => {
@@ -123,6 +126,22 @@ export default function SchedulePage() {
   const handleCardUpdate = (updated: ContentCard) => {
     setCards((prev) => prev.map((card) => (card.id === updated.id ? updated : card)))
     setSelectedCard(updated)
+  }
+
+  const handleCreateContent = async () => {
+    if (creating) return
+
+    setCreating(true)
+
+    try {
+      const nextId = await createContentCard()
+      router.push(`/content/${nextId}`)
+    } catch (error) {
+      console.error('Failed to create content card', error)
+      window.alert('새 콘텐츠를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setCreating(false)
+    }
   }
 
   const moveRange = (direction: 'prev' | 'next') => {
@@ -390,13 +409,15 @@ export default function SchedulePage() {
                     <Share2 size={13} />
                   </button>
 
-                  <Link
-                    href="/content"
-                    className="inline-flex h-7 items-center gap-[5px] rounded-[5px] bg-[var(--color-accent)] px-3 text-[12px] font-bold tracking-[-0.01em] text-[var(--color-on-accent)] transition-[background-color] hover:bg-[var(--color-accent-hover)]"
+                  <button
+                    type="button"
+                    onClick={handleCreateContent}
+                    disabled={creating}
+                    className="inline-flex h-7 items-center gap-[5px] rounded-[5px] bg-[var(--color-accent)] px-3 text-[12px] font-bold tracking-[-0.01em] text-[var(--color-on-accent)] transition-[background-color] hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:bg-[var(--color-accent-disabled)]"
                   >
                     <Plus size={11} />
-                    새 콘텐츠
-                  </Link>
+                    {creating ? '생성 중...' : '새 콘텐츠'}
+                  </button>
                 </div>
               </div>
 
