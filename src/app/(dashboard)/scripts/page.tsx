@@ -1,10 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { clsx } from 'clsx'
+import { FileText } from 'lucide-react'
 import { ScriptEditor } from '@/components/scripts/ScriptEditor'
 import { createClient } from '@/lib/supabase/client'
 import type { Script } from '@/lib/types'
-import { FileText } from 'lucide-react'
+
+const LIST_TITLE = '\uC2A4\uD06C\uB9BD\uD2B8 \uBAA9\uB85D'
+const EMPTY_LIST_TITLE = '\uC2A4\uD06C\uB9BD\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
+const EMPTY_LIST_DESCRIPTION = '\uC5F0\uACB0\uB41C \uCF58\uD150\uCE20\uC5D0\uC11C \uC2A4\uD06C\uB9BD\uD2B8\uB97C \uD655\uC778\uD574\uBCF4\uC138\uC694'
+const UNTITLED_LABEL = '\uC81C\uBAA9 \uC5C6\uC74C'
+const EMPTY_EDITOR_TITLE = '\uC2A4\uD06C\uB9BD\uD2B8\uB97C \uC120\uD0DD\uD574\uC8FC\uC138\uC694'
+const EMPTY_EDITOR_DESCRIPTION = '\uC67C\uCABD \uBAA9\uB85D\uC5D0\uC11C \uD3B8\uC9D1\uD560 \uC2A4\uD06C\uB9BD\uD2B8\uB97C \uACE0\uB97C \uC218 \uC788\uC2B5\uB2C8\uB2E4'
 
 export default function ScriptsPage() {
   const [scripts, setScripts] = useState<Script[]>([])
@@ -18,84 +26,107 @@ export default function ScriptsPage() {
         .from('scripts')
         .select('*, card:content_cards(title, status)')
         .order('updated_at', { ascending: false })
+
       setScripts((data as Script[]) ?? [])
-      if (data && data.length > 0) setSelectedScript(data[0] as Script)
+      if (data && data.length > 0) {
+        setSelectedScript(data[0] as Script)
+      }
       setLoading(false)
     }
+
     fetchScripts()
   }, [])
 
   const handleSave = (updated: Script) => {
-    setScripts((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+    setScripts((prev) => prev.map((script) => (script.id === updated.id ? updated : script)))
     setSelectedScript(updated)
   }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full py-24">
-        <div className="w-5 h-5 border-2 border-[#E8917E] border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center bg-[var(--color-bg-canvas)] py-24">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Script list */}
-      <div className="w-60 shrink-0 border-r border-[#F0F0F0] bg-white overflow-y-auto">
-        <div className="px-4 py-4 border-b border-[#F0F0F0]">
-          <p className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider">원고 목록</p>
+    <div className="flex h-full min-h-0 gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+      <aside className="flex w-64 shrink-0 min-h-0 flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+        <div className="border-b border-[var(--color-border-default)] px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">
+            {LIST_TITLE}
+          </p>
         </div>
+
         {scripts.length === 0 ? (
-          <div className="px-4 py-8 text-center">
-            <p className="text-xs text-[#9CA3AF]">원고가 없습니다</p>
+          <div className="flex flex-1 flex-col items-center justify-center px-5 py-10 text-center">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
+              <FileText size={18} />
+            </div>
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_LIST_TITLE}</p>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_LIST_DESCRIPTION}</p>
           </div>
         ) : (
-          <div className="py-2">
-            {scripts.map((script) => (
-              <button
-                key={script.id}
-                onClick={() => setSelectedScript(script)}
-                className={`w-full text-left px-4 py-3 transition-colors flex items-start gap-2.5 ${
-                  selectedScript?.id === script.id
-                    ? 'bg-[#FDF0ED]'
-                    : 'hover:bg-[#FAFAFA]'
-                }`}
-              >
-                <FileText
-                  size={14}
-                  className={selectedScript?.id === script.id ? 'text-[#E8917E] mt-0.5' : 'text-[#9CA3AF] mt-0.5'}
-                  strokeWidth={1.8}
-                />
-                <div className="min-w-0">
-                  <p
-                    className={`text-sm truncate ${
-                      selectedScript?.id === script.id
-                        ? 'font-medium text-[#E8917E]'
-                        : 'text-[#1A1A1A]'
-                    }`}
-                  >
-                    {script.title || script.card?.title || '제목 없음'}
-                  </p>
-                  {script.card && (
-                    <p className="text-xs text-[#9CA3AF] truncate mt-0.5">
-                      {(script.card as { title?: string }).title}
-                    </p>
+          <div className="min-h-0 flex-1 overflow-y-auto py-2">
+            {scripts.map((script) => {
+              const active = selectedScript?.id === script.id
+
+              return (
+                <button
+                  key={script.id}
+                  type="button"
+                  onClick={() => setSelectedScript(script)}
+                  className={clsx(
+                    'flex w-full items-start gap-2.5 px-4 py-3 text-left transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                    active
+                      ? 'bg-[var(--color-bg-accent-soft)]'
+                      : 'hover:bg-[var(--color-bg-canvas)]'
                   )}
-                </div>
-              </button>
-            ))}
+                >
+                  <FileText
+                    size={14}
+                    strokeWidth={1.8}
+                    className={clsx(
+                      'mt-0.5 shrink-0',
+                      active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'
+                    )}
+                  />
+
+                  <div className="min-w-0">
+                    <p
+                      className={clsx(
+                        'truncate text-sm',
+                        active
+                          ? 'font-medium text-[var(--color-accent)]'
+                          : 'text-[var(--color-text-primary)]'
+                      )}
+                    >
+                      {script.title || script.card?.title || UNTITLED_LABEL}
+                    </p>
+                    {script.card && (
+                      <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">
+                        {(script.card as { title?: string }).title}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )}
-      </div>
+      </aside>
 
-      {/* Editor */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {selectedScript ? (
           <ScriptEditor script={selectedScript} onSave={handleSave} />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full py-24 text-center">
-            <p className="text-3xl mb-3">✍️</p>
-            <p className="text-sm text-[#9CA3AF]">원고를 선택하세요</p>
+          <div className="flex h-full min-h-[420px] flex-col items-center justify-center rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-24 text-center">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
+              <FileText size={18} />
+            </div>
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_EDITOR_TITLE}</p>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_EDITOR_DESCRIPTION}</p>
           </div>
         )}
       </div>

@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { CheckCircle, Pencil, Save } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { createClient } from '@/lib/supabase/client'
 import type { Script } from '@/lib/types'
-import { CheckCircle, Pencil, Save } from 'lucide-react'
 
 interface ScriptEditorProps {
   script: Script
@@ -27,9 +27,13 @@ type ScriptUpdatePayload = Partial<
   >
 >
 
-const DEFAULT_PANEL_TITLE = '대본'
+const DEFAULT_PANEL_TITLE = '\uB300\uBCF8'
 const PANEL_TITLE_MIN_WIDTH = 80
 const PANEL_TITLE_MAX_WIDTH = 200
+const SAVE_SUCCESS_LABEL = '\uC800\uC7A5\uB428'
+const SAVE_PENDING_LABEL = '\uC800\uC7A5 \uC911...'
+const SAVE_LABEL = '\uC800\uC7A5'
+const PANEL_TITLE_ARIA_LABEL = '\uB300\uBCF8 \uD328\uB110 \uC81C\uBAA9'
 
 function getInitialFormState(script: Script): ScriptFormData {
   return {
@@ -84,15 +88,15 @@ export function ScriptEditor({ script, onSave }: ScriptEditorProps) {
   }, [editingPanelTitle])
 
   useEffect(() => {
-    const measure = panelTitleMeasureRef.current
+    const measureElement = panelTitleMeasureRef.current
 
-    if (!measure) {
+    if (!measureElement) {
       return
     }
 
     const nextWidth = Math.min(
       PANEL_TITLE_MAX_WIDTH,
-      Math.max(PANEL_TITLE_MIN_WIDTH, Math.ceil(measure.getBoundingClientRect().width + 8))
+      Math.max(PANEL_TITLE_MIN_WIDTH, Math.ceil(measureElement.getBoundingClientRect().width + 8))
     )
 
     setPanelTitleInputWidth(nextWidth)
@@ -206,6 +210,10 @@ export function ScriptEditor({ script, onSave }: ScriptEditorProps) {
     }
   }
 
+  const updateField = (key: keyof ScriptFormData, value: string) => {
+    setData((prev) => ({ ...prev, [key]: value }))
+  }
+
   const field = (
     label: string,
     key: keyof ScriptFormData,
@@ -213,30 +221,30 @@ export function ScriptEditor({ script, onSave }: ScriptEditorProps) {
     rows = 4
   ) => (
     <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-medium text-[#6B7280]">{label}</label>
+      <label className="text-xs font-medium text-[var(--color-text-secondary)]">{label}</label>
       {multiline ? (
         <textarea
           value={data[key]}
-          onChange={(event) => setData((prev) => ({ ...prev, [key]: event.target.value }))}
+          onChange={(event) => updateField(key, event.target.value)}
           rows={rows}
-          className="w-full rounded-[8px] border border-[#F0F0F0] bg-white px-3 py-2 text-sm outline-none transition-all placeholder-[#9CA3AF] resize-none focus:border-[#E8917E] focus:ring-2 focus:ring-[#E8917E]/10"
-          placeholder={`${label} 입력`}
+          className="w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none transition-[background-color,border-color,color,box-shadow] placeholder:text-[var(--color-text-muted)] focus-visible:border-[var(--color-accent)] focus-visible:[box-shadow:var(--focus-ring)] resize-none"
+          placeholder={`${label} \uC785\uB825`}
         />
       ) : (
         <input
           type="text"
           value={data[key]}
-          onChange={(event) => setData((prev) => ({ ...prev, [key]: event.target.value }))}
-          className="w-full rounded-[8px] border border-[#F0F0F0] bg-white px-3 py-2 text-sm outline-none transition-all placeholder-[#9CA3AF] focus:border-[#E8917E] focus:ring-2 focus:ring-[#E8917E]/10"
-          placeholder={`${label} 입력`}
+          onChange={(event) => updateField(key, event.target.value)}
+          className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none transition-[background-color,border-color,color,box-shadow] placeholder:text-[var(--color-text-muted)] focus-visible:border-[var(--color-accent)] focus-visible:[box-shadow:var(--focus-ring)]"
+          placeholder={`${label} \uC785\uB825`}
         />
       )}
     </div>
   )
 
   return (
-    <section className="overflow-hidden rounded-[16px] border border-[#F0F0F0] bg-white">
-      <div className="flex items-center justify-between gap-4 border-b border-[#F0F0F0] px-6 py-4">
+    <section className="overflow-hidden rounded-[var(--radius-2xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+      <div className="flex items-center justify-between gap-4 border-b border-[var(--color-border-default)] px-6 py-4">
         <div className="relative min-w-0">
           <span
             ref={panelTitleMeasureRef}
@@ -259,22 +267,22 @@ export function ScriptEditor({ script, onSave }: ScriptEditorProps) {
                 void handlePanelTitleKeyDown(event)
               }}
               disabled={panelTitleSaving}
-              className="min-w-[80px] max-w-[200px] border-0 border-b border-transparent bg-transparent px-0 py-0 text-lg font-semibold text-[#1A1A1A] outline-none transition-colors focus:border-b focus:border-[#E8917E]"
+              className="min-w-[80px] max-w-[200px] border-0 border-b border-transparent bg-transparent px-0 py-0 text-lg font-semibold text-[var(--color-text-primary)] outline-none transition-colors focus:border-b focus:border-[var(--color-accent)]"
               style={{ width: `${panelTitleInputWidth}px` }}
-              aria-label="대본 패널 제목"
+              aria-label={PANEL_TITLE_ARIA_LABEL}
             />
           ) : (
             <button
               type="button"
               onClick={startPanelTitleEdit}
               disabled={saving || panelTitleSaving}
-              className="group inline-flex items-center gap-2 text-left text-[#1A1A1A] transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+              className="group inline-flex items-center gap-2 text-left text-[var(--color-text-primary)] transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="truncate text-lg font-semibold">{panelTitle}</span>
               <Pencil
                 size={14}
                 strokeWidth={1.9}
-                className="text-[#9CA3AF] opacity-0 transition-opacity group-hover:opacity-100"
+                className="text-[var(--color-text-muted)] opacity-0 transition-opacity group-hover:opacity-100"
               />
             </button>
           )}
@@ -285,25 +293,25 @@ export function ScriptEditor({ script, onSave }: ScriptEditorProps) {
             {saved ? (
               <>
                 <CheckCircle size={15} />
-                저장됨
+                {SAVE_SUCCESS_LABEL}
               </>
             ) : (
               <>
                 <Save size={15} />
-                {saving ? '저장 중...' : '저장'}
+                {saving ? SAVE_PENDING_LABEL : SAVE_LABEL}
               </>
             )}
           </Button>
         )}
       </div>
 
-      <div className="flex flex-col gap-5 p-6">
-        {field('제목', 'title')}
-        {field('본문', 'body', true, 10)}
-        {field('캡션', 'caption', true, 3)}
-        {field('해시태그', 'hashtags')}
+      <div className="grid gap-5 p-6">
+        {field('\uC81C\uBAA9', 'title')}
+        {field('\uBCF8\uBB38', 'body', true, 10)}
+        {field('\uCEA1\uC158', 'caption', true, 3)}
+        {field('\uD574\uC2DC\uD0DC\uADF8', 'hashtags')}
         {field('CTA', 'cta')}
-        {field('썸네일 텍스트', 'thumbnail_text')}
+        {field('\uC378\uB124\uC77C \uD14D\uC2A4\uD2B8', 'thumbnail_text')}
       </div>
     </section>
   )
