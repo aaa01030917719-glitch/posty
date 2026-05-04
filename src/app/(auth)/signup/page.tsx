@@ -7,6 +7,30 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
+function normalizeEmail(email: string) {
+  return email
+    .trim()
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+}
+
+function logSignupError(error: unknown) {
+  const details =
+    typeof error === 'object' && error !== null
+      ? {
+          code: 'code' in error ? error.code : undefined,
+          status: 'status' in error ? error.status : undefined,
+          message: 'message' in error ? error.message : undefined,
+        }
+      : {
+          code: undefined,
+          status: undefined,
+          message: undefined,
+        }
+
+  console.error('Signup failed', details, error)
+}
+
 function getSignupErrorMessage(error: unknown) {
   const rawMessage =
     typeof error === 'object' && error !== null && 'message' in error
@@ -70,15 +94,17 @@ export default function SignupPage() {
     }
 
     try {
+      const normalizedEmail = normalizeEmail(email)
+      const normalizedName = name.trim()
       const supabase = createClient()
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: normalizedEmail,
         password,
-        options: { data: { name } },
+        options: { data: { name: normalizedName } },
       })
 
       if (error) {
-        console.error('Signup failed', error)
+        logSignupError(error)
         setError(getSignupErrorMessage(error))
         return
       }
@@ -91,7 +117,7 @@ export default function SignupPage() {
 
       setDone(true)
     } catch (error) {
-      console.error('Signup failed', error)
+      logSignupError(error)
       setError(getSignupErrorMessage(error))
     } finally {
       setLoading(false)
