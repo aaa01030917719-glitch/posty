@@ -13,7 +13,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#FAFAFA]">
+    <div className="flex h-screen overflow-hidden bg-[var(--color-bg-canvas)]">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header />
