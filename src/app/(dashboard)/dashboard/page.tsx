@@ -1,14 +1,40 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
+import { createClient } from '@/lib/supabase/client'
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants'
 import type { ContentCard, ContentStatus } from '@/lib/types'
 
 const STATUS_ORDER: ContentStatus[] = [
-  'idea', 'planning', 'writing', 'review', 'scheduled', 'published', 'hold',
+  'idea',
+  'planning',
+  'writing',
+  'review',
+  'scheduled',
+  'published',
+  'hold',
 ]
+
+const SUMMARY_ITEMS = [
+  {
+    key: 'total',
+    label: '\uC804\uCCB4 \uCF58\uD150\uCE20',
+    color: 'var(--color-accent)',
+  },
+  {
+    key: 'published',
+    label: '\uBC1C\uD589',
+    color: 'var(--color-success)',
+  },
+  {
+    key: 'inProgress',
+    label: '\uC9C4\uD589 \uC911',
+    color: 'var(--color-info)',
+  },
+] as const
+
+const STATUS_SECTION_TITLE = '\uC0C1\uD0DC\uBCC4 \uD604\uD669'
 
 export default function DashboardPage() {
   const [cards, setCards] = useState<ContentCard[]>([])
@@ -20,82 +46,92 @@ export default function DashboardPage() {
       const { data } = await supabase
         .from('content_cards')
         .select('*, channel:channels(*)')
+
       setCards((data as ContentCard[]) ?? [])
       setLoading(false)
     }
+
     fetchData()
   }, [])
 
   const total = cards.length
-  const published = cards.filter((c) => c.status === 'published').length
-  const inProgress = cards.filter((c) => ['planning', 'writing', 'review'].includes(c.status)).length
+  const published = cards.filter((card) => card.status === 'published').length
+  const inProgress = cards.filter((card) =>
+    ['planning', 'writing', 'review'].includes(card.status)
+  ).length
+
+  const summaryValues = {
+    total,
+    published,
+    inProgress,
+  }
 
   const countByStatus = STATUS_ORDER.reduce(
-    (acc, s) => ({ ...acc, [s]: cards.filter((c) => c.status === s).length }),
+    (accumulator, status) => ({
+      ...accumulator,
+      [status]: cards.filter((card) => card.status === status).length,
+    }),
     {} as Record<ContentStatus, number>
   )
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="w-5 h-5 border-2 border-[#E8917E] border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center bg-[var(--color-bg-canvas)] py-24">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="p-5 md:p-6 max-w-5xl">
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        {[
-          { label: '전체 콘텐츠', value: total, color: '#E8917E' },
-          { label: '발행됨', value: published, color: '#47C9A2' },
-          { label: '진행 중', value: inProgress, color: '#3B9EFF' },
-        ].map((item) => (
+    <div className="mx-auto flex max-w-5xl flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {SUMMARY_ITEMS.map((item) => (
           <div
-            key={item.label}
-            className="bg-white border border-[#F0F0F0] rounded-[12px] px-5 py-4"
+            key={item.key}
+            className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-5 py-4"
           >
-            <p className="text-xs text-[#9CA3AF] mb-1">{item.label}</p>
-            <p
-              className="text-3xl font-bold font-mono"
-              style={{ color: item.color }}
-            >
-              {item.value}
+            <p className="mb-1 text-xs text-[var(--color-text-muted)]">{item.label}</p>
+            <p className="font-mono text-3xl font-bold" style={{ color: item.color }}>
+              {summaryValues[item.key]}
             </p>
           </div>
         ))}
-      </div>
+      </section>
 
-      {/* Status breakdown */}
-      <div className="bg-white border border-[#F0F0F0] rounded-[12px] p-5">
-        <h2 className="text-sm font-semibold text-[#1A1A1A] mb-4">상태별 현황</h2>
+      <section className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-5">
+        <h2 className="mb-4 text-sm font-semibold text-[var(--color-text-primary)]">
+          {STATUS_SECTION_TITLE}
+        </h2>
+
         <div className="flex flex-col gap-3">
           {STATUS_ORDER.map((status) => {
             const count = countByStatus[status]
-            const pct = total > 0 ? (count / total) * 100 : 0
+            const percentage = total > 0 ? (count / total) * 100 : 0
+
             return (
               <div key={status} className="flex items-center gap-3">
                 <div className="w-16 shrink-0">
                   <Badge label={STATUS_LABELS[status]} color={STATUS_COLORS[status]} />
                 </div>
-                <div className="flex-1 h-1.5 bg-[#F5F5F5] rounded-full overflow-hidden">
+
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--color-bg-subtle)]">
                   <div
                     className="h-full rounded-full transition-all"
                     style={{
-                      width: `${pct}%`,
+                      width: `${percentage}%`,
                       backgroundColor: STATUS_COLORS[status],
                     }}
                   />
                 </div>
-                <span className="text-xs font-mono text-[#6B7280] w-8 text-right shrink-0">
+
+                <span className="w-8 shrink-0 text-right font-mono text-xs text-[var(--color-text-secondary)]">
                   {count}
                 </span>
               </div>
             )
           })}
         </div>
-      </div>
+      </section>
     </div>
   )
 }
