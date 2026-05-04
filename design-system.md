@@ -544,8 +544,8 @@ module.exports = {
           1000: '#242424',
         },
         brand: {
-          // Posty의 dusty apricot-pink primary
-          primary: '#E8917E',
+          // Posty's Airbnb-aligned primary
+          primary: '#ff385c',
         },
         danger: {
           light: '#fdd2cf',
@@ -590,4 +590,4 @@ module.exports = {
 }
 ```
 
-> **Posty Brand Color 주의:** 이 시스템의 Brand 색상은 grayscale 기반이지만, Posty는 `#E8917E` (dusty apricot-pink)를 CTA, active state, today indicator에만 사용합니다. Tailwind에서 `brand.primary`로 별도 정의하세요.
+> **Posty Runtime Color Note:** Figma 추출 문서의 grayscale brand 설명과 별개로, 현재 Posty 런타임 token은 Airbnb 기준 색상을 사용합니다. Primary/CTA는 `#ff385c`, active는 `#e00b41`, accent soft/disabled는 `#ffd1da`를 기준으로 맞춥니다.

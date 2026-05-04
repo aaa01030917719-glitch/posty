@@ -2,21 +2,31 @@
 @import "tailwindcss";
 
 :root {
-  --color-bg-canvas: #FAFAFA;
-  --color-bg-surface: #FFFFFF;
-  --color-bg-subtle: #F5F5F5;
-  --color-bg-accent-soft: #FDF0ED;
-  --color-border-default: #F0F0F0;
-  --color-border-strong: #E5E7EB;
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #6B7280;
-  --color-text-muted: #9CA3AF;
-  --color-accent: #E8917E;
-  --color-accent-hover: #d97d6a;
-  --color-accent-pressed: #c8705f;
+  --color-bg-canvas: #ffffff;
+  --color-bg-surface: #ffffff;
+  --color-bg-subtle: #f7f7f7;
+  --color-bg-surface-strong: #f2f2f2;
+  --color-bg-accent-soft: #ffd1da;
+  --color-border-default: #dddddd;
+  --color-border-soft: #ebebeb;
+  --color-border-strong: #c1c1c1;
+  --color-text-primary: #222222;
+  --color-text-body: #3f3f3f;
+  --color-text-secondary: var(--color-text-body);
+  --color-text-subtle: #6a6a6a;
+  --color-text-muted-soft: #929292;
+  --color-text-muted: var(--color-text-muted-soft);
+  --color-accent: #ff385c;
+  --color-accent-hover: #e00b41;
+  --color-accent-pressed: #e00b41;
+  --color-accent-disabled: #ffd1da;
+  --color-on-accent: #ffffff;
+  --color-danger: #c13515;
+  --color-danger-hover: #b32505;
+  --color-link-legal: #428bff;
   --color-success: #47C9A2;
   --color-info: #3B9EFF;
-  --color-overlay: rgb(0 0 0 / 0.2);
+  --color-overlay: rgb(0 0 0 / 0.5);
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -26,10 +36,10 @@
   --radius-2xl: 16px;
   --radius-pill: 999px;
 
-  --shadow-sm: 0 1px 2px rgb(26 26 26 / 0.06);
-  --shadow-md: 0 8px 24px rgb(26 26 26 / 0.08);
-  --shadow-lg: 0 20px 48px rgb(26 26 26 / 0.16);
-  --focus-ring: 0 0 0 2px rgb(232 145 126 / 0.1);
+  --shadow-sm: 0 1px 2px rgb(34 34 34 / 0.06);
+  --shadow-md: 0 8px 24px rgb(34 34 34 / 0.08);
+  --shadow-lg: 0 20px 48px rgb(34 34 34 / 0.16);
+  --focus-ring: 0 0 0 2px rgb(255 56 92 / 0.14);
 
   --space-1: 4px;
   --space-1_5: 6px;
@@ -55,15 +65,25 @@
   --color-bg-canvas: var(--color-bg-canvas);
   --color-bg-surface: var(--color-bg-surface);
   --color-bg-subtle: var(--color-bg-subtle);
+  --color-bg-surface-strong: var(--color-bg-surface-strong);
   --color-bg-accent-soft: var(--color-bg-accent-soft);
   --color-border-default: var(--color-border-default);
+  --color-border-soft: var(--color-border-soft);
   --color-border-strong: var(--color-border-strong);
   --color-text-primary: var(--color-text-primary);
+  --color-text-body: var(--color-text-body);
   --color-text-secondary: var(--color-text-secondary);
+  --color-text-subtle: var(--color-text-subtle);
+  --color-text-muted-soft: var(--color-text-muted-soft);
   --color-text-muted: var(--color-text-muted);
   --color-accent: var(--color-accent);
   --color-accent-hover: var(--color-accent-hover);
   --color-accent-pressed: var(--color-accent-pressed);
+  --color-accent-disabled: var(--color-accent-disabled);
+  --color-on-accent: var(--color-on-accent);
+  --color-danger: var(--color-danger);
+  --color-danger-hover: var(--color-danger-hover);
+  --color-link-legal: var(--color-link-legal);
   --color-success: var(--color-success);
   --color-info: var(--color-info);
   --color-overlay: var(--color-overlay);
