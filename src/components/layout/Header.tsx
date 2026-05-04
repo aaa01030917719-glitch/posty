@@ -3,12 +3,12 @@
 import { usePathname } from 'next/navigation'
 
 const PAGE_TITLES: Record<string, string> = {
-  '/schedule': '스케줄',
-  '/content': '콘텐츠',
-  '/scripts': '원고',
-  '/ideas': '아이디어',
-  '/mindmap': '마인드맵',
-  '/dashboard': '대시보드',
+  '/schedule': '\uC77C\uC815',
+  '/content': '\uCF58\uD150\uCE20',
+  '/scripts': '\uC2A4\uD06C\uB9BD\uD2B8',
+  '/ideas': '\uC544\uC774\uB514\uC5B4',
+  '/mindmap': '\uB9C8\uC778\uB4DC\uB9F5',
+  '/dashboard': '\uB300\uC2DC\uBCF4\uB4DC',
 }
 
 export function Header() {

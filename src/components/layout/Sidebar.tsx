@@ -1,8 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   Calendar,
   LayoutGrid,
@@ -16,13 +15,15 @@ import { clsx } from 'clsx'
 import { createClient } from '@/lib/supabase/client'
 
 const NAV_ITEMS = [
-  { href: '/schedule', label: '스케줄', icon: Calendar },
-  { href: '/content', label: '콘텐츠', icon: LayoutGrid },
-  { href: '/scripts', label: '원고', icon: FileText },
-  { href: '/ideas', label: '아이디어', icon: Lightbulb },
-  { href: '/mindmap', label: '마인드맵', icon: Network },
-  { href: '/dashboard', label: '대시보드', icon: BarChart2 },
+  { href: '/schedule', label: '\uC77C\uC815', icon: Calendar },
+  { href: '/content', label: '\uCF58\uD150\uCE20', icon: LayoutGrid },
+  { href: '/scripts', label: '\uC2A4\uD06C\uB9BD\uD2B8', icon: FileText },
+  { href: '/ideas', label: '\uC544\uC774\uB514\uC5B4', icon: Lightbulb },
+  { href: '/mindmap', label: '\uB9C8\uC778\uB4DC\uB9F5', icon: Network },
+  { href: '/dashboard', label: '\uB300\uC2DC\uBCF4\uB4DC', icon: BarChart2 },
 ]
+
+const LOGOUT_LABEL = '\uB85C\uADF8\uC544\uC6C3'
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -82,7 +83,7 @@ export function Sidebar() {
           className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-accent-soft)] hover:text-[var(--color-accent)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
         >
           <LogOut size={17} strokeWidth={1.8} />
-          로그아웃
+          {LOGOUT_LABEL}
         </button>
       </div>
     </aside>

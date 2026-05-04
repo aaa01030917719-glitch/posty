@@ -12,11 +12,11 @@ import {
 import { clsx } from 'clsx'
 
 const NAV_ITEMS = [
-  { href: '/schedule', label: '스케줄', icon: Calendar },
-  { href: '/content', label: '콘텐츠', icon: LayoutGrid },
-  { href: '/scripts', label: '원고', icon: FileText },
-  { href: '/ideas', label: '아이디어', icon: Lightbulb },
-  { href: '/mindmap', label: '맵', icon: Network },
+  { href: '/schedule', label: '\uC77C\uC815', icon: Calendar },
+  { href: '/content', label: '\uCF58\uD150\uCE20', icon: LayoutGrid },
+  { href: '/scripts', label: '\uC2A4\uD06C\uB9BD\uD2B8', icon: FileText },
+  { href: '/ideas', label: '\uC544\uC774\uB514\uC5B4', icon: Lightbulb },
+  { href: '/mindmap', label: '\uB9C8\uC778\uB4DC\uB9F5', icon: Network },
 ]
 
 export function MobileNav() {
