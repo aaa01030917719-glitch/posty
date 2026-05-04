@@ -26,16 +26,27 @@ interface CalendarMonthProps {
   onCardClick?: (card: ContentCard) => void
 }
 
+const WEEKDAY_LABELS = [
+  '\uC77C',
+  '\uC6D4',
+  '\uD654',
+  '\uC218',
+  '\uBAA9',
+  '\uAE08',
+  '\uD1A0',
+]
+
+const TODAY_BUTTON_LABEL = '\uC624\uB298'
+const MORE_SUFFIX = '\uAC1C'
+
 export function CalendarMonth({ cards, onDateClick, onCardClick }: CalendarMonthProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
 
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
-  const calStart = startOfWeek(monthStart, { weekStartsOn: 0 })
-  const calEnd = endOfWeek(monthEnd, { weekStartsOn: 0 })
-  const days = eachDayOfInterval({ start: calStart, end: calEnd })
-
-  const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 })
+  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 })
+  const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
 
   const getCardsForDate = (date: Date) =>
     cards.filter((card) => {
@@ -44,92 +55,103 @@ export function CalendarMonth({ cards, onDateClick, onCardClick }: CalendarMonth
     })
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[12px] overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0F0F0]">
-        <h2 className="text-base font-semibold text-[#1A1A1A]">
-          {format(currentDate, 'yyyy년 M월', { locale: ko })}
+    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-6 py-4">
+        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+          {format(currentDate, 'yyyy\uB144 M\uC6D4', { locale: ko })}
         </h2>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-            className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors"
+            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
             <ChevronLeft size={16} />
           </button>
           <button
+            type="button"
             onClick={() => setCurrentDate(new Date())}
-            className="px-3 py-1 text-xs rounded-[8px] text-[#6B7280] hover:bg-[#F5F5F5] transition-colors font-medium"
+            className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
-            오늘
+            {TODAY_BUTTON_LABEL}
           </button>
           <button
+            type="button"
             onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-            className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors"
+            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
             <ChevronRight size={16} />
           </button>
         </div>
       </div>
 
-      {/* Weekday headers */}
-      <div className="grid grid-cols-7 border-b border-[#F0F0F0]">
-        {WEEKDAYS.map((day, i) => (
+      <div className="grid grid-cols-7 border-b border-[var(--color-border-default)] bg-[var(--color-bg-canvas)]">
+        {WEEKDAY_LABELS.map((dayLabel, index) => (
           <div
-            key={day}
+            key={dayLabel}
             className={clsx(
               'py-2.5 text-center text-xs font-medium',
-              i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-[#9CA3AF]'
+              index === 0
+                ? 'text-red-400'
+                : index === 6
+                  ? 'text-blue-400'
+                  : 'text-[var(--color-text-muted)]'
             )}
           >
-            {day}
+            {dayLabel}
           </div>
         ))}
       </div>
 
-      {/* Days grid */}
       <div className="grid grid-cols-7">
-        {days.map((day, idx) => {
+        {days.map((day, index) => {
           const dayCards = getCardsForDate(day)
           const isCurrentMonth = isSameMonth(day, currentDate)
           const today = isToday(day)
-          const isLastRow = idx >= days.length - 7
+          const isLastRow = index >= days.length - 7
+          const isLastColumn = index % 7 === 6
 
           return (
             <div
               key={day.toISOString()}
               onClick={() => onDateClick?.(day)}
               className={clsx(
-                'min-h-[90px] p-2 border-b border-r border-[#F0F0F0] cursor-pointer transition-colors',
-                !isLastRow && 'border-b',
-                idx % 7 !== 6 && 'border-r',
-                isCurrentMonth ? 'bg-white hover:bg-[#FAFAFA]' : 'bg-[#FAFAFA]/50',
+                'min-h-[96px] cursor-pointer p-2 transition-colors',
+                !isLastRow && 'border-b border-[var(--color-border-default)]',
+                !isLastColumn && 'border-r border-[var(--color-border-default)]',
+                isCurrentMonth
+                  ? 'bg-[var(--color-bg-surface)] hover:bg-[var(--color-bg-subtle)]'
+                  : 'bg-[var(--color-bg-canvas)]'
               )}
             >
-              <div className="flex justify-end mb-1">
+              <div className="mb-1 flex justify-end">
                 <span
                   className={clsx(
-                    'inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium font-mono',
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs font-medium',
                     today
-                      ? 'bg-[#E8917E] text-white'
+                      ? 'bg-[var(--color-accent)] text-[var(--color-bg-surface)]'
                       : !isCurrentMonth
-                      ? 'text-[#D1D5DB]'
-                      : idx % 7 === 0
-                      ? 'text-red-400'
-                      : idx % 7 === 6
-                      ? 'text-blue-400'
-                      : 'text-[#6B7280]'
+                        ? 'text-[var(--color-text-muted)]'
+                        : index % 7 === 0
+                          ? 'text-red-400'
+                          : index % 7 === 6
+                            ? 'text-blue-400'
+                            : 'text-[var(--color-text-secondary)]'
                   )}
                 >
                   {format(day, 'd')}
                 </span>
               </div>
-              <div className="flex flex-col gap-0.5">
+
+              <div className="flex flex-col gap-1">
                 {dayCards.slice(0, 3).map((card) => (
                   <div
                     key={card.id}
-                    onClick={(e) => { e.stopPropagation(); onCardClick?.(card) }}
-                    className="px-1.5 py-0.5 rounded-[4px] text-[10px] font-medium truncate cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onCardClick?.(card)
+                    }}
+                    className="truncate rounded-[var(--radius-xs)] px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80"
                     style={{
                       backgroundColor: `${STATUS_COLORS[card.status]}20`,
                       color: STATUS_COLORS[card.status],
@@ -139,8 +161,9 @@ export function CalendarMonth({ cards, onDateClick, onCardClick }: CalendarMonth
                   </div>
                 ))}
                 {dayCards.length > 3 && (
-                  <span className="text-[10px] text-[#9CA3AF] pl-1">
-                    +{dayCards.length - 3}개
+                  <span className="pl-1 text-[10px] text-[var(--color-text-muted)]">
+                    +{dayCards.length - 3}
+                    {MORE_SUFFIX}
                   </span>
                 )}
               </div>

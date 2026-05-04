@@ -1,15 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { clsx } from 'clsx'
 import { CalendarMonth } from '@/components/schedule/CalendarMonth'
 import { CalendarWeek } from '@/components/schedule/CalendarWeek'
 import { CalendarDay } from '@/components/schedule/CalendarDay'
 import { CardModal } from '@/components/content/CardModal'
 import { createClient } from '@/lib/supabase/client'
 import type { ContentCard } from '@/lib/types'
-import { clsx } from 'clsx'
 
 type ViewMode = 'month' | 'week' | 'day'
+
+const VIEW_LABELS: Record<ViewMode, string> = {
+  month: '\uC6D4',
+  week: '\uC8FC',
+  day: '\uC77C',
+}
 
 export default function SchedulePage() {
   const [view, setView] = useState<ViewMode>('month')
@@ -25,60 +31,61 @@ export default function SchedulePage() {
         .select('*, channel:channels(*)')
         .not('scheduled_at', 'is', null)
         .order('scheduled_at', { ascending: true })
+
       setCards((data as ContentCard[]) ?? [])
       setLoading(false)
     }
+
     fetchCards()
   }, [])
 
   const handleCardUpdate = (updated: ContentCard) => {
-    setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+    setCards((prev) => prev.map((card) => (card.id === updated.id ? updated : card)))
     setSelectedCard(updated)
   }
 
-  const viewBtnClass = (v: ViewMode) =>
+  const viewButtonClass = (targetView: ViewMode) =>
     clsx(
-      'px-3 py-1.5 text-xs font-medium rounded-[8px] transition-all',
-      view === v
-        ? 'bg-[#E8917E] text-white'
-        : 'text-[#6B7280] hover:bg-[#F5F5F5]'
+      'rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-medium transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+      view === targetView
+        ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)] shadow-[var(--shadow-sm)]'
+        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]'
     )
 
   return (
-    <div className="p-5 md:p-6 max-w-6xl mx-auto">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between mb-5">
-        <div />
-        <div className="flex items-center gap-1 bg-[#F5F5F5] rounded-[10px] p-1">
-          <button className={viewBtnClass('month')} onClick={() => setView('month')}>월</button>
-          <button className={viewBtnClass('week')} onClick={() => setView('week')}>주</button>
-          <button className={viewBtnClass('day')} onClick={() => setView('day')}>일</button>
+    <div className="mx-auto flex max-w-6xl flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+      <section className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 md:p-5">
+        <div className="flex items-center justify-end">
+          <div className="flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-0.5">
+            {(['month', 'week', 'day'] as const).map((targetView) => (
+              <button
+                key={targetView}
+                type="button"
+                aria-pressed={view === targetView}
+                onClick={() => setView(targetView)}
+                className={viewButtonClass(targetView)}
+              >
+                {VIEW_LABELS[targetView]}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      </section>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <div className="w-5 h-5 border-2 border-[#E8917E] border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center justify-center rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] py-24">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
       ) : (
         <>
           {view === 'month' && (
-            <CalendarMonth
-              cards={cards}
-              onCardClick={setSelectedCard}
-            />
+            <CalendarMonth cards={cards} onCardClick={setSelectedCard} />
           )}
           {view === 'week' && (
-            <CalendarWeek
-              cards={cards}
-              onCardClick={setSelectedCard}
-            />
+            <CalendarWeek cards={cards} onCardClick={setSelectedCard} />
           )}
           {view === 'day' && (
-            <CalendarDay
-              cards={cards}
-              onCardClick={setSelectedCard}
-            />
+            <CalendarDay cards={cards} onCardClick={setSelectedCard} />
           )}
         </>
       )}

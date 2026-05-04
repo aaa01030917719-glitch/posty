@@ -22,6 +22,18 @@ interface CalendarWeekProps {
   onCardClick?: (card: ContentCard) => void
 }
 
+const WEEKDAY_LABELS = [
+  '\uC77C',
+  '\uC6D4',
+  '\uD654',
+  '\uC218',
+  '\uBAA9',
+  '\uAE08',
+  '\uD1A0',
+]
+
+const CURRENT_WEEK_LABEL = '\uC774\uBC88 \uC8FC'
+
 export function CalendarWeek({ cards, onCardClick }: CalendarWeekProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
 
@@ -36,58 +48,74 @@ export function CalendarWeek({ cards, onCardClick }: CalendarWeekProps) {
     })
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[12px] overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0F0F0]">
-        <h2 className="text-base font-semibold text-[#1A1A1A]">
-          {format(weekStart, 'M월 d일', { locale: ko })} –{' '}
-          {format(weekEnd, 'M월 d일', { locale: ko })}
+    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-6 py-4">
+        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+          {format(weekStart, 'M\uC6D4 d\uC77C', { locale: ko })} - {format(weekEnd, 'M\uC6D4 d\uC77C', { locale: ko })}
         </h2>
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => setCurrentDate(subWeeks(currentDate, 1))}
-            className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:bg-[#F5F5F5] transition-colors"
+            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
             <ChevronLeft size={16} />
           </button>
           <button
+            type="button"
             onClick={() => setCurrentDate(new Date())}
-            className="px-3 py-1 text-xs rounded-[8px] text-[#6B7280] hover:bg-[#F5F5F5] transition-colors font-medium"
+            className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
-            이번 주
+            {CURRENT_WEEK_LABEL}
           </button>
           <button
+            type="button"
             onClick={() => setCurrentDate(addWeeks(currentDate, 1))}
-            className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:bg-[#F5F5F5] transition-colors"
+            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
             <ChevronRight size={16} />
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-7 divide-x divide-[#F0F0F0]">
-        {days.map((day, i) => {
+
+      <div className="grid grid-cols-7 divide-x divide-[var(--color-border-default)]">
+        {days.map((day, index) => {
           const dayCards = getCardsForDate(day)
           const today = isToday(day)
+
           return (
-            <div key={day.toISOString()} className="min-h-[200px] p-3">
-              <div className="flex flex-col items-center mb-3 gap-0.5">
-                <span className="text-[10px] text-[#9CA3AF]">
-                  {['일', '월', '화', '수', '목', '금', '토'][i]}
+            <div key={day.toISOString()} className="min-h-[220px] bg-[var(--color-bg-surface)] p-3">
+              <div className="mb-3 flex flex-col items-center gap-0.5">
+                <span
+                  className={clsx(
+                    'text-[10px]',
+                    index === 0
+                      ? 'text-red-400'
+                      : index === 6
+                        ? 'text-blue-400'
+                        : 'text-[var(--color-text-muted)]'
+                  )}
+                >
+                  {WEEKDAY_LABELS[index]}
                 </span>
                 <span
                   className={clsx(
-                    'w-7 h-7 flex items-center justify-center rounded-full text-sm font-medium font-mono',
-                    today ? 'bg-[#E8917E] text-white' : 'text-[#1A1A1A]'
+                    'flex h-7 w-7 items-center justify-center rounded-full font-mono text-sm font-medium',
+                    today
+                      ? 'bg-[var(--color-accent)] text-[var(--color-bg-surface)]'
+                      : 'text-[var(--color-text-primary)]'
                   )}
                 >
                   {format(day, 'd')}
                 </span>
               </div>
-              <div className="flex flex-col gap-1">
+
+              <div className="flex flex-col gap-1.5">
                 {dayCards.map((card) => (
                   <div
                     key={card.id}
                     onClick={() => onCardClick?.(card)}
-                    className="px-2 py-1 rounded-[6px] text-xs font-medium truncate cursor-pointer hover:opacity-80 transition-opacity"
+                    className="truncate rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium transition-opacity hover:opacity-80"
                     style={{
                       backgroundColor: `${STATUS_COLORS[card.status]}20`,
                       color: STATUS_COLORS[card.status],

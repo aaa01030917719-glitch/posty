@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { format, addDays, subDays, isToday } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { clsx } from 'clsx'
 import type { ContentCard } from '@/lib/types'
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants'
 
@@ -13,51 +12,60 @@ interface CalendarDayProps {
   onCardClick?: (card: ContentCard) => void
 }
 
+const TODAY_LABEL = '\uC624\uB298'
+const EMPTY_TITLE = '\uB4F1\uB85D\uB41C \uC77C\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4'
+const EMPTY_DESCRIPTION = '\uB2E4\uB978 \uB0A0\uC9DC\uB97C \uC120\uD0DD\uD574\uBCF4\uC138\uC694'
+
 export function CalendarDay({ cards, onCardClick }: CalendarDayProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
 
   const dayCards = cards.filter((card) => {
     const target = card.scheduled_at || card.published_at
     if (!target) return false
-    const d = new Date(target)
+
+    const targetDate = new Date(target)
     return (
-      d.getFullYear() === currentDate.getFullYear() &&
-      d.getMonth() === currentDate.getMonth() &&
-      d.getDate() === currentDate.getDate()
+      targetDate.getFullYear() === currentDate.getFullYear() &&
+      targetDate.getMonth() === currentDate.getMonth() &&
+      targetDate.getDate() === currentDate.getDate()
     )
   })
 
   const today = isToday(currentDate)
 
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[12px] overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0F0F0]">
+    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+      <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-6 py-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold text-[#1A1A1A]">
-            {format(currentDate, 'M월 d일 (E)', { locale: ko })}
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
+            {format(currentDate, 'M\uC6D4 d\uC77C (E)', { locale: ko })}
           </h2>
           {today && (
-            <span className="px-2 py-0.5 text-xs bg-[#FDF0ED] text-[#E8917E] rounded-full font-medium">
-              오늘
+            <span className="rounded-[var(--radius-pill)] bg-[var(--color-bg-accent-soft)] px-2 py-0.5 text-xs font-medium text-[var(--color-accent)]">
+              {TODAY_LABEL}
             </span>
           )}
         </div>
+
         <div className="flex items-center gap-1">
           <button
+            type="button"
             onClick={() => setCurrentDate(subDays(currentDate, 1))}
-            className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:bg-[#F5F5F5] transition-colors"
+            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
             <ChevronLeft size={16} />
           </button>
           <button
+            type="button"
             onClick={() => setCurrentDate(new Date())}
-            className="px-3 py-1 text-xs rounded-[8px] text-[#6B7280] hover:bg-[#F5F5F5] transition-colors font-medium"
+            className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
-            오늘
+            {TODAY_LABEL}
           </button>
           <button
+            type="button"
             onClick={() => setCurrentDate(addDays(currentDate, 1))}
-            className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:bg-[#F5F5F5] transition-colors"
+            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
             <ChevronRight size={16} />
           </button>
@@ -66,24 +74,29 @@ export function CalendarDay({ cards, onCardClick }: CalendarDayProps) {
 
       <div className="p-6">
         {dayCards.length === 0 ? (
-          <p className="text-sm text-[#9CA3AF] text-center py-8">이 날 예정된 콘텐츠가 없습니다.</p>
+          <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-canvas)] px-6 py-16 text-center">
+            <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_TITLE}</p>
+            <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_DESCRIPTION}</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             {dayCards.map((card) => (
               <div
                 key={card.id}
                 onClick={() => onCardClick?.(card)}
-                className="flex items-start gap-3 p-4 border border-[#F0F0F0] rounded-[10px] cursor-pointer hover:border-[#E8917E]/30 hover:bg-[#FDF0ED]/30 transition-all"
+                className="flex cursor-pointer items-start gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 transition-[background-color,border-color,box-shadow] hover:border-[color:color-mix(in_srgb,var(--color-accent)_30%,transparent)] hover:bg-[var(--color-bg-accent-soft)] hover:shadow-[var(--shadow-sm)]"
               >
                 <div
-                  className="w-2 h-2 rounded-full mt-1.5 shrink-0"
+                  className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
                   style={{ backgroundColor: STATUS_COLORS[card.status] }}
                 />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#1A1A1A] truncate">{card.title}</p>
-                  <p className="text-xs text-[#9CA3AF] mt-0.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                    {card.title}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
                     {STATUS_LABELS[card.status]}
-                    {card.channel && ` · ${card.channel.name}`}
+                    {card.channel && ` / ${card.channel.name}`}
                   </p>
                 </div>
               </div>
