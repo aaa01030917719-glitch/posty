@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { createClient } from '@/lib/supabase/client'
 
 function getLoginErrorMessage(error: unknown) {
   const rawMessage =
@@ -73,18 +73,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FAFAFA] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg-canvas)] px-4 py-10">
       <div className="w-full max-w-sm">
-        <div className="mb-10 text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-[12px] bg-[#E8917E] mb-4">
-            <span className="text-white text-xl font-bold">P</span>
+        <div className="mb-8 text-center">
+          <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-[var(--radius-xl)] bg-[var(--color-accent)]">
+            <span className="text-xl font-bold text-white">P</span>
           </div>
-          <h1 className="text-2xl font-bold text-[#1A1A1A]">Posty</h1>
-          <p className="mt-1 text-sm text-[#6B7280]">콘텐츠 운영 관리 서비스</p>
+          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">Posty</h1>
+          <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+            콘텐츠 운영 관리 서비스
+          </p>
         </div>
 
-        <div className="bg-white border border-[#F0F0F0] rounded-[12px] p-8">
-          <h2 className="text-lg font-semibold text-[#1A1A1A] mb-6">로그인</h2>
+        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-8 shadow-[var(--shadow-sm)]">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">로그인</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-secondary)]">
+              이메일과 비밀번호를 입력해 Posty를 시작하세요.
+            </p>
+          </div>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <Input
@@ -107,17 +114,25 @@ export default function LoginPage() {
             />
 
             {error && (
-              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-[8px]">{error}</p>
+              <p
+                aria-live="polite"
+                className="rounded-[var(--radius-md)] bg-[var(--color-bg-accent-soft)] px-3 py-2 text-sm text-[var(--color-text-primary)]"
+              >
+                {error}
+              </p>
             )}
 
-            <Button type="submit" disabled={loading} className="w-full mt-2">
+            <Button type="submit" disabled={loading} className="mt-2 w-full">
               {loading ? '로그인 중...' : '로그인'}
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-[#6B7280]">
+          <p className="mt-6 text-center text-sm text-[var(--color-text-secondary)]">
             계정이 없으신가요?{' '}
-            <Link href="/signup" className="text-[#E8917E] font-medium hover:underline">
+            <Link
+              href="/signup"
+              className="font-medium text-[var(--color-accent)] transition-colors hover:text-[var(--color-accent-hover)] hover:underline"
+            >
               회원가입
             </Link>
           </p>
