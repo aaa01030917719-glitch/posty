@@ -3,7 +3,7 @@
 import { clsx } from 'clsx'
 import { eachDayOfInterval, endOfWeek, format, isSameDay, isToday, startOfWeek } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
+import { CHANNEL_COLORS, STATUS_BADGE_CLASSES, STATUS_LABELS } from '@/lib/constants'
 import type { ContentCard } from '@/lib/types'
 
 interface CalendarWeekProps {
@@ -34,23 +34,6 @@ function getChannelShortLabel(card: ContentCard) {
       return 'BL'
     default:
       return 'ETC'
-  }
-}
-
-function getStatusBadgeClass(status: ContentCard['status']) {
-  switch (status) {
-    case 'writing':
-      return 'bg-[var(--color-bg-surface-strong)] text-[var(--color-text-body)]'
-    case 'published':
-      return 'bg-[#eaf4e2] text-[#3a6e1a]'
-    case 'review':
-      return 'bg-[#e8f4ff] text-[#1a5fa8]'
-    case 'planning':
-      return 'bg-[#f0eeff] text-[#5b3fb5]'
-    case 'scheduled':
-      return 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
-    default:
-      return 'bg-[#fff4e0] text-[#a05500]'
   }
 }
 
@@ -172,7 +155,7 @@ export function CalendarWeek({ cards, currentDate, onCardClick }: CalendarWeekPr
                     <span
                       className={clsx(
                         'mt-[3px] inline-flex rounded-[3px] px-[5px] py-[1.5px] text-[10px] font-semibold',
-                        getStatusBadgeClass(card.status)
+                        STATUS_BADGE_CLASSES[card.status]
                       )}
                     >
                       {STATUS_LABELS[card.status]}

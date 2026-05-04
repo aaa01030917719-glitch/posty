@@ -18,6 +18,16 @@ export const STATUS_COLORS: Record<ContentStatus, string> = {
   hold: '#D1D5DB',
 }
 
+export const STATUS_BADGE_CLASSES: Record<ContentStatus, string> = {
+  idea: 'bg-[#f3f4f6] text-[#6b7280]',
+  planning: 'bg-[#f0eeff] text-[#5b3fb5]',
+  writing: 'bg-[var(--color-bg-surface-strong)] text-[var(--color-text-body)]',
+  review: 'bg-[#e8f4ff] text-[#1a5fa8]',
+  scheduled: 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]',
+  published: 'bg-[#eaf4e2] text-[#3a6e1a]',
+  hold: 'bg-[#f3f4f6] text-[#6b7280]',
+}
+
 export const STATUS_LABELS: Record<ContentStatus, string> = {
   idea: '\uC544\uC774\uB514\uC5B4',
   planning: '\uAE30\uD68D\uC911',

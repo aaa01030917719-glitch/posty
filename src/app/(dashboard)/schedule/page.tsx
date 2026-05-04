@@ -25,7 +25,7 @@ import { createContentCard } from '@/components/content/createContentCard'
 import { CalendarDay } from '@/components/schedule/CalendarDay'
 import { CalendarMonth } from '@/components/schedule/CalendarMonth'
 import { CalendarWeek } from '@/components/schedule/CalendarWeek'
-import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
+import { CHANNEL_COLORS, STATUS_BADGE_CLASSES, STATUS_LABELS } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
 import type { ChannelType, ContentCard } from '@/lib/types'
 
@@ -67,9 +67,20 @@ function getWeekOfMonth(date: Date) {
   )
 }
 
-function formatTimeLabel(card: ContentCard) {
+function getPanelMeta(card: ContentCard) {
   const targetDate = getTargetDate(card)
-  return targetDate ? format(targetDate, 'a h시', { locale: ko }) : STATUS_LABELS[card.status]
+
+  if (targetDate) {
+    return {
+      kind: 'time' as const,
+      label: format(targetDate, 'a h시', { locale: ko }),
+    }
+  }
+
+  return {
+    kind: 'status' as const,
+    label: STATUS_LABELS[card.status],
+  }
 }
 
 function getViewTitle(view: ViewMode, currentDate: Date) {
@@ -203,6 +214,7 @@ export default function SchedulePage() {
   const renderPanelCard = (card: ContentCard, variant: 'default' | 'done' | 'review') => {
     const channelColor = card.channel ? CHANNEL_COLORS[card.channel.type] ?? '#929292' : '#929292'
     const channelLabel = card.channel ? CHANNEL_SHORT_LABELS[card.channel.type] : null
+    const panelMeta = getPanelMeta(card)
 
     return (
       <button
@@ -243,9 +255,18 @@ export default function SchedulePage() {
                 {channelLabel}
               </span>
             )}
-            <span className="text-[10.5px] text-[var(--color-text-muted)]">
-              {formatTimeLabel(card)}
-            </span>
+            {panelMeta.kind === 'time' ? (
+              <span className="text-[10.5px] text-[var(--color-text-muted)]">{panelMeta.label}</span>
+            ) : (
+              <span
+                className={clsx(
+                  'inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold',
+                  STATUS_BADGE_CLASSES[card.status]
+                )}
+              >
+                {panelMeta.label}
+              </span>
+            )}
           </span>
         </span>
       </button>
