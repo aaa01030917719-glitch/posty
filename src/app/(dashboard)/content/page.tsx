@@ -45,7 +45,7 @@ export default function ContentPage() {
       const supabase = createClient()
       const { data } = await supabase
         .from('content_cards')
-        .select('*, channel:channels(*)')
+        .select('*, channel:channels(*), project:content_projects(id,title)')
         .order('created_at', { ascending: false })
 
       setCards((data as ContentCard[]) ?? [])

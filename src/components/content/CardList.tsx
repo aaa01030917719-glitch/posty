@@ -43,6 +43,11 @@ export function CardList({ cards, onCardClick }: CardListProps) {
             />
 
             <div className="min-w-0 flex-1">
+              {card.project?.title && (
+                <p className="mb-1 truncate text-[11px] font-medium text-[var(--color-text-muted)]">
+                  {card.project.title}
+                </p>
+              )}
               <p className="truncate text-sm font-medium text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-accent)]">
                 {card.title}
               </p>

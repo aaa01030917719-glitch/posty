@@ -16,7 +16,7 @@ import {
 import { clsx } from 'clsx'
 import { CHANNEL_COLORS } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
-import type { ChecklistItem, ContentCard, Script } from '@/lib/types'
+import type { ChecklistItem, ContentCard, ContentProjectSummary, Script } from '@/lib/types'
 
 interface ContentEditorShellProps {
   cardId: string
@@ -44,6 +44,7 @@ const PREVIEW_IDS = new Set(['preview', 'demo'])
 const DEFAULT_PANEL_TITLE = '대본'
 const EDITOR_PLACEHOLDER = '원고를 작성해보세요...'
 const EMPTY_SECTION_MESSAGE = '아직 입력된 내용이 없습니다.'
+const NO_CAMPAIGN_LABEL = '캠페인 없음'
 const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
   { value: 'body', label: '원고' },
   { value: 'scenes', label: '대본' },
@@ -72,6 +73,7 @@ const SAMPLE_CARD: ContentCard = {
     { id: 'check-3', text: '캡션과 해시태그 정리', done: false },
   ],
   idea_id: null,
+  project_id: null,
   created_at: '2026-05-04T10:00:00+09:00',
   updated_at: '2026-05-04T14:43:00+09:00',
   channel: {
@@ -82,6 +84,7 @@ const SAMPLE_CARD: ContentCard = {
     color: CHANNEL_COLORS.instagram,
     created_at: '2026-05-04T10:00:00+09:00',
   },
+  project: null,
 }
 
 const SAMPLE_SCRIPT: Script = {
@@ -225,6 +228,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [panelTitle, setPanelTitle] = useState(DEFAULT_PANEL_TITLE)
   const [sceneDrafts, setSceneDrafts] = useState<SceneDraft[]>(createSceneDrafts(SAMPLE_SCRIPT))
   const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [projects, setProjects] = useState<ContentProjectSummary[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState('')
 
   const isPreview = PREVIEW_IDS.has(cardId)
 
@@ -232,6 +237,13 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     () => SECTION_ITEMS.find((item) => item.value === activeSection)?.label ?? DEFAULT_PANEL_TITLE,
     [activeSection]
   )
+  const campaignOptions = useMemo(() => {
+    if (!card?.project) return projects
+
+    return projects.some((project) => project.id === card.project?.id)
+      ? projects
+      : [card.project, ...projects]
+  }, [card?.project, projects])
 
   useEffect(() => {
     if (saveState !== 'saved') return
@@ -261,6 +273,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setMemoDraft(nextCard?.memo ?? '')
       setPanelTitle(nextScript?.panel_title?.trim() || DEFAULT_PANEL_TITLE)
       setSceneDrafts(createSceneDrafts(nextScript))
+      setSelectedProjectId(nextCard?.project_id ?? '')
       setSaveState('idle')
       setLoading(false)
     }
@@ -269,20 +282,25 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setLoading(true)
 
       if (isPreview) {
+        setProjects([])
         applyState(SAMPLE_CARD, SAMPLE_SCRIPT)
         return
       }
 
       const supabase = createClient()
-      const [{ data: cardData, error: cardError }, { data: scriptData, error: scriptError }] =
-        await Promise.all([
-          supabase
-            .from('content_cards')
-            .select('*, channel:channels(*)')
-            .eq('id', cardId)
-            .maybeSingle(),
-          supabase.from('scripts').select('*').eq('card_id', cardId).maybeSingle(),
-        ])
+      const [
+        { data: cardData, error: cardError },
+        { data: scriptData, error: scriptError },
+        { data: projectData, error: projectError },
+      ] = await Promise.all([
+        supabase
+          .from('content_cards')
+          .select('*, channel:channels(*), project:content_projects(id,title)')
+          .eq('id', cardId)
+          .maybeSingle(),
+        supabase.from('scripts').select('*').eq('card_id', cardId).maybeSingle(),
+        supabase.from('content_projects').select('id, title').order('created_at', { ascending: false }),
+      ])
 
       if (cardError) {
         console.error('Failed to fetch content card', cardError)
@@ -292,6 +310,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         console.error('Failed to fetch script', scriptError)
       }
 
+      if (projectError) {
+        console.error('Failed to fetch content projects', projectError)
+      }
+
+      setProjects((projectData as ContentProjectSummary[] | null) ?? [])
       applyState((cardData as ContentCard | null) ?? null, (scriptData as Script | null) ?? null)
     }
 
@@ -323,13 +346,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         status: nextStatus,
         scheduled_at: toIsoFromScheduledFields(scheduledDateDraft, scheduledTimeDraft),
         memo: bodyDraft.trim() ? bodyDraft : null,
+        project_id: selectedProjectId || null,
       }
 
       const { data, error } = await supabase
         .from('content_cards')
         .update(payload)
         .eq('id', card.id)
-        .select('*, channel:channels(*)')
+        .select('*, channel:channels(*), project:content_projects(id,title)')
         .single()
 
       if (error) {
@@ -347,6 +371,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setScheduledTimeDraft(nextScheduled.time)
       setBodyDraft(nextCard.memo ?? '')
       setMemoDraft(nextCard.memo ?? '')
+      setSelectedProjectId(nextCard.project_id ?? '')
       setSaveState('saved')
       router.push('/content')
     } catch (error) {
@@ -652,6 +677,23 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               <span className="flex h-9 items-center text-xs text-[var(--color-text-body)]">
                 {formatDate(card.updated_at, true)}
               </span>
+
+              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">캠페인</span>
+              <div className="flex flex-col gap-1">
+                <select
+                  value={selectedProjectId}
+                  onChange={(event) => setSelectedProjectId(event.target.value)}
+                  disabled={isPreview || saveState === 'saving'}
+                  className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                >
+                  <option value="">{NO_CAMPAIGN_LABEL}</option>
+                  {campaignOptions.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">업로드 예정일</span>
               <div className="flex flex-col gap-2 sm:flex-row">

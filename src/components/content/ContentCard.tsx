@@ -44,6 +44,9 @@ export function ContentCard({ card, onClick }: ContentCardProps) {
         </button>
       </div>
 
+      {card.project?.title && (
+        <p className="text-[11px] font-medium text-[var(--color-text-muted)]">{card.project.title}</p>
+      )}
       <p className="line-clamp-2 text-sm font-medium leading-snug text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-accent)]">
         {card.title}
       </p>

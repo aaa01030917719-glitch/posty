@@ -26,6 +26,20 @@ export interface Tag {
   color: string
 }
 
+export interface ContentProject {
+  id: string
+  user_id: string
+  title: string
+  description: string | null
+  status: string
+  start_date: string | null
+  end_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ContentProjectSummary = Pick<ContentProject, 'id' | 'title'>
+
 export interface ChecklistItem {
   id: string
   text: string
@@ -46,10 +60,12 @@ export interface ContentCard {
   reference_url: string | null
   checklist: ChecklistItem[]
   idea_id: string | null
+  project_id: string | null
   created_at: string
   updated_at: string
   channel?: Channel
   tags?: Tag[]
+  project?: ContentProjectSummary | null
 }
 
 export interface Script {
@@ -134,12 +150,20 @@ export type Database = {
         Insert: Omit<Tag, 'id'> & { id?: string }
         Update: Partial<Omit<Tag, 'id'>>
       }
-      content_cards: {
-        Row: ContentCard
-        Insert: Omit<ContentCard, 'id' | 'created_at' | 'updated_at' | 'channel' | 'tags'> & {
+      content_projects: {
+        Row: ContentProject
+        Insert: Omit<ContentProject, 'id' | 'created_at' | 'updated_at'> & {
           id?: string; created_at?: string; updated_at?: string
         }
-        Update: Partial<Omit<ContentCard, 'id' | 'channel' | 'tags'>>
+        Update: Partial<Omit<ContentProject, 'id'>>
+      }
+      content_cards: {
+        Row: ContentCard
+        Insert: Omit<
+          ContentCard,
+          'id' | 'created_at' | 'updated_at' | 'channel' | 'tags' | 'project'
+        > & { id?: string; created_at?: string; updated_at?: string }
+        Update: Partial<Omit<ContentCard, 'id' | 'channel' | 'tags' | 'project'>>
       }
       scripts: {
         Row: Script

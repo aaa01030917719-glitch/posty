@@ -45,6 +45,7 @@ export async function createContentCard() {
     reference_url: null,
     checklist: [],
     idea_id: null,
+    project_id: null,
   }
 
   const { data, error } = await supabase
