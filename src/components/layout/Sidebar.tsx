@@ -36,54 +36,76 @@ export function Sidebar() {
     router.refresh()
   }
 
+  const avatarText = 'ME'
+
   return (
-    <aside className="hidden h-full w-56 shrink-0 flex-col border-r border-[var(--color-border-default)] bg-[var(--color-bg-surface)] md:flex">
-      {/* Logo */}
-      <div className="border-b border-[var(--color-border-default)] px-5 py-5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)]">
-            <span className="text-white text-sm font-bold">P</span>
+    <aside className="hidden h-full w-[168px] shrink-0 flex-col border-r border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] md:flex">
+      <div className="px-3 pb-2.5 pt-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-[var(--color-accent)]">
+            <span className="text-[11px] font-bold text-[var(--color-on-accent)]">P</span>
           </div>
-          <span className="text-base font-bold text-[var(--color-text-primary)]">Posty</span>
+          <span className="text-sm font-bold tracking-[-0.02em] text-[var(--color-text-primary)]">
+            Posty
+          </span>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
+      <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-1">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
+
           return (
             <Link
               key={href}
               href={href}
               className={clsx(
-                'flex items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-sm font-medium transition-[background-color,color,box-shadow]',
-                'outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                'mb-px flex items-center gap-2 rounded-[5px] px-2 py-1.5 transition-[background-color,color,box-shadow] outline-none focus-visible:[box-shadow:var(--focus-ring)]',
                 active
-                  ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]'
+                  ? 'bg-[var(--color-bg-surface-soft)]'
+                  : 'hover:bg-[var(--color-bg-surface-soft)]'
               )}
             >
               <Icon
-                size={17}
-                className={active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
-                strokeWidth={active ? 2.2 : 1.8}
+                size={14}
+                className={active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted-soft)]'}
+                strokeWidth={1.8}
               />
-              {label}
+              <span
+                className={clsx(
+                  'text-[12.5px]',
+                  active
+                    ? 'font-semibold text-[var(--color-text-primary)]'
+                    : 'font-medium text-[var(--color-text-secondary)]'
+                )}
+              >
+                {label}
+              </span>
+              <span
+                className={clsx(
+                  'ml-auto h-3 w-[2px] rounded-[1px] bg-[var(--color-accent)]',
+                  active ? 'opacity-100' : 'opacity-0'
+                )}
+              />
             </Link>
           )
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="border-t border-[var(--color-border-default)] px-3 py-4">
+      <div className="mt-auto border-t border-[var(--color-bg-surface-strong)] px-2 py-2.5">
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-accent-soft)] hover:text-[var(--color-accent)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+          className="flex w-full items-center gap-2 rounded-[5px] px-2 py-[7px] text-left transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-surface-soft)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+          aria-label={LOGOUT_LABEL}
         >
-          <LogOut size={17} strokeWidth={1.8} />
-          {LOGOUT_LABEL}
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-text-body)] text-[9.5px] font-semibold text-[var(--color-on-accent)]">
+            {avatarText}
+          </span>
+          <span className="min-w-0 flex-1 text-[12px] font-medium text-[var(--color-text-body)]">
+            {LOGOUT_LABEL}
+          </span>
+          <LogOut size={14} strokeWidth={1.8} className="shrink-0 text-[var(--color-text-muted-soft)]" />
         </button>
       </div>
     </aside>
