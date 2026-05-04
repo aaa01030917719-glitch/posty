@@ -1,28 +1,32 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, LayoutGrid, List, Search } from 'lucide-react'
+import { clsx } from 'clsx'
 import { CardGrid } from '@/components/content/CardGrid'
 import { CardList } from '@/components/content/CardList'
 import { CardModal } from '@/components/content/CardModal'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { createClient } from '@/lib/supabase/client'
+import { STATUS_COLORS } from '@/lib/constants'
 import type { ContentCard, ContentStatus } from '@/lib/types'
-import { STATUS_LABELS, STATUS_COLORS } from '@/lib/constants'
-import { clsx } from 'clsx'
 
 type ViewMode = 'grid' | 'list'
 
 const STATUS_FILTERS: { value: ContentStatus | 'all'; label: string }[] = [
-  { value: 'all', label: '전체' },
-  { value: 'idea', label: '아이디어' },
-  { value: 'planning', label: '기획중' },
-  { value: 'writing', label: '작성중' },
-  { value: 'review', label: '검토중' },
-  { value: 'scheduled', label: '예약됨' },
-  { value: 'published', label: '발행됨' },
-  { value: 'hold', label: '보류' },
+  { value: 'all', label: '\uC804\uCCB4' },
+  { value: 'idea', label: '\uC544\uC774\uB514\uC5B4' },
+  { value: 'planning', label: '\uAE30\uD68D\uC911' },
+  { value: 'writing', label: '\uC791\uC131\uC911' },
+  { value: 'review', label: '\uAC80\uC218\uC911' },
+  { value: 'scheduled', label: '\uC608\uC57D' },
+  { value: 'published', label: '\uBC1C\uD589' },
+  { value: 'hold', label: '\uBCF4\uB958' },
 ]
+
+const SEARCH_PLACEHOLDER = '\uCF58\uD150\uCE20 \uAC80\uC0C9...'
+const NEW_CONTENT_LABEL = '\uC0C8 \uCF58\uD150\uCE20'
 
 export default function ContentPage() {
   const [view, setView] = useState<ViewMode>('grid')
@@ -39,9 +43,11 @@ export default function ContentPage() {
         .from('content_cards')
         .select('*, channel:channels(*)')
         .order('created_at', { ascending: false })
+
       setCards((data as ContentCard[]) ?? [])
       setLoading(false)
     }
+
     fetchCards()
   }, [])
 
@@ -52,81 +58,99 @@ export default function ContentPage() {
   })
 
   const handleCardUpdate = (updated: ContentCard) => {
-    setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+    setCards((prev) => prev.map((card) => (card.id === updated.id ? updated : card)))
     setSelectedCard(updated)
   }
 
   return (
-    <div className="p-5 md:p-6">
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        {/* Search */}
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
-          <input
-            type="text"
-            placeholder="콘텐츠 검색..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-2 text-sm border border-[#F0F0F0] rounded-[8px] outline-none focus:border-[#E8917E] focus:ring-2 focus:ring-[#E8917E]/10 bg-white placeholder-[#9CA3AF]"
-          />
-        </div>
-        <div className="flex items-center gap-2 ml-auto">
-          {/* View toggle */}
-          <div className="flex items-center gap-0.5 bg-[#F5F5F5] rounded-[8px] p-0.5">
-            <button
-              onClick={() => setView('grid')}
-              className={clsx('p-1.5 rounded-[6px] transition-all', view === 'grid' ? 'bg-white shadow-sm text-[#1A1A1A]' : 'text-[#9CA3AF]')}
-            >
-              <LayoutGrid size={15} />
-            </button>
-            <button
-              onClick={() => setView('list')}
-              className={clsx('p-1.5 rounded-[6px] transition-all', view === 'list' ? 'bg-white shadow-sm text-[#1A1A1A]' : 'text-[#9CA3AF]')}
-            >
-              <List size={15} />
-            </button>
+    <div className="flex flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+      <section className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 md:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative w-full max-w-sm">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[var(--color-text-muted)]"
+            />
+            <Input
+              type="text"
+              value={search}
+              placeholder={SEARCH_PLACEHOLDER}
+              onChange={(event) => setSearch(event.target.value)}
+              className="pl-9"
+            />
           </div>
-          <Button size="sm">
-            <Plus size={14} />
-            새 콘텐츠
-          </Button>
-        </div>
-      </div>
 
-      {/* Status filter tabs */}
-      <div className="flex items-center gap-1.5 mb-5 overflow-x-auto pb-1">
-        {STATUS_FILTERS.map(({ value, label }) => (
-          <button
-            key={value}
-            onClick={() => setStatusFilter(value)}
-            className={clsx(
-              'px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-all',
-              statusFilter === value
-                ? value === 'all'
-                  ? 'bg-[#1A1A1A] text-white'
-                  : 'text-white'
-                : 'bg-[#F5F5F5] text-[#6B7280] hover:bg-[#EBEBEB]'
-            )}
-            style={
-              statusFilter === value && value !== 'all'
-                ? { backgroundColor: STATUS_COLORS[value as ContentStatus] }
-                : undefined
-            }
-          >
-            {label}
-            {value !== 'all' && (
-              <span className="ml-1 opacity-70">
-                {cards.filter((c) => c.status === value).length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+          <div className="flex items-center justify-between gap-2 lg:ml-auto">
+            <div className="flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-0.5">
+              <button
+                type="button"
+                aria-label="Grid view"
+                onClick={() => setView('grid')}
+                className={clsx(
+                  'rounded-[var(--radius-sm)] p-1.5 transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                  view === 'grid'
+                    ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)] shadow-[var(--shadow-sm)]'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+                )}
+              >
+                <LayoutGrid size={15} />
+              </button>
+              <button
+                type="button"
+                aria-label="List view"
+                onClick={() => setView('list')}
+                className={clsx(
+                  'rounded-[var(--radius-sm)] p-1.5 transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                  view === 'list'
+                    ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)] shadow-[var(--shadow-sm)]'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
+                )}
+              >
+                <List size={15} />
+              </button>
+            </div>
+
+            <Button size="sm" className="shrink-0">
+              <Plus size={14} />
+              {NEW_CONTENT_LABEL}
+            </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-1.5 overflow-x-auto border-t border-[var(--color-border-default)] pt-4 pb-1">
+          {STATUS_FILTERS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStatusFilter(value)}
+              className={clsx(
+                'whitespace-nowrap rounded-[var(--radius-pill)] px-3 py-1.5 text-xs font-medium transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                statusFilter === value
+                  ? value === 'all'
+                    ? 'bg-[var(--color-text-primary)] text-[var(--color-bg-surface)]'
+                    : 'text-[var(--color-bg-surface)]'
+                  : 'bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] ring-1 ring-inset ring-[var(--color-border-default)] hover:bg-[var(--color-bg-subtle)]'
+              )}
+              style={
+                statusFilter === value && value !== 'all'
+                  ? { backgroundColor: STATUS_COLORS[value as ContentStatus] }
+                  : undefined
+              }
+            >
+              {label}
+              {value !== 'all' && (
+                <span className="ml-1 opacity-70">
+                  {cards.filter((card) => card.status === value).length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </section>
 
       {loading ? (
-        <div className="flex items-center justify-center py-24">
-          <div className="w-5 h-5 border-2 border-[#E8917E] border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center justify-center rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] py-24">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
       ) : view === 'grid' ? (
         <CardGrid cards={filtered} onCardClick={setSelectedCard} />

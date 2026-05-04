@@ -3,14 +3,14 @@
 import { useState } from 'react'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
+import { CheckSquare, Square, ExternalLink } from 'lucide-react'
+import { clsx } from 'clsx'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
 import { STATUS_COLORS, STATUS_LABELS, CHANNEL_COLORS } from '@/lib/constants'
-import type { ContentCard, ContentStatus } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
-import { CheckSquare, Square, ExternalLink } from 'lucide-react'
+import type { ContentCard, ContentStatus } from '@/lib/types'
 
 interface CardModalProps {
   card: ContentCard | null
@@ -20,6 +20,11 @@ interface CardModalProps {
 }
 
 const STATUS_OPTIONS: ContentStatus[] = ['idea', 'planning', 'writing', 'review', 'scheduled', 'published', 'hold']
+const STATUS_SECTION_TITLE = '\uC0C1\uD0DC \uBCC0\uACBD'
+const MEMO_SECTION_TITLE = '\uBA54\uBAA8'
+const REFERENCE_SECTION_TITLE = '\uCC38\uACE0 \uB9C1\uD06C'
+const CHECKLIST_SECTION_TITLE = '\uCCB4\uD06C\uB9AC\uC2A4\uD2B8'
+const CLOSE_BUTTON_LABEL = '\uB2EB\uAE30'
 
 export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
   const [saving, setSaving] = useState(false)
@@ -30,6 +35,7 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
 
   const handleStatusChange = async (status: ContentStatus) => {
     setSaving(true)
+
     const supabase = createClient()
     const { data } = await supabase
       .from('content_cards')
@@ -37,29 +43,31 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
       .eq('id', card.id)
       .select()
       .single()
+
     if (data) onUpdate?.(data as ContentCard)
     setSaving(false)
   }
 
   const toggleChecklist = async (itemId: string) => {
-    const updated = card.checklist.map((item) =>
+    const updatedChecklist = card.checklist.map((item) =>
       item.id === itemId ? { ...item, done: !item.done } : item
     )
+
     const supabase = createClient()
     const { data } = await supabase
       .from('content_cards')
-      .update({ checklist: updated } as never)
+      .update({ checklist: updatedChecklist } as never)
       .eq('id', card.id)
       .select()
       .single()
+
     if (data) onUpdate?.(data as ContentCard)
   }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={card.title} size="lg">
       <div className="flex flex-col gap-5">
-        {/* Status + Channel */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex flex-wrap items-center gap-2">
           <Badge label={STATUS_LABELS[card.status]} color={STATUS_COLORS[card.status]} />
           {card.channel && (
             <Badge
@@ -68,89 +76,114 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
             />
           )}
           {scheduled && (
-            <span className="text-xs text-[#9CA3AF] font-mono ml-auto">
+            <span className="ml-auto font-mono text-xs text-[var(--color-text-muted)]">
               {format(new Date(scheduled), 'yyyy.M.d(E)', { locale: ko })}
             </span>
           )}
         </div>
 
-        {/* Status change */}
-        <div>
-          <p className="text-xs font-medium text-[#6B7280] mb-2">상태 변경</p>
+        <section className="rounded-[var(--radius-lg)] bg-[var(--color-bg-canvas)] p-4">
+          <p className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">
+            {STATUS_SECTION_TITLE}
+          </p>
           <div className="flex flex-wrap gap-1.5">
-            {STATUS_OPTIONS.map((s) => (
+            {STATUS_OPTIONS.map((status) => (
               <button
-                key={s}
+                key={status}
+                type="button"
                 disabled={saving}
-                onClick={() => handleStatusChange(s)}
-                className="px-2.5 py-1 rounded-full text-xs font-medium transition-all disabled:opacity-50"
+                onClick={() => handleStatusChange(status)}
+                className="rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:opacity-50"
                 style={{
-                  backgroundColor: card.status === s ? STATUS_COLORS[s] : `${STATUS_COLORS[s]}20`,
-                  color: card.status === s ? 'white' : STATUS_COLORS[s],
+                  backgroundColor:
+                    card.status === status ? STATUS_COLORS[status] : `${STATUS_COLORS[status]}20`,
+                  color:
+                    card.status === status ? 'var(--color-bg-surface)' : STATUS_COLORS[status],
                 }}
               >
-                {STATUS_LABELS[s]}
+                {STATUS_LABELS[status]}
               </button>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* Memo */}
         {card.memo && (
-          <div>
-            <p className="text-xs font-medium text-[#6B7280] mb-1.5">메모</p>
-            <p className="text-sm text-[#1A1A1A] leading-relaxed whitespace-pre-wrap">
-              {card.memo}
+          <section>
+            <p className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+              {MEMO_SECTION_TITLE}
             </p>
-          </div>
+            <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-canvas)] p-4">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
+                {card.memo}
+              </p>
+            </div>
+          </section>
         )}
 
-        {/* Reference URL */}
         {card.reference_url && (
-          <div>
-            <p className="text-xs font-medium text-[#6B7280] mb-1.5">참고 링크</p>
-            <a
-              href={card.reference_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm text-[#E8917E] hover:underline"
-            >
-              <ExternalLink size={12} />
-              {card.reference_url}
-            </a>
-          </div>
+          <section>
+            <p className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+              {REFERENCE_SECTION_TITLE}
+            </p>
+            <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-canvas)] p-4">
+              <a
+                href={card.reference_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-[var(--color-accent)] hover:underline"
+              >
+                <ExternalLink size={12} />
+                {card.reference_url}
+              </a>
+            </div>
+          </section>
         )}
 
-        {/* Checklist */}
         {card.checklist && card.checklist.length > 0 && (
-          <div>
-            <p className="text-xs font-medium text-[#6B7280] mb-2">체크리스트</p>
-            <div className="flex flex-col gap-1.5">
+          <section>
+            <p className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">
+              {CHECKLIST_SECTION_TITLE}
+            </p>
+            <div className="flex flex-col gap-1.5 rounded-[var(--radius-lg)] bg-[var(--color-bg-canvas)] p-4">
               {card.checklist.map((item) => (
                 <button
                   key={item.id}
+                  type="button"
                   onClick={() => toggleChecklist(item.id)}
-                  className="flex items-center gap-2.5 text-left hover:opacity-80 transition-opacity"
+                  className="flex items-center gap-2.5 rounded-[var(--radius-md)] text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
                 >
                   {item.done ? (
-                    <CheckSquare size={15} className="text-[#47C9A2] shrink-0" strokeWidth={2} />
+                    <CheckSquare
+                      size={15}
+                      className="shrink-0 text-[var(--color-success)]"
+                      strokeWidth={2}
+                    />
                   ) : (
-                    <Square size={15} className="text-[#D1D5DB] shrink-0" strokeWidth={1.5} />
+                    <Square
+                      size={15}
+                      className="shrink-0 text-[var(--color-border-strong)]"
+                      strokeWidth={1.5}
+                    />
                   )}
                   <span
-                    className={`text-sm ${item.done ? 'line-through text-[#9CA3AF]' : 'text-[#1A1A1A]'}`}
+                    className={clsx(
+                      'text-sm',
+                      item.done
+                        ? 'line-through text-[var(--color-text-muted)]'
+                        : 'text-[var(--color-text-primary)]'
+                    )}
                   >
                     {item.text}
                   </span>
                 </button>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
-        <div className="flex justify-end gap-2 pt-2 border-t border-[#F0F0F0]">
+        <div className="flex justify-end gap-2 border-t border-[var(--color-border-default)] pt-2">
           <Button variant="secondary" size="sm" onClick={onClose}>
-            닫기
+            {CLOSE_BUTTON_LABEL}
           </Button>
         </div>
       </div>

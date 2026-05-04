@@ -1,6 +1,9 @@
 import { ContentCard } from './ContentCard'
 import type { ContentCard as ContentCardType } from '@/lib/types'
 
+const EMPTY_TITLE = '\uCF58\uD150\uCE20\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
+const EMPTY_DESCRIPTION = '\uC0C8 \uCF58\uD150\uCE20 \uCE74\uB4DC\uB97C \uCD94\uAC00\uD574\uBCF4\uC138\uC694'
+
 interface CardGridProps {
   cards: ContentCardType[]
   onCardClick?: (card: ContentCardType) => void
@@ -9,16 +12,18 @@ interface CardGridProps {
 export function CardGrid({ cards, onCardClick }: CardGridProps) {
   if (cards.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <p className="text-3xl mb-3">📝</p>
-        <p className="text-sm font-medium text-[#1A1A1A]">콘텐츠가 없습니다</p>
-        <p className="text-xs text-[#9CA3AF] mt-1">새 콘텐츠 카드를 추가해보세요</p>
+      <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-20 text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
+          +
+        </div>
+        <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_TITLE}</p>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_DESCRIPTION}</p>
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {cards.map((card) => (
         <ContentCard key={card.id} card={card} onClick={() => onCardClick?.(card)} />
       ))}

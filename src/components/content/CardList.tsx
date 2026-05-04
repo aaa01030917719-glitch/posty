@@ -5,6 +5,9 @@ import { Badge } from '@/components/ui/Badge'
 import { STATUS_COLORS, STATUS_LABELS, CHANNEL_COLORS } from '@/lib/constants'
 import type { ContentCard } from '@/lib/types'
 
+const EMPTY_TITLE = '\uCF58\uD150\uCE20\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
+const EMPTY_DESCRIPTION = '\uC0C8 \uCF58\uD150\uCE20 \uCE74\uB4DC\uB97C \uCD94\uAC00\uD574\uBCF4\uC138\uC694'
+
 interface CardListProps {
   cards: ContentCard[]
   onCardClick?: (card: ContentCard) => void
@@ -13,32 +16,39 @@ interface CardListProps {
 export function CardList({ cards, onCardClick }: CardListProps) {
   if (cards.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <p className="text-3xl mb-3">📝</p>
-        <p className="text-sm font-medium text-[#1A1A1A]">콘텐츠가 없습니다</p>
-        <p className="text-xs text-[#9CA3AF] mt-1">새 콘텐츠 카드를 추가해보세요</p>
+      <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-20 text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
+          +
+        </div>
+        <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_TITLE}</p>
+        <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_DESCRIPTION}</p>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col divide-y divide-[#F0F0F0] bg-white border border-[#F0F0F0] rounded-[12px] overflow-hidden">
+    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
       {cards.map((card) => {
         const scheduled = card.scheduled_at || card.published_at
+
         return (
           <div
             key={card.id}
             onClick={() => onCardClick?.(card)}
-            className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-[#FAFAFA] transition-colors"
+            className="group flex cursor-pointer items-center gap-4 border-b border-[var(--color-border-default)] px-5 py-4 transition-colors last:border-b-0 hover:bg-[var(--color-bg-canvas)]"
           >
             <div
-              className="w-2 h-2 rounded-full shrink-0"
+              className="h-2 w-2 shrink-0 rounded-full"
               style={{ backgroundColor: STATUS_COLORS[card.status] }}
             />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[#1A1A1A] truncate">{card.title}</p>
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-accent)]">
+                {card.title}
+              </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+
+            <div className="flex shrink-0 items-center gap-2">
               <Badge label={STATUS_LABELS[card.status]} color={STATUS_COLORS[card.status]} />
               {card.channel && (
                 <Badge
@@ -47,7 +57,7 @@ export function CardList({ cards, onCardClick }: CardListProps) {
                 />
               )}
               {scheduled && (
-                <span className="hidden sm:flex items-center gap-1 text-xs text-[#9CA3AF] font-mono">
+                <span className="hidden items-center gap-1 font-mono text-xs text-[var(--color-text-muted)] sm:flex">
                   <Calendar size={11} />
                   {format(new Date(scheduled), 'M/d(E)', { locale: ko })}
                 </span>

@@ -3,10 +3,10 @@
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { Calendar, MoreHorizontal } from 'lucide-react'
+import { clsx } from 'clsx'
 import { Badge } from '@/components/ui/Badge'
 import { STATUS_COLORS, STATUS_LABELS, CHANNEL_COLORS } from '@/lib/constants'
 import type { ContentCard as ContentCardType } from '@/lib/types'
-import { clsx } from 'clsx'
 
 interface ContentCardProps {
   card: ContentCardType
@@ -20,18 +20,13 @@ export function ContentCard({ card, onClick }: ContentCardProps) {
     <div
       onClick={onClick}
       className={clsx(
-        'bg-white border border-[#F0F0F0] rounded-[12px] p-4 cursor-pointer',
-        'hover:border-[#E8917E]/30 hover:shadow-sm transition-all',
-        'flex flex-col gap-3'
+        'group flex min-h-[176px] cursor-pointer flex-col gap-3 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4',
+        'transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-[color:color-mix(in_srgb,var(--color-accent)_30%,transparent)] hover:shadow-[var(--shadow-sm)]'
       )}
     >
-      {/* Top row */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge
-            label={STATUS_LABELS[card.status]}
-            color={STATUS_COLORS[card.status]}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge label={STATUS_LABELS[card.status]} color={STATUS_COLORS[card.status]} />
           {card.channel && (
             <Badge
               label={card.channel.name}
@@ -39,29 +34,28 @@ export function ContentCard({ card, onClick }: ContentCardProps) {
             />
           )}
         </div>
+
         <button
-          onClick={(e) => e.stopPropagation()}
-          className="p-1 rounded-[6px] text-[#9CA3AF] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors shrink-0"
+          type="button"
+          onClick={(event) => event.stopPropagation()}
+          className="shrink-0 rounded-[var(--radius-sm)] p-1 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
         >
           <MoreHorizontal size={14} />
         </button>
       </div>
 
-      {/* Title */}
-      <p className="text-sm font-medium text-[#1A1A1A] leading-snug line-clamp-2">
+      <p className="line-clamp-2 text-sm font-medium leading-snug text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-accent)]">
         {card.title}
       </p>
 
-      {/* Memo */}
       {card.memo && (
-        <p className="text-xs text-[#9CA3AF] line-clamp-2 leading-relaxed">
+        <p className="line-clamp-3 text-xs leading-relaxed text-[var(--color-text-muted)]">
           {card.memo}
         </p>
       )}
 
-      {/* Footer */}
       {scheduled && (
-        <div className="flex items-center gap-1.5 text-xs text-[#9CA3AF] mt-auto pt-1">
+        <div className="mt-auto flex items-center gap-1.5 pt-1 text-xs text-[var(--color-text-muted)]">
           <Calendar size={11} strokeWidth={1.8} />
           <span className="font-mono">
             {format(new Date(scheduled), 'M/d(E)', { locale: ko })}
