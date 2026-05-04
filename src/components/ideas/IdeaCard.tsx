@@ -13,9 +13,13 @@ interface IdeaCardProps {
   onArchive?: (idea: Idea) => void
 }
 
+const CONVERT_LABEL = '\uCF58\uD150\uCE20\uB85C \uBCC0\uD658'
+const CONVERTED_LABEL = '\uBCC0\uD658\uB428'
+const ARCHIVE_LABEL = '\uC544\uCE74\uC774\uBE0C'
+
 export function IdeaCard({ idea, onConvert, onArchive }: IdeaCardProps) {
   return (
-    <div className="bg-white border border-[#F0F0F0] rounded-[12px] p-4 flex flex-col gap-3 hover:border-[#E8917E]/30 hover:shadow-sm transition-all">
+    <div className="group flex flex-col gap-3 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-[color:color-mix(in_srgb,var(--color-accent)_30%,transparent)] hover:shadow-[var(--shadow-sm)]">
       <div className="flex items-start justify-between gap-2">
         {idea.channel_type && (
           <Badge
@@ -23,34 +27,44 @@ export function IdeaCard({ idea, onConvert, onArchive }: IdeaCardProps) {
             color={CHANNEL_COLORS[idea.channel_type]}
           />
         )}
-        <span className="text-xs text-[#9CA3AF] font-mono ml-auto shrink-0">
+        <span className="ml-auto shrink-0 font-mono text-xs text-[var(--color-text-muted)]">
           {format(new Date(idea.created_at), 'M/d', { locale: ko })}
         </span>
       </div>
 
-      <p className="text-sm font-medium text-[#1A1A1A] leading-snug">{idea.title}</p>
+      <p className="text-sm font-medium leading-snug text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-accent)]">
+        {idea.title}
+      </p>
 
       {idea.body && (
-        <p className="text-xs text-[#9CA3AF] line-clamp-2 leading-relaxed">{idea.body}</p>
+        <p className="line-clamp-2 text-xs leading-relaxed text-[var(--color-text-muted)]">
+          {idea.body}
+        </p>
       )}
 
-      <div className="flex items-center gap-2 mt-auto pt-1">
+      <div className="mt-auto flex items-center gap-2 pt-1">
         {!idea.converted_card_id && onConvert && (
           <button
+            type="button"
             onClick={() => onConvert(idea)}
-            className="flex items-center gap-1 text-xs text-[#E8917E] hover:underline font-medium"
+            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-accent)] transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+            aria-label={CONVERT_LABEL}
           >
             <ArrowRight size={12} />
-            콘텐츠로 전환
+            {CONVERT_LABEL}
           </button>
         )}
+
         {idea.converted_card_id && (
-          <span className="text-xs text-[#47C9A2] font-medium">✓ 전환됨</span>
+          <span className="text-xs font-medium text-[var(--color-success)]">{CONVERTED_LABEL}</span>
         )}
+
         {onArchive && (
           <button
+            type="button"
             onClick={() => onArchive(idea)}
-            className="ml-auto text-[#9CA3AF] hover:text-[#6B7280] transition-colors"
+            className="ml-auto rounded-[var(--radius-sm)] p-1 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-secondary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+            aria-label={ARCHIVE_LABEL}
           >
             <Archive size={13} />
           </button>
