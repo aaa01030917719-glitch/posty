@@ -8,13 +8,23 @@ import {
   Columns2,
   GripVertical,
   Plus,
+  Save,
   Share2,
   X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { CHANNEL_COLORS, STATUS_COLORS, STATUS_LABELS } from '@/lib/constants'
+import {
+  CHANNEL_COLORS,
+  STATUS_COLORS,
+  STATUS_LABELS,
+} from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
-import type { ChecklistItem, ContentCard, Script } from '@/lib/types'
+import type {
+  ChecklistItem,
+  ContentCard,
+  ContentStatus,
+  Script,
+} from '@/lib/types'
 
 interface ContentEditorShellProps {
   cardId: string
@@ -36,10 +46,21 @@ type SceneDraft = {
   body: string
 }
 
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
 const PREVIEW_IDS = new Set(['preview', 'demo'])
 const DEFAULT_PANEL_TITLE = '대본'
 const EDITOR_PLACEHOLDER = '원고를 작성해보세요...'
 const EMPTY_SECTION_MESSAGE = '아직 입력된 내용이 없습니다.'
+const EDITABLE_STATUSES: ContentStatus[] = [
+  'idea',
+  'planning',
+  'writing',
+  'review',
+  'scheduled',
+  'published',
+  'hold',
+]
 
 const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
   { value: 'body', label: '원고' },
@@ -74,7 +95,7 @@ const SAMPLE_CARD: ContentCard = {
   channel: {
     id: 'preview-channel',
     user_id: 'preview-user',
-    name: '인스타그램 릴스',
+    name: '인스타그램',
     type: 'instagram',
     color: CHANNEL_COLORS.instagram,
     created_at: '2026-05-04T10:00:00+09:00',
@@ -127,6 +148,29 @@ function formatDate(value: string | null, withTime = false) {
   }
 }
 
+function toDatetimeLocal(value: string | null) {
+  if (!value) return ''
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return ''
+
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  const hours = `${date.getHours()}`.padStart(2, '0')
+  const minutes = `${date.getMinutes()}`.padStart(2, '0')
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+function toIsoFromDatetimeLocal(value: string) {
+  if (!value) return null
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
 function createSceneDrafts(script: Script | null): SceneDraft[] {
   const body = script?.body?.trim() ?? ''
   const lines = body
@@ -156,10 +200,21 @@ function createSceneDrafts(script: Script | null): SceneDraft[] {
   ]
 }
 
-function createPreviewState() {
-  return {
-    card: SAMPLE_CARD,
-    script: SAMPLE_SCRIPT,
+function getChannelBadgeLabel(card: ContentCard) {
+  if (!card.channel) return null
+
+  switch (card.channel.type) {
+    case 'instagram':
+      return '인스타그램'
+    case 'threads':
+      return '스레드'
+    case 'youtube':
+      return '유튜브'
+    case 'blog':
+      return '블로그'
+    case 'custom':
+    default:
+      return card.channel.name
   }
 }
 
@@ -169,6 +224,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [panelOpen, setPanelOpen] = useState(true)
   const [sectionMenuOpen, setSectionMenuOpen] = useState(false)
   const [activeSection, setActiveSection] = useState<EditorSection>('scenes')
+  const [titleDraft, setTitleDraft] = useState('')
+  const [statusDraft, setStatusDraft] = useState<ContentStatus>('idea')
+  const [scheduledDraft, setScheduledDraft] = useState('')
   const [bodyDraft, setBodyDraft] = useState('')
   const [captionDraft, setCaptionDraft] = useState('')
   const [hashtagsDraft, setHashtagsDraft] = useState('')
@@ -176,13 +234,21 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [memoDraft, setMemoDraft] = useState('')
   const [panelTitle, setPanelTitle] = useState(DEFAULT_PANEL_TITLE)
   const [sceneDrafts, setSceneDrafts] = useState<SceneDraft[]>(createSceneDrafts(SAMPLE_SCRIPT))
+  const [saveState, setSaveState] = useState<SaveState>('idle')
 
   const isPreview = PREVIEW_IDS.has(cardId)
-  const activeSectionLabel =
-    useMemo(
-      () => SECTION_ITEMS.find((item) => item.value === activeSection)?.label ?? DEFAULT_PANEL_TITLE,
-      [activeSection]
-    )
+
+  const activeSectionLabel = useMemo(
+    () => SECTION_ITEMS.find((item) => item.value === activeSection)?.label ?? DEFAULT_PANEL_TITLE,
+    [activeSection]
+  )
+
+  useEffect(() => {
+    if (saveState !== 'saved') return
+
+    const timer = window.setTimeout(() => setSaveState('idle'), 2000)
+    return () => window.clearTimeout(timer)
+  }, [saveState])
 
   useEffect(() => {
     let cancelled = false
@@ -191,13 +257,17 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       if (cancelled) return
 
       setCard(nextCard)
-      setBodyDraft(nextScript?.body ?? '')
+      setTitleDraft(nextCard?.title ?? '')
+      setStatusDraft(nextCard?.status ?? 'idea')
+      setScheduledDraft(toDatetimeLocal(nextCard?.scheduled_at ?? nextCard?.published_at ?? null))
+      setBodyDraft(nextCard?.memo ?? nextScript?.body ?? '')
       setCaptionDraft(nextScript?.caption ?? '')
       setHashtagsDraft(nextScript?.hashtags ?? '')
       setThumbnailDraft(nextScript?.thumbnail_text ?? '')
       setMemoDraft(nextCard?.memo ?? '')
       setPanelTitle(nextScript?.panel_title?.trim() || DEFAULT_PANEL_TITLE)
       setSceneDrafts(createSceneDrafts(nextScript))
+      setSaveState('idle')
       setLoading(false)
     }
 
@@ -205,8 +275,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setLoading(true)
 
       if (isPreview) {
-        const preview = createPreviewState()
-        applyState(preview.card, preview.script)
+        applyState(SAMPLE_CARD, SAMPLE_SCRIPT)
         return
       }
 
@@ -239,12 +308,56 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }, [cardId, isPreview])
 
-  const checklistItems: ChecklistItem[] = card?.checklist ?? []
+  const checklistItems: ChecklistItem[] = Array.isArray(card?.checklist) ? card.checklist : []
+  const channelBadgeLabel = card ? getChannelBadgeLabel(card) : null
+  const scheduledAt = card?.scheduled_at ?? card?.published_at ?? null
+  const scheduledDisplayValue = scheduledDraft
+    ? toIsoFromDatetimeLocal(scheduledDraft)
+    : scheduledAt
 
   const updateSceneDraft = (sceneId: string, key: 'title' | 'body', value: string) => {
     setSceneDrafts((prev) =>
       prev.map((scene) => (scene.id === sceneId ? { ...scene, [key]: value } : scene))
     )
+  }
+
+  const handleSave = async () => {
+    if (isPreview || !card || saveState === 'saving') return
+
+    setSaveState('saving')
+
+    try {
+      const supabase = createClient()
+      const payload = {
+        title: titleDraft.trim() || '새 콘텐츠',
+        status: statusDraft,
+        scheduled_at: toIsoFromDatetimeLocal(scheduledDraft),
+        memo: bodyDraft.trim() ? bodyDraft : null,
+      }
+
+      const { data, error } = await supabase
+        .from('content_cards')
+        .update(payload)
+        .eq('id', card.id)
+        .select('*, channel:channels(*)')
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      const nextCard = data as ContentCard
+      setCard(nextCard)
+      setTitleDraft(nextCard.title)
+      setStatusDraft(nextCard.status)
+      setScheduledDraft(toDatetimeLocal(nextCard.scheduled_at ?? nextCard.published_at ?? null))
+      setBodyDraft(nextCard.memo ?? '')
+      setSaveState('saved')
+    } catch (error) {
+      console.error('Failed to save content card', error)
+      setSaveState('error')
+      window.alert('저장하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    }
   }
 
   const renderPanelBody = () => {
@@ -411,7 +524,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             콘텐츠를 찾을 수 없습니다.
           </p>
           <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-            목록으로 돌아가거나 에디터 미리보기 화면을 열어 구조를 확인해보세요.
+            목록으로 돌아가거나 에디터 미리보기 화면에서 구조를 확인해보세요.
           </p>
           <div className="mt-4 flex items-center justify-center gap-2">
             <Link
@@ -432,7 +545,16 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     )
   }
 
-  const scheduledAt = card.scheduled_at ?? card.published_at ?? null
+  const saveLabel =
+    saveState === 'saving'
+      ? '저장 중...'
+      : saveState === 'saved'
+        ? '저장됨'
+        : saveState === 'error'
+          ? '저장 실패'
+          : isPreview
+            ? '미리보기'
+            : null
 
   return (
     <div className="flex h-full min-h-0 w-full flex-1 overflow-hidden bg-[var(--color-bg-surface)]">
@@ -444,10 +566,25 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 콘텐츠
               </Link>
               <span className="text-[var(--color-border-strong)]">/</span>
-              <span className="truncate font-medium text-[var(--color-text-body)]">{card.title}</span>
+              <span className="truncate font-medium text-[var(--color-text-body)]">{titleDraft}</span>
             </div>
 
-            <div className="topbar-actions flex items-center gap-1">
+            <div className="topbar-actions flex items-center gap-1.5">
+              {saveLabel && (
+                <span className="text-[11px] font-medium text-[var(--color-text-muted)]">
+                  {saveLabel}
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isPreview || saveState === 'saving'}
+                className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+              >
+                <Save size={13} />
+                저장
+              </button>
               <button
                 type="button"
                 disabled
@@ -481,7 +618,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           </div>
 
           <div className="content-header shrink-0 px-11 pt-5">
-            {card.channel && (
+            {card.channel && channelBadgeLabel && (
               <span
                 className="mb-3 inline-flex items-center gap-1.5 rounded-[3px] px-2 py-0.5 text-[11px] font-semibold"
                 style={{
@@ -489,35 +626,56 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                   color: CHANNEL_COLORS[card.channel.type] ?? '#ff385c',
                 }}
               >
-                {card.channel.name}
+                {channelBadgeLabel}
               </span>
             )}
 
-            <h1 className="mb-3 text-[24px] font-bold leading-[1.2] tracking-[-0.03em] text-[var(--color-text-primary)]">
-              {card.title}
-            </h1>
+            <input
+              type="text"
+              value={titleDraft}
+              onChange={(event) => setTitleDraft(event.target.value)}
+              className="mb-3 w-full max-w-[720px] border-0 bg-transparent p-0 text-[24px] font-bold leading-[1.2] tracking-[-0.03em] text-[var(--color-text-primary)] outline-none"
+              placeholder="콘텐츠 제목"
+            />
 
-            <div className="mb-4 grid w-fit grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-              <span className="text-xs text-[var(--color-text-muted-soft)]">상태</span>
-              <span className="text-xs text-[var(--color-text-body)]">
-                <span
-                  className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle"
-                  style={{ backgroundColor: STATUS_COLORS[card.status] }}
-                />
-                <span className="font-semibold">{STATUS_LABELS[card.status]}</span>
+            <div className="mb-4 grid w-full max-w-[620px] grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">상태</span>
+              <select
+                value={statusDraft}
+                onChange={(event) => setStatusDraft(event.target.value as ContentStatus)}
+                className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+              >
+                {EDITABLE_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
+
+              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">작성일</span>
+              <span className="flex h-9 items-center text-xs text-[var(--color-text-body)]">
+                {formatDate(card.created_at)}
               </span>
 
-              <span className="text-xs text-[var(--color-text-muted-soft)]">작성일</span>
-              <span className="text-xs text-[var(--color-text-body)]">{formatDate(card.created_at)}</span>
-
-              <span className="text-xs text-[var(--color-text-muted-soft)]">마지막 수정</span>
-              <span className="text-xs text-[var(--color-text-body)]">
+              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">마지막 수정</span>
+              <span className="flex h-9 items-center text-xs text-[var(--color-text-body)]">
                 {formatDate(card.updated_at, true)}
               </span>
 
-              <span className="text-xs text-[var(--color-text-muted-soft)]">업로드 예정일</span>
-              <span className="text-xs text-[var(--color-text-body)]">{formatDate(scheduledAt)}</span>
+              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">업로드 예정일</span>
+              <input
+                type="datetime-local"
+                value={scheduledDraft}
+                onChange={(event) => setScheduledDraft(event.target.value)}
+                className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+              />
             </div>
+
+            {isPreview && (
+              <p className="mb-4 text-xs text-[var(--color-text-muted)]">
+                미리보기 화면에서는 저장할 수 없습니다.
+              </p>
+            )}
           </div>
 
           <div className="toolbar-wrap shrink-0 border-y border-[var(--color-border-soft)] px-11">
@@ -584,6 +742,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               className="min-h-[320px] w-full max-w-[620px] resize-none border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
               placeholder={EDITOR_PLACEHOLDER}
             />
+            {scheduledDisplayValue && (
+              <p className="mt-5 text-xs text-[var(--color-text-muted)]">
+                현재 업로드 예정일: {formatDate(scheduledDisplayValue, true)}
+              </p>
+            )}
           </div>
         </div>
 
