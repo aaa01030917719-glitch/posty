@@ -1,130 +1,185 @@
 'use client'
 
-import { useState } from 'react'
-import {
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  format,
-  isSameDay,
-  isToday,
-  addWeeks,
-  subWeeks,
-} from 'date-fns'
-import { ko } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { clsx } from 'clsx'
+import { eachDayOfInterval, endOfWeek, format, isSameDay, isToday, startOfWeek } from 'date-fns'
+import { ko } from 'date-fns/locale'
+import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import type { ContentCard } from '@/lib/types'
-import { STATUS_COLORS } from '@/lib/constants'
 
 interface CalendarWeekProps {
   cards: ContentCard[]
+  currentDate: Date
   onCardClick?: (card: ContentCard) => void
 }
 
-const WEEKDAY_LABELS = [
-  '\uC77C',
-  '\uC6D4',
-  '\uD654',
-  '\uC218',
-  '\uBAA9',
-  '\uAE08',
-  '\uD1A0',
-]
+const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
+const TIME_LABELS = ['오전', '오후', '저녁']
 
-const CURRENT_WEEK_LABEL = '\uC774\uBC88 \uC8FC'
+function getTargetDate(card: ContentCard) {
+  const target = card.scheduled_at || card.published_at
+  return target ? new Date(target) : null
+}
 
-export function CalendarWeek({ cards, onCardClick }: CalendarWeekProps) {
-  const [currentDate, setCurrentDate] = useState(new Date())
+function getChannelShortLabel(card: ContentCard) {
+  if (!card.channel) return null
 
+  switch (card.channel.type) {
+    case 'instagram':
+      return 'IG'
+    case 'threads':
+      return 'TH'
+    case 'youtube':
+      return 'YT'
+    case 'blog':
+      return 'BL'
+    default:
+      return 'ETC'
+  }
+}
+
+function getStatusBadgeClass(status: ContentCard['status']) {
+  switch (status) {
+    case 'writing':
+      return 'bg-[var(--color-bg-surface-strong)] text-[var(--color-text-body)]'
+    case 'published':
+      return 'bg-[#eaf4e2] text-[#3a6e1a]'
+    case 'review':
+      return 'bg-[#e8f4ff] text-[#1a5fa8]'
+    case 'planning':
+      return 'bg-[#f0eeff] text-[#5b3fb5]'
+    case 'scheduled':
+      return 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
+    default:
+      return 'bg-[#fff4e0] text-[#a05500]'
+  }
+}
+
+export function CalendarWeek({ cards, currentDate, onCardClick }: CalendarWeekProps) {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 })
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 })
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd })
 
   const getCardsForDate = (date: Date) =>
-    cards.filter((card) => {
-      const target = card.scheduled_at || card.published_at
-      return target && isSameDay(new Date(target), date)
-    })
+    cards
+      .filter((card) => {
+        const targetDate = getTargetDate(card)
+        return targetDate ? isSameDay(targetDate, date) : false
+      })
+      .sort((left, right) => {
+        const leftDate = getTargetDate(left)?.getTime() ?? 0
+        const rightDate = getTargetDate(right)?.getTime() ?? 0
+        return leftDate - rightDate
+      })
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
-      <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-6 py-4">
-        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-          {format(weekStart, 'M\uC6D4 d\uC77C', { locale: ko })} - {format(weekEnd, 'M\uC6D4 d\uC77C', { locale: ko })}
-        </h2>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setCurrentDate(subWeeks(currentDate, 1))}
-            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentDate(new Date())}
-            className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-          >
-            {CURRENT_WEEK_LABEL}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentDate(addWeeks(currentDate, 1))}
-            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
+    <div className="flex h-full min-h-[620px] w-full min-w-[980px] flex-col overflow-hidden rounded-[9px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+      <div className="grid grid-cols-[52px_repeat(7,minmax(120px,1fr))] border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
+        <div className="border-r border-[var(--color-border-soft)]" />
 
-      <div className="grid grid-cols-7 divide-x divide-[var(--color-border-default)]">
         {days.map((day, index) => {
-          const dayCards = getCardsForDate(day)
           const today = isToday(day)
 
           return (
-            <div key={day.toISOString()} className="min-h-[220px] bg-[var(--color-bg-surface)] p-3">
-              <div className="mb-3 flex flex-col items-center gap-0.5">
-                <span
-                  className={clsx(
-                    'text-[10px]',
-                    index === 0
-                      ? 'text-red-400'
+            <div
+              key={day.toISOString()}
+              className="border-r border-[var(--color-border-soft)] px-2 py-[9px] text-center last:border-r-0"
+            >
+              <div
+                className={clsx(
+                  'mb-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]',
+                  index === 0
+                    ? 'text-[var(--color-accent)]'
+                    : index === 6
+                      ? 'text-[var(--color-link-legal)]'
+                      : 'text-[var(--color-text-muted-soft)]'
+                )}
+              >
+                {WEEKDAY_LABELS[index]}
+              </div>
+              <div
+                className={clsx(
+                  'inline-flex h-7 w-7 items-center justify-center rounded-full text-[15px] font-bold leading-none',
+                  today
+                    ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)]'
+                    : index === 0
+                      ? 'text-[var(--color-accent)]'
                       : index === 6
-                        ? 'text-blue-400'
-                        : 'text-[var(--color-text-muted)]'
-                  )}
-                >
-                  {WEEKDAY_LABELS[index]}
-                </span>
-                <span
-                  className={clsx(
-                    'flex h-7 w-7 items-center justify-center rounded-full font-mono text-sm font-medium',
-                    today
-                      ? 'bg-[var(--color-accent)] text-[var(--color-bg-surface)]'
-                      : 'text-[var(--color-text-primary)]'
-                  )}
-                >
-                  {format(day, 'd')}
-                </span>
+                        ? 'text-[var(--color-link-legal)]'
+                        : 'text-[var(--color-text-body)]'
+                )}
+              >
+                {format(day, 'd', { locale: ko })}
               </div>
+            </div>
+          )
+        })}
+      </div>
 
-              <div className="flex flex-col gap-1.5">
-                {dayCards.map((card) => (
-                  <div
+      <div className="grid min-h-0 flex-1 grid-cols-[52px_repeat(7,minmax(120px,1fr))] overflow-hidden bg-[var(--color-bg-surface)]">
+        <div className="flex flex-col border-r border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] pt-3">
+          {TIME_LABELS.map((label) => (
+            <div key={label} className="flex flex-1 items-start px-1.5">
+              <span className="text-[10px] font-medium text-[var(--color-text-muted-soft)]">
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {days.map((day) => {
+          const dayCards = getCardsForDate(day)
+
+          return (
+            <div
+              key={`body-${day.toISOString()}`}
+              className="flex min-w-0 flex-col gap-[5px] border-r border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-[5px] py-2 last:border-r-0"
+            >
+              {dayCards.map((card) => {
+                const targetDate = getTargetDate(card)
+                const channelColor = card.channel
+                  ? CHANNEL_COLORS[card.channel.type] ?? '#929292'
+                  : '#929292'
+                const channelShortLabel = getChannelShortLabel(card)
+
+                return (
+                  <button
                     key={card.id}
+                    type="button"
                     onClick={() => onCardClick?.(card)}
-                    className="truncate rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium transition-opacity hover:opacity-80"
-                    style={{
-                      backgroundColor: `${STATUS_COLORS[card.status]}20`,
-                      color: STATUS_COLORS[card.status],
-                    }}
+                    className="min-w-0 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2 py-[7px] text-left transition-[border-color,background-color] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-surface-soft)]"
                   >
-                    {card.title}
-                  </div>
-                ))}
-              </div>
+                    <div className="mb-1 flex items-center gap-1">
+                      {channelShortLabel && (
+                        <span
+                          className="inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: `${channelColor}14`,
+                            color: channelColor,
+                          }}
+                        >
+                          {channelShortLabel}
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate text-[11.5px] font-semibold leading-[1.35] text-[var(--color-text-primary)]">
+                      {card.title}
+                    </div>
+                    {targetDate && (
+                      <div className="mt-1 text-[10.5px] text-[var(--color-text-muted)]">
+                        {format(targetDate, 'a h시', { locale: ko })}
+                      </div>
+                    )}
+                    <span
+                      className={clsx(
+                        'mt-[3px] inline-flex rounded-[3px] px-[5px] py-[1.5px] text-[10px] font-semibold',
+                        getStatusBadgeClass(card.status)
+                      )}
+                    >
+                      {STATUS_LABELS[card.status]}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )
         })}

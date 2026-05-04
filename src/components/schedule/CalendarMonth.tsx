@@ -1,47 +1,30 @@
 'use client'
 
-import { useState } from 'react'
 import {
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
   eachDayOfInterval,
+  endOfMonth,
+  endOfWeek,
   format,
-  isSameMonth,
   isSameDay,
+  isSameMonth,
   isToday,
-  addMonths,
-  subMonths,
+  startOfMonth,
+  startOfWeek,
 } from 'date-fns'
-import { ko } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { ContentCard } from '@/lib/types'
 import { STATUS_COLORS } from '@/lib/constants'
 
 interface CalendarMonthProps {
   cards: ContentCard[]
+  currentDate: Date
   onDateClick?: (date: Date) => void
   onCardClick?: (card: ContentCard) => void
 }
 
-const WEEKDAY_LABELS = [
-  '\uC77C',
-  '\uC6D4',
-  '\uD654',
-  '\uC218',
-  '\uBAA9',
-  '\uAE08',
-  '\uD1A0',
-]
+const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
-const TODAY_BUTTON_LABEL = '\uC624\uB298'
-const MORE_SUFFIX = '\uAC1C'
-
-export function CalendarMonth({ cards, onDateClick, onCardClick }: CalendarMonthProps) {
-  const [currentDate, setCurrentDate] = useState(new Date())
-
+export function CalendarMonth({ cards, currentDate, onDateClick, onCardClick }: CalendarMonthProps) {
   const monthStart = startOfMonth(currentDate)
   const monthEnd = endOfMonth(currentDate)
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 })
@@ -51,54 +34,25 @@ export function CalendarMonth({ cards, onDateClick, onCardClick }: CalendarMonth
   const getCardsForDate = (date: Date) =>
     cards.filter((card) => {
       const target = card.scheduled_at || card.published_at
-      return target && isSameDay(new Date(target), date)
+      return target ? isSameDay(new Date(target), date) : false
     })
 
   return (
-    <div className="overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
-      <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-6 py-4">
-        <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-          {format(currentDate, 'yyyy\uB144 M\uC6D4', { locale: ko })}
-        </h2>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentDate(new Date())}
-            className="rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1 text-xs font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-          >
-            {TODAY_BUTTON_LABEL}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-            className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-7 border-b border-[var(--color-border-default)] bg-[var(--color-bg-canvas)]">
-        {WEEKDAY_LABELS.map((dayLabel, index) => (
+    <div className="overflow-hidden rounded-[9px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+      <div className="grid grid-cols-7 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
+        {WEEKDAY_LABELS.map((label, index) => (
           <div
-            key={dayLabel}
+            key={label}
             className={clsx(
               'py-2.5 text-center text-xs font-medium',
               index === 0
-                ? 'text-red-400'
+                ? 'text-[var(--color-accent)]'
                 : index === 6
-                  ? 'text-blue-400'
+                  ? 'text-[var(--color-link-legal)]'
                   : 'text-[var(--color-text-muted)]'
             )}
           >
-            {dayLabel}
+            {label}
           </div>
         ))}
       </div>
@@ -117,26 +71,26 @@ export function CalendarMonth({ cards, onDateClick, onCardClick }: CalendarMonth
               onClick={() => onDateClick?.(day)}
               className={clsx(
                 'min-h-[96px] cursor-pointer p-2 transition-colors',
-                !isLastRow && 'border-b border-[var(--color-border-default)]',
-                !isLastColumn && 'border-r border-[var(--color-border-default)]',
+                !isLastRow && 'border-b border-[var(--color-border-soft)]',
+                !isLastColumn && 'border-r border-[var(--color-border-soft)]',
                 isCurrentMonth
-                  ? 'bg-[var(--color-bg-surface)] hover:bg-[var(--color-bg-subtle)]'
-                  : 'bg-[var(--color-bg-canvas)]'
+                  ? 'bg-[var(--color-bg-surface)] hover:bg-[var(--color-bg-surface-soft)]'
+                  : 'bg-[var(--color-bg-surface-soft)]'
               )}
             >
               <div className="mb-1 flex justify-end">
                 <span
                   className={clsx(
-                    'inline-flex h-6 w-6 items-center justify-center rounded-full font-mono text-xs font-medium',
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium',
                     today
-                      ? 'bg-[var(--color-accent)] text-[var(--color-bg-surface)]'
+                      ? 'bg-[var(--color-accent)] text-[var(--color-on-accent)]'
                       : !isCurrentMonth
                         ? 'text-[var(--color-text-muted)]'
                         : index % 7 === 0
-                          ? 'text-red-400'
+                          ? 'text-[var(--color-accent)]'
                           : index % 7 === 6
-                            ? 'text-blue-400'
-                            : 'text-[var(--color-text-secondary)]'
+                            ? 'text-[var(--color-link-legal)]'
+                            : 'text-[var(--color-text-body)]'
                   )}
                 >
                   {format(day, 'd')}
@@ -145,25 +99,25 @@ export function CalendarMonth({ cards, onDateClick, onCardClick }: CalendarMonth
 
               <div className="flex flex-col gap-1">
                 {dayCards.slice(0, 3).map((card) => (
-                  <div
+                  <button
                     key={card.id}
+                    type="button"
                     onClick={(event) => {
                       event.stopPropagation()
                       onCardClick?.(card)
                     }}
-                    className="truncate rounded-[var(--radius-xs)] px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-80"
+                    className="truncate rounded-[4px] px-1.5 py-0.5 text-left text-[10px] font-medium transition-opacity hover:opacity-80"
                     style={{
                       backgroundColor: `${STATUS_COLORS[card.status]}20`,
                       color: STATUS_COLORS[card.status],
                     }}
                   >
                     {card.title}
-                  </div>
+                  </button>
                 ))}
                 {dayCards.length > 3 && (
                   <span className="pl-1 text-[10px] text-[var(--color-text-muted)]">
-                    +{dayCards.length - 3}
-                    {MORE_SUFFIX}
+                    +{dayCards.length - 3}개
                   </span>
                 )}
               </div>
