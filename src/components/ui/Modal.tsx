@@ -35,12 +35,13 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-[var(--color-overlay)] backdrop-blur-[2px]"
         onClick={onClose}
       />
       <div
         className={clsx(
-          'relative bg-white rounded-[12px] shadow-xl w-full max-h-[90vh] flex flex-col',
+          'relative flex max-h-[90vh] w-full flex-col overflow-hidden',
+          'rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-lg)]',
           {
             'max-w-sm': size === 'sm',
             'max-w-lg': size === 'md',
@@ -50,11 +51,12 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
         )}
       >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-[#F0F0F0]">
-            <h2 className="text-base font-semibold text-[#1A1A1A]">{title}</h2>
+          <div className="flex items-center justify-between border-b border-[var(--color-border-default)] px-6 py-4">
+            <h2 className="text-base font-semibold text-[var(--color-text-primary)]">{title}</h2>
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 rounded-[8px] text-[#9CA3AF] hover:bg-[#F5F5F5] hover:text-[#1A1A1A] transition-colors"
+              className="rounded-[var(--radius-md)] p-1.5 text-[var(--color-text-muted)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
             >
               <X size={16} />
             </button>
