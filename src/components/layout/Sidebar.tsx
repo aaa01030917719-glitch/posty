@@ -36,19 +36,19 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="hidden md:flex flex-col w-56 h-full bg-white border-r border-[#F0F0F0] shrink-0">
+    <aside className="hidden h-full w-56 shrink-0 flex-col border-r border-[var(--color-border-default)] bg-[var(--color-bg-surface)] md:flex">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-[#F0F0F0]">
+      <div className="border-b border-[var(--color-border-default)] px-5 py-5">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-[8px] bg-[#E8917E] flex items-center justify-center shrink-0">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-[var(--color-accent)]">
             <span className="text-white text-sm font-bold">P</span>
           </div>
-          <span className="text-base font-bold text-[#1A1A1A]">Posty</span>
+          <span className="text-base font-bold text-[var(--color-text-primary)]">Posty</span>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5 overflow-y-auto">
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || pathname.startsWith(href + '/')
           return (
@@ -56,15 +56,16 @@ export function Sidebar() {
               key={href}
               href={href}
               className={clsx(
-                'flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-sm transition-all',
+                'flex items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-sm font-medium transition-[background-color,color,box-shadow]',
+                'outline-none focus-visible:[box-shadow:var(--focus-ring)]',
                 active
-                  ? 'bg-[#FDF0ED] text-[#E8917E] font-medium'
-                  : 'text-[#6B7280] hover:bg-[#F5F5F5] hover:text-[#1A1A1A]'
+                  ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
+                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]'
               )}
             >
               <Icon
                 size={17}
-                className={active ? 'text-[#E8917E]' : 'text-[#9CA3AF]'}
+                className={active ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
                 strokeWidth={active ? 2.2 : 1.8}
               />
               {label}
@@ -74,10 +75,11 @@ export function Sidebar() {
       </nav>
 
       {/* Logout */}
-      <div className="px-3 py-4 border-t border-[#F0F0F0]">
+      <div className="border-t border-[var(--color-border-default)] px-3 py-4">
         <button
+          type="button"
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-[10px] text-sm text-[#6B7280] hover:bg-[#FFF0EE] hover:text-[#E8917E] transition-all"
+          className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-sm font-medium text-[var(--color-text-secondary)] transition-[background-color,color,box-shadow] hover:bg-[var(--color-bg-accent-soft)] hover:text-[var(--color-accent)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
         >
           <LogOut size={17} strokeWidth={1.8} />
           로그아웃
