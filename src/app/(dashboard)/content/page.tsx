@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, LayoutGrid, List, Search } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { clsx } from 'clsx'
-import { CardGrid } from '@/components/content/CardGrid'
-import { CardList } from '@/components/content/CardList'
+import { CampaignRowList, type CampaignRowGroup } from '@/components/content/CampaignRowList'
 import { createContentCard } from '@/components/content/createContentCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -14,7 +13,6 @@ import { createClient } from '@/lib/supabase/client'
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants'
 import type { ContentCard, ContentProjectSummary, ContentStatus, Database } from '@/lib/types'
 
-type ViewMode = 'grid' | 'list'
 type CampaignInsert = Database['public']['Tables']['content_projects']['Insert']
 
 const STATUS_FILTERS: Array<ContentStatus | 'all'> = [
@@ -35,6 +33,32 @@ const CREATING_LABEL = '\uC0DD\uC131 \uC911...'
 const CREATING_CAMPAIGN_LABEL = '\uCEA0\uD398\uC778 \uC0DD\uC131 \uC911...'
 const PREVIEW_LABEL = '\uC5D0\uB514\uD130 \uBBF8\uB9AC\uBCF4\uAE30'
 const CAMPAIGN_SUCCESS_TOAST = '\uCEA0\uD398\uC778\uC774 \uCD94\uAC00\uB418\uC5C8\uC2B5\uB2C8\uB2E4'
+const NO_CAMPAIGN_GROUP_TITLE = '\uCEA0\uD398\uC778 \uC5C6\uC74C'
+const EMPTY_STATE_TITLE = '\uCF58\uD150\uCE20\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
+const EMPTY_STATE_DESCRIPTION =
+  '\uBAA9\uB85D\uC740 \uBE44\uC5B4 \uC788\uC9C0\uB9CC \uAE00 \uC791\uC131 \uD654\uBA74 shell\uC740 \uBC14\uB85C \uBBF8\uB9AC\uBCFC \uC218 \uC788\uC2B5\uB2C8\uB2E4.'
+const EMPTY_FILTERED_TITLE =
+  '\uC870\uAC74\uC5D0 \uB9DE\uB294 \uCF58\uD150\uCE20\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
+const EMPTY_FILTERED_DESCRIPTION =
+  '\uAC80\uC0C9\uC5B4\uB098 \uC0C1\uD0DC \uD544\uD130\uB97C \uC870\uC815\uD574\uBCF4\uC138\uC694'
+const DUPLICATE_CAMPAIGN_ERROR = '\uC774\uBBF8 \uCD94\uAC00\uB41C \uCEA0\uD398\uC778\uC785\uB2C8\uB2E4'
+const CREATE_CONTENT_ERROR =
+  '\uC0C8 \uCF58\uD150\uCE20\uB97C \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
+const CREATE_CAMPAIGN_ERROR =
+  '\uCEA0\uD398\uC778\uC744 \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
+const CAMPAIGN_SECTION_TITLE = '\uCEA0\uD398\uC778'
+const CAMPAIGN_COUNT_SUFFIX = '\uAC1C'
+const CAMPAIGN_HELP_TEXT =
+  '\uC0DD\uC131\uD55C \uCEA0\uD398\uC778\uC740 \uD558\uC704 \uCF58\uD150\uCE20\uB97C \uD3BC\uCCD0 \uBE60\uB974\uAC8C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.'
+const NO_CAMPAIGNS_TEXT =
+  '\uC544\uC9C1 \uC0DD\uC131\uB41C \uCEA0\uD398\uC778\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC0C8 \uCEA0\uD398\uC778\uC744 \uCD94\uAC00\uD574 \uCF58\uD150\uCE20\uB97C \uBB36\uC5B4\uBCF4\uC138\uC694.'
+const CAMPAIGN_TITLE_LABEL = '\uCEA0\uD398\uC778 \uC81C\uBAA9'
+const CAMPAIGN_TITLE_PLACEHOLDER =
+  '\uC608: Posty \uCF58\uD150\uCE20 \uD504\uB85C\uC81D\uD2B8'
+const CAMPAIGN_DESCRIPTION_LABEL = '\uC124\uBA85'
+const OPTIONAL_PLACEHOLDER = '\uC120\uD0DD \uC0AC\uD56D'
+const CANCEL_LABEL = '\uCDE8\uC18C'
+const ALL_LABEL = '\uC804\uCCB4'
 
 function normalizeCampaignTitle(title: string) {
   return title.trim().toLocaleLowerCase()
@@ -42,7 +66,6 @@ function normalizeCampaignTitle(title: string) {
 
 export default function ContentPage() {
   const router = useRouter()
-  const [view, setView] = useState<ViewMode>('grid')
   const [cards, setCards] = useState<ContentCard[]>([])
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
   const [statusFilter, setStatusFilter] = useState<ContentStatus | 'all'>('all')
@@ -61,7 +84,7 @@ export default function ContentPage() {
   const campaignTitleError =
     normalizedCampaignTitle.length > 0 &&
     projects.some((project) => normalizeCampaignTitle(project.title) === normalizedCampaignTitle)
-      ? '이미 추가된 캠페인입니다'
+      ? DUPLICATE_CAMPAIGN_ERROR
       : undefined
 
   useEffect(() => {
@@ -83,7 +106,10 @@ export default function ContentPage() {
             .from('content_cards')
             .select('*, channel:channels(*), project:content_projects(id,title)')
             .order('created_at', { ascending: false }),
-          supabase.from('content_projects').select('id, title').order('created_at', { ascending: false }),
+          supabase
+            .from('content_projects')
+            .select('id, title')
+            .order('created_at', { ascending: false }),
         ])
 
       if (cardError) {
@@ -102,11 +128,93 @@ export default function ContentPage() {
     fetchContentData()
   }, [])
 
-  const filtered = cards.filter((card) => {
-    const matchStatus = statusFilter === 'all' || card.status === statusFilter
-    const matchSearch = !search || card.title.toLowerCase().includes(search.toLowerCase())
-    return matchStatus && matchSearch
-  })
+  const trimmedSearch = search.trim().toLowerCase()
+
+  const groupedCampaigns = useMemo<CampaignRowGroup[]>(() => {
+    const cardsByProjectId = new Map<string, ContentCard[]>()
+    const uncategorizedCards: ContentCard[] = []
+
+    cards.forEach((card) => {
+      if (card.project_id) {
+        const nextCards = cardsByProjectId.get(card.project_id) ?? []
+        nextCards.push(card)
+        cardsByProjectId.set(card.project_id, nextCards)
+        return
+      }
+
+      uncategorizedCards.push(card)
+    })
+
+    const groups: CampaignRowGroup[] = projects.flatMap((project) => {
+      const projectCards = cardsByProjectId.get(project.id) ?? []
+      const matchesProjectTitle =
+        trimmedSearch.length > 0 && project.title.toLowerCase().includes(trimmedSearch)
+
+      const visibleCards = projectCards.filter((card) => {
+        const matchesStatus = statusFilter === 'all' || card.status === statusFilter
+        const matchesSearch =
+          trimmedSearch.length === 0 ||
+          matchesProjectTitle ||
+          card.title.toLowerCase().includes(trimmedSearch)
+
+        return matchesStatus && matchesSearch
+      })
+
+      const shouldShowEmptyProject =
+        projectCards.length === 0 &&
+        statusFilter === 'all' &&
+        (trimmedSearch.length === 0 || matchesProjectTitle)
+
+      if (!matchesProjectTitle && visibleCards.length === 0 && !shouldShowEmptyProject) {
+        return []
+      }
+
+      return [
+        {
+          id: project.id,
+          title: project.title,
+          cards: visibleCards,
+        },
+      ]
+    })
+
+    const visibleUncategorizedCards = uncategorizedCards.filter((card) => {
+      const matchesStatus = statusFilter === 'all' || card.status === statusFilter
+      const matchesSearch =
+        trimmedSearch.length === 0 || card.title.toLowerCase().includes(trimmedSearch)
+
+      return matchesStatus && matchesSearch
+    })
+
+    if (visibleUncategorizedCards.length > 0) {
+      groups.push({
+        id: 'no-campaign',
+        title: NO_CAMPAIGN_GROUP_TITLE,
+        cards: visibleUncategorizedCards,
+        isVirtual: true,
+      })
+    }
+
+    return groups
+  }, [cards, projects, statusFilter, trimmedSearch])
+
+  const statusCounts = useMemo(() => {
+    return cards.reduce<Record<ContentStatus, number>>(
+      (acc, card) => {
+        acc[card.status] += 1
+        return acc
+      },
+      {
+        idea: 0,
+        planning: 0,
+        writing: 0,
+        review: 0,
+        scheduled: 0,
+        published: 0,
+        hold: 0,
+      }
+    )
+  }, [cards])
 
   const openDetail = (card: ContentCard) => {
     router.push(`/content/${card.id}`)
@@ -122,7 +230,7 @@ export default function ContentPage() {
       router.push(`/content/${nextId}`)
     } catch (error) {
       console.error('Failed to create content card', error)
-      window.alert('새 콘텐츠를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.')
+      window.alert(CREATE_CONTENT_ERROR)
     } finally {
       setCreating(false)
     }
@@ -182,7 +290,7 @@ export default function ContentPage() {
       setCampaignToastNonce((prev) => prev + 1)
     } catch (error) {
       console.error('Failed to create campaign', error)
-      setCampaignRequestError('캠페인을 생성하지 못했습니다. 잠시 후 다시 시도해주세요.')
+      setCampaignRequestError(CREATE_CAMPAIGN_ERROR)
     } finally {
       setCampaignCreating(false)
     }
@@ -213,36 +321,7 @@ export default function ContentPage() {
             />
           </div>
 
-          <div className="flex items-center justify-between gap-2 lg:ml-auto">
-            <div className="flex items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-0.5">
-              <button
-                type="button"
-                aria-label="Grid view"
-                onClick={() => setView('grid')}
-                className={clsx(
-                  'rounded-[var(--radius-sm)] p-1.5 transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
-                  view === 'grid'
-                    ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)] shadow-[var(--shadow-sm)]'
-                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
-                )}
-              >
-                <LayoutGrid size={15} />
-              </button>
-              <button
-                type="button"
-                aria-label="List view"
-                onClick={() => setView('list')}
-                className={clsx(
-                  'rounded-[var(--radius-sm)] p-1.5 transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
-                  view === 'list'
-                    ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)] shadow-[var(--shadow-sm)]'
-                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'
-                )}
-              >
-                <List size={15} />
-              </button>
-            </div>
-
+          <div className="flex items-center justify-end gap-2 lg:ml-auto">
             <Button
               size="sm"
               variant="secondary"
@@ -282,12 +361,8 @@ export default function ContentPage() {
                   : undefined
               }
             >
-              {value === 'all' ? '\uC804\uCCB4' : STATUS_LABELS[value]}
-              {value !== 'all' && (
-                <span className="ml-1 opacity-70">
-                  {cards.filter((card) => card.status === value).length}
-                </span>
-              )}
+              {value === 'all' ? ALL_LABEL : STATUS_LABELS[value]}
+              {value !== 'all' && <span className="ml-1 opacity-70">{statusCounts[value]}</span>}
             </button>
           ))}
         </div>
@@ -295,13 +370,16 @@ export default function ContentPage() {
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-[var(--color-text-primary)]">캠페인</p>
-              <span className="text-xs text-[var(--color-text-muted)]">{projects.length}개</span>
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                {CAMPAIGN_SECTION_TITLE}
+              </p>
+              <span className="text-xs text-[var(--color-text-muted)]">
+                {projects.length}
+                {CAMPAIGN_COUNT_SUFFIX}
+              </span>
             </div>
             {!campaignFormOpen && !loading && projects.length > 0 && (
-              <p className="text-xs text-[var(--color-text-muted)]">
-                생성한 캠페인은 글 작성 페이지에서 바로 선택할 수 있습니다.
-              </p>
+              <p className="text-xs text-[var(--color-text-muted)]">{CAMPAIGN_HELP_TEXT}</p>
             )}
           </div>
 
@@ -312,22 +390,22 @@ export default function ContentPage() {
             >
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] lg:items-start">
                 <Input
-                  label="캠페인 제목"
+                  label={CAMPAIGN_TITLE_LABEL}
                   type="text"
                   value={campaignTitle}
                   onChange={(event) => setCampaignTitle(event.target.value)}
-                  placeholder="예: Posty 콘텐츠 프로젝트"
+                  placeholder={CAMPAIGN_TITLE_PLACEHOLDER}
                   maxLength={120}
                   disabled={campaignCreating}
                   error={campaignTitleError}
                 />
 
                 <Input
-                  label="설명"
+                  label={CAMPAIGN_DESCRIPTION_LABEL}
                   type="text"
                   value={campaignDescription}
                   onChange={(event) => setCampaignDescription(event.target.value)}
-                  placeholder="선택 사항"
+                  placeholder={OPTIONAL_PLACEHOLDER}
                   maxLength={200}
                   disabled={campaignCreating}
                 />
@@ -352,7 +430,7 @@ export default function ContentPage() {
                       setCampaignRequestError(null)
                     }}
                   >
-                    취소
+                    {CANCEL_LABEL}
                   </Button>
                 </div>
               </div>
@@ -362,23 +440,8 @@ export default function ContentPage() {
             </form>
           )}
 
-          {!loading && (
-            projects.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {projects.map((project) => (
-                  <span
-                    key={project.id}
-                    className="inline-flex rounded-[var(--radius-pill)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-text-body)]"
-                  >
-                    {project.title}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-[var(--color-text-muted)]">
-                아직 생성된 캠페인이 없습니다.
-              </p>
-            )
+          {!loading && projects.length === 0 && (
+            <p className="text-xs text-[var(--color-text-muted)]">{NO_CAMPAIGNS_TEXT}</p>
           )}
         </div>
       </section>
@@ -387,25 +450,26 @@ export default function ContentPage() {
         <div className="flex items-center justify-center rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] py-24">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
-      ) : cards.length === 0 ? (
+      ) : cards.length === 0 && projects.length === 0 ? (
         <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-20 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
             +
           </div>
-          <p className="text-sm font-medium text-[var(--color-text-primary)]">콘텐츠가 없습니다</p>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            목록은 비어 있지만, 글 작성 화면 shell은 바로 미리볼 수 있습니다.
-          </p>
+          <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_STATE_TITLE}</p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_STATE_DESCRIPTION}</p>
           <div className="mt-4 flex justify-center">
             <Button size="sm" onClick={() => router.push('/content/preview')}>
               {PREVIEW_LABEL}
             </Button>
           </div>
         </div>
-      ) : view === 'grid' ? (
-        <CardGrid cards={filtered} onCardClick={openDetail} />
+      ) : groupedCampaigns.length === 0 ? (
+        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-16 text-center">
+          <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_FILTERED_TITLE}</p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_FILTERED_DESCRIPTION}</p>
+        </div>
       ) : (
-        <CardList cards={filtered} onCardClick={openDetail} />
+        <CampaignRowList groups={groupedCampaigns} onCardClick={openDetail} />
       )}
     </div>
   )
