@@ -210,8 +210,13 @@ function createEditableSceneDrafts(script: Script | null): SceneDraft[] {
     const parsed = JSON.parse(body) as unknown
 
     if (Array.isArray(parsed) && parsed.length > 0) {
-      return defaultScenes.map((fallback, index) => {
-        const parsedScene = parsed[index]
+      return parsed.map((parsedScene, index) => {
+        const fallback = defaultScenes[index] ?? {
+          id: `scene-${index + 1}`,
+          number: index + 1,
+          title: `Scene ${index + 1}`,
+          body: '',
+        }
         const scene =
           typeof parsedScene === 'object' && parsedScene !== null
             ? (parsedScene as Partial<PersistedSceneDraft>)
@@ -256,11 +261,28 @@ function serializeSceneDrafts(sceneDrafts: SceneDraft[]) {
   }))
   const hasSceneContent = normalizedScenes.some(
     (scene, index) =>
+      normalizedScenes.length !== defaultScenes.length ||
       scene.body.trim().length > 0 ||
       scene.title !== (defaultScenes[index]?.title ?? scene.title)
   )
 
   return hasSceneContent ? JSON.stringify(normalizedScenes) : null
+}
+
+function renumberSceneDrafts(sceneDrafts: SceneDraft[]) {
+  return sceneDrafts.map((scene, index) => ({
+    ...scene,
+    number: index + 1,
+  }))
+}
+
+function createAddedSceneDraft(number: number): SceneDraft {
+  return {
+    id: `scene-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    number,
+    title: '새 씬',
+    body: '',
+  }
 }
 
 function getChannelBadgeLabel(card: ContentCard) {
@@ -409,6 +431,20 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     )
   }
 
+  const addSceneDraft = () => {
+    setSceneDrafts((prev) => [...prev, createAddedSceneDraft(prev.length + 1)])
+  }
+
+  const removeSceneDraft = (sceneId: string) => {
+    setSceneDrafts((prev) => {
+      if (prev.length <= 1) {
+        return prev
+      }
+
+      return renumberSceneDrafts(prev.filter((scene) => scene.id !== sceneId))
+    })
+  }
+
   const handlePersist = async (nextStatus: 'writing' | 'published') => {
     if (isPreview || !card || saveState === 'saving') return
 
@@ -535,6 +571,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                       onChange={(event) => updateSceneDraft(scene.id, 'title', event.target.value)}
                       className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] font-semibold text-[var(--color-text-primary)] outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={() => removeSceneDraft(scene.id)}
+                      disabled={sceneDrafts.length <= 1}
+                      className="flex h-6 w-6 items-center justify-center rounded-[4px] text-[var(--color-text-muted-soft)] transition-colors hover:bg-[var(--color-bg-surface)] hover:text-[var(--color-text-body)] disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`${scene.number}번 씬 삭제`}
+                    >
+                      <X size={12} />
+                    </button>
                     <GripVertical size={13} className="text-[var(--color-text-muted-soft)]" />
                   </div>
                   <div className="px-3 py-3">
@@ -552,8 +597,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
             <button
               type="button"
-              disabled
-              className="flex w-full items-center justify-center gap-1.5 rounded-[7px] border border-dashed border-[var(--color-border-default)] px-3 py-2 text-[12px] font-semibold text-[var(--color-text-muted)] disabled:opacity-100"
+              onClick={addSceneDraft}
+              className="flex w-full items-center justify-center gap-1.5 rounded-[7px] border border-dashed border-[var(--color-border-default)] px-3 py-2 text-[12px] font-semibold text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)]"
             >
               <Plus size={12} />
               씬 추가
