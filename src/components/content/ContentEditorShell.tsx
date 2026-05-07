@@ -446,6 +446,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         card_id: nextCard.id,
         title: nextCard.title?.trim() || 'Untitled content',
         body: nextSceneBody,
+        caption: captionDraft.trim() ? captionDraft : null,
+        hashtags: hashtagsDraft.trim() ? hashtagsDraft : null,
+        thumbnail_text: thumbnailDraft.trim() ? thumbnailDraft : null,
         panel_title: nextPanelTitle,
       }
       const { data: scriptData, error: scriptError } = scriptRecord?.id
@@ -472,6 +475,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setScheduledDateDraft(nextScheduled.date)
       setScheduledTimeDraft(nextScheduled.time)
       setBodyDraft(nextCard.memo ?? '')
+      setCaptionDraft(nextScript.caption ?? '')
+      setHashtagsDraft(nextScript.hashtags ?? '')
+      setThumbnailDraft(nextScript.thumbnail_text ?? '')
       setMemoDraft(nextCard.memo ?? '')
       setPanelTitle(nextScript.panel_title?.trim() || DEFAULT_PANEL_TITLE)
       setSceneDrafts(createEditableSceneDrafts(nextScript))
