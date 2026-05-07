@@ -112,7 +112,12 @@ export function CalendarMonth({ cards, currentDate, onDateClick, onCardClick }: 
                       color: STATUS_COLORS[card.status],
                     }}
                   >
-                    {card.title}
+                    {card.project?.title && (
+                      <span className="block truncate text-[9px] font-medium opacity-70">
+                        {card.project.title}
+                      </span>
+                    )}
+                    <span className="block truncate">{card.title}</span>
                   </button>
                 ))}
                 {dayCards.length > 3 && (

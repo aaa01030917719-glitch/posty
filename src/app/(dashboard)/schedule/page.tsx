@@ -123,7 +123,7 @@ export default function SchedulePage() {
       const supabase = createClient()
       const { data } = await supabase
         .from('content_cards')
-        .select('*, channel:channels(*)')
+        .select('*, channel:channels(*), project:content_projects(id,title)')
         .not('scheduled_at', 'is', null)
         .order('scheduled_at', { ascending: true })
 

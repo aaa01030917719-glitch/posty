@@ -41,7 +41,7 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
       .from('content_cards')
       .update({ status } as never)
       .eq('id', card.id)
-      .select()
+      .select('*, channel:channels(*), project:content_projects(id,title)')
       .single()
 
     if (data) onUpdate?.(data as ContentCard)
@@ -58,15 +58,26 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
       .from('content_cards')
       .update({ checklist: updatedChecklist } as never)
       .eq('id', card.id)
-      .select()
+      .select('*, channel:channels(*), project:content_projects(id,title)')
       .single()
 
     if (data) onUpdate?.(data as ContentCard)
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={card.title} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="콘텐츠 상세" size="lg">
       <div className="flex flex-col gap-5">
+        <section>
+          {card.project?.title && (
+            <p className="mb-1 text-xs font-medium text-[var(--color-text-muted)]">
+              {card.project.title}
+            </p>
+          )}
+          <h2 className="text-xl font-semibold tracking-[-0.02em] text-[var(--color-text-primary)]">
+            {card.title}
+          </h2>
+        </section>
+
         <div className="flex flex-wrap items-center gap-2">
           <Badge label={STATUS_LABELS[card.status]} color={STATUS_COLORS[card.status]} />
           {card.channel && (

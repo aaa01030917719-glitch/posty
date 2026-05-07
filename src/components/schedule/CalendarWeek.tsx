@@ -144,7 +144,12 @@ export function CalendarWeek({ cards, currentDate, onCardClick }: CalendarWeekPr
                         </span>
                       )}
                     </div>
-                    <div className="truncate text-[11.5px] font-semibold leading-[1.35] text-[var(--color-text-primary)]">
+                    {card.project?.title && (
+                      <div className="truncate text-[10px] font-medium text-[var(--color-text-muted)]">
+                        {card.project.title}
+                      </div>
+                    )}
+                    <div className="truncate text-[13px] font-semibold leading-[1.35] text-[var(--color-text-primary)]">
                       {card.title}
                     </div>
                     {targetDate && (

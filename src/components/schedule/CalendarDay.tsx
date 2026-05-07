@@ -58,6 +58,11 @@ export function CalendarDay({ cards, currentDate, onCardClick }: CalendarDayProp
                   style={{ backgroundColor: STATUS_COLORS[card.status] }}
                 />
                 <span className="min-w-0 flex-1">
+                  {card.project?.title && (
+                    <span className="block truncate text-[11px] font-medium text-[var(--color-text-muted)]">
+                      {card.project.title}
+                    </span>
+                  )}
                   <span className="block truncate text-sm font-medium text-[var(--color-text-primary)]">
                     {card.title}
                   </span>
