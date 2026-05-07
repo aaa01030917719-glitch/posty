@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  CheckSquare,
   ChevronDown,
   Columns2,
   GripVertical,
@@ -38,8 +37,17 @@ type SceneDraft = {
   body: string
 }
 
+type ChecklistDraft = {
+  id: string
+  text: string
+  checked: boolean
+}
+
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 type PersistedSceneDraft = Pick<SceneDraft, 'id' | 'number' | 'title' | 'body'>
+type PersistedChecklistDraft = Partial<ChecklistItem> & {
+  checked?: boolean
+}
 
 const PREVIEW_IDS = new Set(['preview', 'demo'])
 const DEFAULT_PANEL_TITLE = '대본'
@@ -269,6 +277,46 @@ function serializeSceneDrafts(sceneDrafts: SceneDraft[]) {
   return hasSceneContent ? JSON.stringify(normalizedScenes) : null
 }
 
+function normalizeChecklistDrafts(checklist: unknown): ChecklistDraft[] {
+  if (!Array.isArray(checklist)) {
+    return []
+  }
+
+  return checklist
+    .map((value, index) => {
+      const item =
+        typeof value === 'object' && value !== null ? (value as PersistedChecklistDraft) : {}
+      const text = typeof item.text === 'string' ? item.text : ''
+      const checked =
+        typeof item.checked === 'boolean'
+          ? item.checked
+          : typeof item.done === 'boolean'
+            ? item.done
+            : false
+
+      return {
+        id:
+          typeof item.id === 'string' && item.id.trim()
+            ? item.id
+            : `checklist-${index + 1}`,
+        text,
+        checked,
+      }
+    })
+    .filter((item) => item.text.trim().length > 0 || item.checked)
+}
+
+function serializeChecklistDrafts(checklistDrafts: ChecklistDraft[]) {
+  return checklistDrafts
+    .map((item) => ({
+      id: item.id,
+      text: item.text.trim(),
+      done: item.checked,
+      checked: item.checked,
+    }))
+    .filter((item) => item.text.length > 0)
+}
+
 function renumberSceneDrafts(sceneDrafts: SceneDraft[]) {
   return sceneDrafts.map((scene, index) => ({
     ...scene,
@@ -282,6 +330,14 @@ function createAddedSceneDraft(number: number): SceneDraft {
     number,
     title: '새 씬',
     body: '',
+  }
+}
+
+function createChecklistDraft(): ChecklistDraft {
+  return {
+    id: `checklist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    text: '',
+    checked: false,
   }
 }
 
@@ -321,6 +377,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [panelTitle, setPanelTitle] = useState(DEFAULT_PANEL_TITLE)
   const [sceneDrafts, setSceneDrafts] = useState<SceneDraft[]>(
     createEditableSceneDrafts(SAMPLE_SCRIPT)
+  )
+  const [checklistDrafts, setChecklistDrafts] = useState<ChecklistDraft[]>(
+    normalizeChecklistDrafts(SAMPLE_CARD.checklist)
   )
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
@@ -370,6 +429,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setMemoDraft(nextCard?.memo ?? '')
       setPanelTitle(nextScript?.panel_title?.trim() || DEFAULT_PANEL_TITLE)
       setSceneDrafts(createEditableSceneDrafts(nextScript))
+      setChecklistDrafts(normalizeChecklistDrafts(nextCard?.checklist))
       setSelectedProjectId(nextCard?.project_id ?? '')
       setSaveState('idle')
       setLoading(false)
@@ -422,7 +482,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }, [cardId, isPreview])
 
-  const checklistItems: ChecklistItem[] = Array.isArray(card?.checklist) ? card.checklist : []
   const channelBadgeLabel = card ? getChannelBadgeLabel(card) : null
 
   const updateSceneDraft = (sceneId: string, key: 'title' | 'body', value: string) => {
@@ -445,6 +504,24 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     })
   }
 
+  const updateChecklistDraft = (
+    itemId: string,
+    key: keyof Omit<ChecklistDraft, 'id'>,
+    value: string | boolean
+  ) => {
+    setChecklistDrafts((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, [key]: value } : item))
+    )
+  }
+
+  const addChecklistDraft = () => {
+    setChecklistDrafts((prev) => [...prev, createChecklistDraft()])
+  }
+
+  const removeChecklistDraft = (itemId: string) => {
+    setChecklistDrafts((prev) => prev.filter((item) => item.id !== itemId))
+  }
+
   const handlePersist = async (nextStatus: 'writing' | 'published') => {
     if (isPreview || !card || saveState === 'saving') return
 
@@ -453,6 +530,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     try {
       const supabase = createClient()
       const nextSceneBody = serializeSceneDrafts(sceneDrafts)
+      const nextChecklist = serializeChecklistDrafts(checklistDrafts)
       const nextPanelTitle = panelTitle.trim() || DEFAULT_PANEL_TITLE
       const payload = {
         /*
@@ -462,6 +540,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         status: nextStatus,
         scheduled_at: toIsoFromScheduledFields(scheduledDateDraft, scheduledTimeDraft),
         memo: bodyDraft.trim() ? bodyDraft : null,
+        checklist: nextChecklist,
         project_id: selectedProjectId || null,
       }
 
@@ -517,6 +596,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setMemoDraft(nextCard.memo ?? '')
       setPanelTitle(nextScript.panel_title?.trim() || DEFAULT_PANEL_TITLE)
       setSceneDrafts(createEditableSceneDrafts(nextScript))
+      setChecklistDrafts(normalizeChecklistDrafts(nextCard.checklist))
       setSelectedProjectId(nextCard.project_id ?? '')
       setSaveState('saved')
       router.push('/content')
@@ -640,35 +720,60 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         )
 
       case 'checklist':
-        return checklistItems.length > 0 ? (
-          <div className="space-y-2">
-            {checklistItems.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-2 rounded-[7px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-3 py-2.5"
-              >
-                <CheckSquare
-                  size={14}
-                  className={clsx(
-                    'mt-0.5 shrink-0',
-                    item.done ? 'text-[var(--color-success)]' : 'text-[var(--color-text-muted-soft)]'
-                  )}
-                />
-                <span
-                  className={clsx(
-                    'text-[12.5px] leading-5',
-                    item.done
-                      ? 'text-[var(--color-text-muted)] line-through'
-                      : 'text-[var(--color-text-body)]'
-                  )}
-                >
-                  {item.text}
-                </span>
+        return (
+          <div className="space-y-3">
+            {checklistDrafts.length > 0 ? (
+              <div className="space-y-2">
+                {checklistDrafts.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-2 rounded-[7px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-3 py-2.5"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      onChange={(event) =>
+                        updateChecklistDraft(item.id, 'checked', event.target.checked)
+                      }
+                      className="h-4 w-4 rounded border-[var(--color-border-default)] text-[var(--color-accent)] focus-visible:[box-shadow:var(--focus-ring)]"
+                      aria-label="체크리스트 완료 여부"
+                    />
+                    <input
+                      type="text"
+                      value={item.text}
+                      onChange={(event) => updateChecklistDraft(item.id, 'text', event.target.value)}
+                      className={clsx(
+                        'min-w-0 flex-1 border-0 bg-transparent text-[12.5px] leading-5 outline-none placeholder:text-[var(--color-text-muted-soft)]',
+                        item.checked
+                          ? 'text-[var(--color-text-muted)] line-through'
+                          : 'text-[var(--color-text-body)]'
+                      )}
+                      placeholder="체크리스트 항목을 입력해보세요."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeChecklistDraft(item.id)}
+                      className="flex h-6 w-6 items-center justify-center rounded-[4px] text-[var(--color-text-muted-soft)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)]"
+                      aria-label="체크리스트 항목 삭제"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <p className="text-sm text-[var(--color-text-muted)]">체크리스트 항목이 없습니다</p>
+            )}
+
+            <button
+              type="button"
+              onClick={addChecklistDraft}
+              className="flex w-full items-center justify-center gap-1.5 rounded-[7px] border border-dashed border-[var(--color-border-default)] px-3 py-2 text-[12px] font-semibold text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)]"
+            >
+              <Plus size={12} />
+              항목 추가
+            </button>
           </div>
-        ) : (
-          <p className="text-sm text-[var(--color-text-muted)]">{EMPTY_SECTION_MESSAGE}</p>
         )
 
       case 'memo':
