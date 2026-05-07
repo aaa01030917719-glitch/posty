@@ -39,6 +39,7 @@ type SceneDraft = {
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+type PersistedSceneDraft = Pick<SceneDraft, 'id' | 'number' | 'title' | 'body'>
 
 const PREVIEW_IDS = new Set(['preview', 'demo'])
 const DEFAULT_PANEL_TITLE = '대본'
@@ -192,6 +193,76 @@ function createSceneDrafts(script: Script | null): SceneDraft[] {
   ]
 }
 
+function createEditableSceneDrafts(script: Script | null): SceneDraft[] {
+  const defaultScenes = createSceneDrafts(SAMPLE_SCRIPT).map((scene, index) => ({
+    id: `scene-${index + 1}`,
+    number: index + 1,
+    title: scene.title,
+    body: '',
+  }))
+  const body = script?.body?.trim() ?? ''
+
+  if (!body) {
+    return defaultScenes
+  }
+
+  try {
+    const parsed = JSON.parse(body) as unknown
+
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return defaultScenes.map((fallback, index) => {
+        const parsedScene = parsed[index]
+        const scene =
+          typeof parsedScene === 'object' && parsedScene !== null
+            ? (parsedScene as Partial<PersistedSceneDraft>)
+            : {}
+
+        return {
+          id: typeof scene.id === 'string' && scene.id.trim() ? scene.id : fallback.id,
+          number:
+            typeof scene.number === 'number' && Number.isFinite(scene.number)
+              ? scene.number
+              : fallback.number,
+          title:
+            typeof scene.title === 'string' && scene.title.trim()
+              ? scene.title
+              : fallback.title,
+          body: typeof scene.body === 'string' ? scene.body : '',
+        }
+      })
+    }
+  } catch {
+    // Support legacy plain-text script bodies without changing the current UI shape.
+  }
+
+  return defaultScenes.map((scene, index) => ({
+    ...scene,
+    body: index === 0 ? body : '',
+  }))
+}
+
+function serializeSceneDrafts(sceneDrafts: SceneDraft[]) {
+  const defaultScenes = createSceneDrafts(SAMPLE_SCRIPT).map((scene, index) => ({
+    id: `scene-${index + 1}`,
+    number: index + 1,
+    title: scene.title,
+    body: '',
+  }))
+  const normalizedScenes = sceneDrafts.map((scene, index) => ({
+    id: scene.id,
+    number: scene.number,
+    title: scene.title.trim() || defaultScenes[index]?.title || `Scene ${index + 1}`,
+    body: scene.body,
+  }))
+  const hasSceneContent = normalizedScenes.some(
+    (scene, index) =>
+      scene.body.trim().length > 0 ||
+      scene.title !== (defaultScenes[index]?.title ?? scene.title)
+  )
+
+  return hasSceneContent ? JSON.stringify(normalizedScenes) : null
+}
+
 function getChannelBadgeLabel(card: ContentCard) {
   if (!card.channel) return null
 
@@ -226,10 +297,13 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [thumbnailDraft, setThumbnailDraft] = useState('')
   const [memoDraft, setMemoDraft] = useState('')
   const [panelTitle, setPanelTitle] = useState(DEFAULT_PANEL_TITLE)
-  const [sceneDrafts, setSceneDrafts] = useState<SceneDraft[]>(createSceneDrafts(SAMPLE_SCRIPT))
+  const [sceneDrafts, setSceneDrafts] = useState<SceneDraft[]>(
+    createEditableSceneDrafts(SAMPLE_SCRIPT)
+  )
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [scriptRecord, setScriptRecord] = useState<Script | null>(null)
 
   const isPreview = PREVIEW_IDS.has(cardId)
 
@@ -263,16 +337,17 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       )
 
       setCard(nextCard)
+      setScriptRecord(nextScript)
       setTitleDraft(nextCard?.title ?? '')
       setScheduledDateDraft(nextScheduled.date)
       setScheduledTimeDraft(nextScheduled.time)
-      setBodyDraft(nextCard?.memo ?? nextScript?.body ?? '')
+      setBodyDraft(nextCard?.memo ?? '')
       setCaptionDraft(nextScript?.caption ?? '')
       setHashtagsDraft(nextScript?.hashtags ?? '')
       setThumbnailDraft(nextScript?.thumbnail_text ?? '')
       setMemoDraft(nextCard?.memo ?? '')
       setPanelTitle(nextScript?.panel_title?.trim() || DEFAULT_PANEL_TITLE)
-      setSceneDrafts(createSceneDrafts(nextScript))
+      setSceneDrafts(createEditableSceneDrafts(nextScript))
       setSelectedProjectId(nextCard?.project_id ?? '')
       setSaveState('idle')
       setLoading(false)
@@ -341,8 +416,13 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
     try {
       const supabase = createClient()
+      const nextSceneBody = serializeSceneDrafts(sceneDrafts)
+      const nextPanelTitle = panelTitle.trim() || DEFAULT_PANEL_TITLE
       const payload = {
+        /*
         title: titleDraft.trim() || '새 콘텐츠',
+        */
+        title: titleDraft.trim() || 'Untitled content',
         status: nextStatus,
         scheduled_at: toIsoFromScheduledFields(scheduledDateDraft, scheduledTimeDraft),
         memo: bodyDraft.trim() ? bodyDraft : null,
@@ -361,16 +441,40 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       }
 
       const nextCard = data as ContentCard
+      const scriptPayload = {
+        user_id: nextCard.user_id,
+        card_id: nextCard.id,
+        title: nextCard.title?.trim() || 'Untitled content',
+        body: nextSceneBody,
+        panel_title: nextPanelTitle,
+      }
+      const { data: scriptData, error: scriptError } = scriptRecord?.id
+        ? await supabase
+            .from('scripts')
+            .update(scriptPayload)
+            .eq('id', scriptRecord.id)
+            .select('*')
+            .single()
+        : await supabase.from('scripts').insert(scriptPayload).select('*').single()
+
+      if (scriptError) {
+        throw scriptError
+      }
+
+      const nextScript = scriptData as Script
       const nextScheduled = splitScheduledFields(
         nextCard.scheduled_at ?? nextCard.published_at ?? null
       )
 
       setCard(nextCard)
+      setScriptRecord(nextScript)
       setTitleDraft(nextCard.title)
       setScheduledDateDraft(nextScheduled.date)
       setScheduledTimeDraft(nextScheduled.time)
       setBodyDraft(nextCard.memo ?? '')
       setMemoDraft(nextCard.memo ?? '')
+      setPanelTitle(nextScript.panel_title?.trim() || DEFAULT_PANEL_TITLE)
+      setSceneDrafts(createEditableSceneDrafts(nextScript))
       setSelectedProjectId(nextCard.project_id ?? '')
       setSaveState('saved')
       router.push('/content')
