@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { CheckSquare, Square, ExternalLink } from 'lucide-react'
 import { clsx } from 'clsx'
+import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -25,9 +26,11 @@ const MEMO_SECTION_TITLE = '\uBA54\uBAA8'
 const REFERENCE_SECTION_TITLE = '\uCC38\uACE0 \uB9C1\uD06C'
 const CHECKLIST_SECTION_TITLE = '\uCCB4\uD06C\uB9AC\uC2A4\uD2B8'
 const CLOSE_BUTTON_LABEL = '\uB2EB\uAE30'
+const EDIT_BUTTON_LABEL = '\uCF58\uD150\uCE20 \uD3B8\uC9D1\uD558\uAE30'
 
 export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
   const [saving, setSaving] = useState(false)
+  const router = useRouter()
 
   if (!card) return null
 
@@ -64,6 +67,11 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
     if (data) onUpdate?.(data as ContentCard)
   }
 
+  const handleEditClick = () => {
+    onClose()
+    router.push(`/content/${card.id}`)
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="콘텐츠 상세" size="lg">
       <div className="flex flex-col gap-5">
@@ -92,31 +100,6 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
             </span>
           )}
         </div>
-
-        <section className="rounded-[var(--radius-lg)] bg-[var(--color-bg-canvas)] p-4">
-          <p className="mb-2 text-xs font-medium text-[var(--color-text-secondary)]">
-            {STATUS_SECTION_TITLE}
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {STATUS_OPTIONS.map((status) => (
-              <button
-                key={status}
-                type="button"
-                disabled={saving}
-                onClick={() => handleStatusChange(status)}
-                className="rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:opacity-50"
-                style={{
-                  backgroundColor:
-                    card.status === status ? STATUS_COLORS[status] : `${STATUS_COLORS[status]}20`,
-                  color:
-                    card.status === status ? 'var(--color-bg-surface)' : STATUS_COLORS[status],
-                }}
-              >
-                {STATUS_LABELS[status]}
-              </button>
-            ))}
-          </div>
-        </section>
 
         {card.memo && (
           <section>
@@ -192,7 +175,40 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
           </section>
         )}
 
+        <section className="rounded-[var(--radius-lg)] border border-[var(--color-border-default)] p-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-medium text-[var(--color-text-secondary)]">
+              {STATUS_SECTION_TITLE}
+            </p>
+            <span className="text-[11px] text-[var(--color-text-muted)]">
+              {STATUS_LABELS[card.status]}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_OPTIONS.map((status) => (
+              <button
+                key={status}
+                type="button"
+                disabled={saving}
+                onClick={() => handleStatusChange(status)}
+                className="rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-medium transition-[background-color,color,box-shadow] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:opacity-50"
+                style={{
+                  backgroundColor:
+                    card.status === status ? STATUS_COLORS[status] : `${STATUS_COLORS[status]}16`,
+                  color:
+                    card.status === status ? 'var(--color-bg-surface)' : STATUS_COLORS[status],
+                }}
+              >
+                {STATUS_LABELS[status]}
+              </button>
+            ))}
+          </div>
+        </section>
+
         <div className="flex justify-end gap-2 border-t border-[var(--color-border-default)] pt-2">
+          <Button size="sm" onClick={handleEditClick}>
+            {EDIT_BUTTON_LABEL}
+          </Button>
           <Button variant="secondary" size="sm" onClick={onClose}>
             {CLOSE_BUTTON_LABEL}
           </Button>
