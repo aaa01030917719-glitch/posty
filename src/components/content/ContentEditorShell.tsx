@@ -74,6 +74,7 @@ const SAMPLE_CARD: ContentCard = {
   priority: 'normal',
   scheduled_at: '2026-05-07T09:00:00+09:00',
   published_at: null,
+  editor_memo: '작업 전 체크 포인트와 후킹 문장 후보를 메모해두세요.',
   memo: '후킹 문장을 더 짧게 정리하고 마지막 CTA를 자연스럽게 마무리합니다.',
   reference_url: 'https://example.com/reference',
   checklist: [
@@ -426,7 +427,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setCaptionDraft(nextScript?.caption ?? '')
       setHashtagsDraft(nextScript?.hashtags ?? '')
       setThumbnailDraft(nextScript?.thumbnail_text ?? '')
-      setMemoDraft(nextCard?.memo ?? '')
+      setMemoDraft(nextCard?.editor_memo ?? '')
       setPanelTitle(nextScript?.panel_title?.trim() || DEFAULT_PANEL_TITLE)
       setSceneDrafts(createEditableSceneDrafts(nextScript))
       setChecklistDrafts(normalizeChecklistDrafts(nextCard?.checklist))
@@ -540,6 +541,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         status: nextStatus,
         scheduled_at: toIsoFromScheduledFields(scheduledDateDraft, scheduledTimeDraft),
         memo: bodyDraft.trim() ? bodyDraft : null,
+        editor_memo: memoDraft.trim() ? memoDraft : null,
         checklist: nextChecklist,
         project_id: selectedProjectId || null,
       }
@@ -593,7 +595,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setCaptionDraft(nextScript.caption ?? '')
       setHashtagsDraft(nextScript.hashtags ?? '')
       setThumbnailDraft(nextScript.thumbnail_text ?? '')
-      setMemoDraft(nextCard.memo ?? '')
+      setMemoDraft(nextCard.editor_memo ?? '')
       setPanelTitle(nextScript.panel_title?.trim() || DEFAULT_PANEL_TITLE)
       setSceneDrafts(createEditableSceneDrafts(nextScript))
       setChecklistDrafts(normalizeChecklistDrafts(nextCard.checklist))
@@ -783,7 +785,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             onChange={(event) => setMemoDraft(event.target.value)}
             rows={12}
             className="min-h-[240px] w-full resize-none border-0 bg-transparent text-[13px] leading-[1.75] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
-            placeholder="메모를 적어보세요."
+            placeholder="작업 중 참고할 메모를 적어두세요."
           />
         )
     }

@@ -57,6 +57,7 @@ export interface ContentCard {
   scheduled_at: string | null
   published_at: string | null
   memo: string | null
+  editor_memo: string | null
   reference_url: string | null
   checklist: ChecklistItem[]
   idea_id: string | null
@@ -161,8 +162,8 @@ export type Database = {
         Row: ContentCard
         Insert: Omit<
           ContentCard,
-          'id' | 'created_at' | 'updated_at' | 'channel' | 'tags' | 'project'
-        > & { id?: string; created_at?: string; updated_at?: string }
+          'id' | 'created_at' | 'updated_at' | 'channel' | 'tags' | 'project' | 'editor_memo'
+        > & { id?: string; created_at?: string; updated_at?: string; editor_memo?: string | null }
         Update: Partial<Omit<ContentCard, 'id' | 'channel' | 'tags' | 'project'>>
       }
       scripts: {
