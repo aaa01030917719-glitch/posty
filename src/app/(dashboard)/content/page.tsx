@@ -59,6 +59,8 @@ const CAMPAIGN_DESCRIPTION_LABEL = '\uC124\uBA85'
 const OPTIONAL_PLACEHOLDER = '\uC120\uD0DD \uC0AC\uD56D'
 const CANCEL_LABEL = '\uCDE8\uC18C'
 const ALL_LABEL = '\uC804\uCCB4'
+const CONTENT_CAMPAIGN_LABEL = '\uCEA0\uD398\uC778 \uC120\uD0DD'
+const NO_CAMPAIGN_OPTION_LABEL = '\uCEA0\uD398\uC778 \uC5C6\uC74C'
 
 function normalizeCampaignTitle(title: string) {
   return title.trim().toLocaleLowerCase()
@@ -79,6 +81,7 @@ export default function ContentPage() {
   const [campaignRequestError, setCampaignRequestError] = useState<string | null>(null)
   const [campaignToastOpen, setCampaignToastOpen] = useState(false)
   const [campaignToastNonce, setCampaignToastNonce] = useState(0)
+  const [selectedProjectId, setSelectedProjectId] = useState('')
 
   const normalizedCampaignTitle = normalizeCampaignTitle(campaignTitle)
   const campaignTitleError =
@@ -226,7 +229,7 @@ export default function ContentPage() {
     setCreating(true)
 
     try {
-      const nextId = await createContentCard()
+      const nextId = await createContentCard({ projectId: selectedProjectId || null })
       router.push(`/content/${nextId}`)
     } catch (error) {
       console.error('Failed to create content card', error)
@@ -322,6 +325,24 @@ export default function ContentPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 lg:ml-auto">
+            {projects.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
+                <span className="sr-only">{CONTENT_CAMPAIGN_LABEL}</span>
+                <select
+                  value={selectedProjectId}
+                  onChange={(event) => setSelectedProjectId(event.target.value)}
+                  disabled={creating}
+                  className="h-8 max-w-[180px] rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2 text-xs font-medium text-[var(--color-text-secondary)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="">{NO_CAMPAIGN_OPTION_LABEL}</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <Button
               size="sm"
               variant="secondary"
