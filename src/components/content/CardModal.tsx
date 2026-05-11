@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { STATUS_COLORS, STATUS_LABELS, CHANNEL_COLORS } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
 import type { ContentCard, ContentStatus } from '@/lib/types'
@@ -37,18 +38,57 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
   const scheduled = card.scheduled_at || card.published_at
 
   const handleStatusChange = async (status: ContentStatus) => {
+    if (saving || status === card.status) return
+
     setSaving(true)
 
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('content_cards')
-      .update({ status } as never)
-      .eq('id', card.id)
-      .select('*, channel:channels(*), project:content_projects(id,title)')
-      .single()
+    try {
+      const supabase = createClient()
+      const previousStatus = card.status
+      const { data, error } = await supabase
+        .from('content_cards')
+        .update({ status } as never)
+        .eq('id', card.id)
+        .select('*, channel:channels(*), project:content_projects(id,title)')
+        .single()
 
-    if (data) onUpdate?.(data as ContentCard)
-    setSaving(false)
+      if (error) {
+        console.error('Failed to update content status', error)
+        return
+      }
+
+      if (!data) {
+        return
+      }
+
+      const nextCard = data as ContentCard
+
+      try {
+        await recordContentActivityLog(
+          {
+            user_id: nextCard.user_id,
+            card_id: nextCard.id,
+            project_id: nextCard.project_id,
+            action: 'status_changed',
+            title: nextCard.title,
+            description: '상태를 변경했습니다',
+            metadata: {
+              previous_status: previousStatus,
+              next_status: nextCard.status,
+              project_id: nextCard.project_id,
+              scheduled_at: nextCard.scheduled_at,
+            },
+          },
+          supabase
+        )
+      } catch (activityLogError) {
+        console.warn('Failed to record status change activity log', activityLogError)
+      }
+
+      onUpdate?.(nextCard)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const toggleChecklist = async (itemId: string) => {
@@ -57,14 +97,49 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
     )
 
     const supabase = createClient()
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('content_cards')
       .update({ checklist: updatedChecklist } as never)
       .eq('id', card.id)
       .select('*, channel:channels(*), project:content_projects(id,title)')
       .single()
 
-    if (data) onUpdate?.(data as ContentCard)
+    if (error) {
+      console.error('Failed to update content checklist', error)
+      return
+    }
+
+    if (!data) {
+      return
+    }
+
+    const nextCard = data as ContentCard
+    const checklistCount = nextCard.checklist.length
+    const checkedCount = nextCard.checklist.filter((item) => item.done).length
+
+    try {
+      await recordContentActivityLog(
+        {
+          user_id: nextCard.user_id,
+          card_id: nextCard.id,
+          project_id: nextCard.project_id,
+          action: 'checklist_updated',
+          title: nextCard.title,
+          description: '체크리스트를 수정했습니다',
+          metadata: {
+            checklist_count: checklistCount,
+            checked_count: checkedCount,
+            project_id: nextCard.project_id,
+            scheduled_at: nextCard.scheduled_at,
+          },
+        },
+        supabase
+      )
+    } catch (activityLogError) {
+      console.warn('Failed to record checklist activity log', activityLogError)
+    }
+
+    onUpdate?.(nextCard)
   }
 
   const handleEditClick = () => {
