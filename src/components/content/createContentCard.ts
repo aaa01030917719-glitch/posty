@@ -1,11 +1,19 @@
 'use client'
 
+import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
 import type { Database } from '@/lib/types'
 
 type ContentCardInsert = Database['public']['Tables']['content_cards']['Insert']
 
-export async function createContentCard() {
+type CreateContentCardOptions = {
+  title?: string
+  channelId?: string | null
+  projectId?: string | null
+  scheduledAt?: string | null
+}
+
+export async function createContentCard(options: CreateContentCardOptions = {}) {
   const supabase = createClient()
   const {
     data: { user },
@@ -34,28 +42,51 @@ export async function createContentCard() {
 
   const payload: ContentCardInsert = {
     user_id: user.id,
-    channel_id: defaultChannelId,
-    title: '새 콘텐츠',
+    channel_id: options.channelId ?? defaultChannelId,
+    title: options.title?.trim() || '새 콘텐츠',
     format: null,
     status: 'idea',
     priority: 'normal',
-    scheduled_at: null,
+    scheduled_at: options.scheduledAt ?? null,
     published_at: null,
     memo: null,
     reference_url: null,
     checklist: [],
     idea_id: null,
-    project_id: null,
+    project_id: options.projectId ?? null,
   }
 
   const { data, error } = await supabase
     .from('content_cards')
     .insert(payload)
-    .select('id')
+    .select('id, user_id, title, status, project_id, channel_id, scheduled_at')
     .single()
 
   if (error) {
     throw error
+  }
+
+  try {
+    await recordContentActivityLog(
+      {
+        user_id: data.user_id,
+        card_id: data.id,
+        project_id: data.project_id,
+        action: 'content_created',
+        title: data.title,
+        description: '콘텐츠를 생성했습니다',
+        metadata: {
+          status: data.status,
+          project_id: data.project_id,
+          channel_id: data.channel_id,
+          scheduled_at: data.scheduled_at,
+          source: 'content_creation',
+        },
+      },
+      supabase
+    )
+  } catch (activityLogError) {
+    console.warn('Failed to record content creation activity log', activityLogError)
   }
 
   return data.id as string
