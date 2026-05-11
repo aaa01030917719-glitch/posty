@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { clsx } from 'clsx'
 import {
@@ -27,7 +28,7 @@ import { CalendarMonth } from '@/components/schedule/CalendarMonth'
 import { CalendarWeek } from '@/components/schedule/CalendarWeek'
 import { CHANNEL_COLORS, STATUS_BADGE_CLASSES, STATUS_LABELS } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
-import type { ChannelType, ContentCard } from '@/lib/types'
+import type { ChannelType, ContentActivityLog, ContentCard } from '@/lib/types'
 
 type ViewMode = 'month' | 'week' | 'day'
 
@@ -43,6 +44,17 @@ const CHANNEL_SHORT_LABELS: Record<ChannelType, string> = {
   youtube: 'YT',
   blog: 'BL',
   custom: 'ETC',
+}
+
+const ACTIVITY_ACTION_LABELS: Record<string, string> = {
+  content_created: '생성',
+  draft_saved: '임시저장',
+  completed: '완료',
+  status_changed: '상태 변경',
+  checklist_updated: '체크리스트',
+  schedule_changed: '일정 변경',
+  script_updated: '대본 수정',
+  deleted: '삭제됨',
 }
 
 function getTargetDate(card: ContentCard) {
@@ -109,29 +121,56 @@ function getViewSubtitle(view: ViewMode, currentDate: Date) {
   return `${format(weekStart, 'M월 d일', { locale: ko })} - ${format(weekEnd, 'M월 d일', { locale: ko })}`
 }
 
+function formatActivityActionLabel(action: string) {
+  return ACTIVITY_ACTION_LABELS[action] ?? action
+}
+
+function formatActivityTime(value: string) {
+  try {
+    return format(new Date(value), 'HH:mm')
+  } catch {
+    return value
+  }
+}
+
 export default function SchedulePage() {
   const router = useRouter()
   const [view, setView] = useState<ViewMode>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [cards, setCards] = useState<ContentCard[]>([])
+  const [recentActivityLogs, setRecentActivityLogs] = useState<ContentActivityLog[]>([])
   const [selectedCard, setSelectedCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
 
   useEffect(() => {
-    const fetchCards = async () => {
+    const fetchScheduleData = async () => {
       const supabase = createClient()
-      const { data } = await supabase
-        .from('content_cards')
-        .select('*, channel:channels(*), project:content_projects(id,title)')
-        .not('scheduled_at', 'is', null)
-        .order('scheduled_at', { ascending: true })
+      const [cardsResult, activityResult] = await Promise.all([
+        supabase
+          .from('content_cards')
+          .select('*, channel:channels(*), project:content_projects(id,title)')
+          .not('scheduled_at', 'is', null)
+          .order('scheduled_at', { ascending: true }),
+        supabase
+          .from('content_activity_logs')
+          .select(
+            'id, user_id, card_id, project_id, action, title, description, metadata, created_at, card:content_cards(id,title), project:content_projects(id,title)'
+          )
+          .order('created_at', { ascending: false })
+          .limit(5),
+      ])
 
-      setCards((data as ContentCard[]) ?? [])
+      if (activityResult.error) {
+        console.error('Failed to fetch recent activity logs', activityResult.error)
+      }
+
+      setCards((cardsResult.data as ContentCard[]) ?? [])
+      setRecentActivityLogs((activityResult.data as ContentActivityLog[] | null) ?? [])
       setLoading(false)
     }
 
-    fetchCards()
+    fetchScheduleData()
   }, [])
 
   const handleCardUpdate = (updated: ContentCard) => {
@@ -273,6 +312,53 @@ export default function SchedulePage() {
     )
   }
 
+  const renderActivityLog = (log: ContentActivityLog) => {
+    const actionLabel = formatActivityActionLabel(log.action)
+    const title = log.card?.title?.trim() || log.title?.trim() || '제목 없음'
+    const projectTitle = log.project?.title?.trim()
+    const rowBody = (
+      <div className="flex w-full items-start justify-between gap-2 px-2 py-2 text-left transition-[background-color]">
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="shrink-0 rounded-[3px] bg-[var(--color-bg-surface-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text-secondary)]">
+              {actionLabel}
+            </span>
+            <span className="truncate text-[12px] font-medium leading-5 text-[var(--color-text-primary)]">
+              {title}
+            </span>
+          </span>
+          {projectTitle ? (
+            <span className="mt-0.5 block truncate text-[10.5px] text-[var(--color-text-muted-soft)]">
+              {projectTitle}
+            </span>
+          ) : null}
+        </span>
+        <time className="shrink-0 pt-0.5 text-[10.5px] text-[var(--color-text-muted-soft)]">
+          {formatActivityTime(log.created_at)}
+        </time>
+      </div>
+    )
+
+    if (!log.card_id) {
+      return (
+        <li key={log.id} className="border-b border-[var(--color-border-soft)] last:border-b-0">
+          {rowBody}
+        </li>
+      )
+    }
+
+    return (
+      <li key={log.id} className="border-b border-[var(--color-border-soft)] last:border-b-0">
+        <Link
+          href={`/content/${log.card_id}`}
+          className="block rounded-[5px] hover:bg-[var(--color-bg-surface-soft)]"
+        >
+          {rowBody}
+        </Link>
+      </li>
+    )
+  }
+
   return (
     <div className="flex min-h-full flex-1 bg-[var(--color-bg-surface-soft)]">
       {loading ? (
@@ -357,6 +443,27 @@ export default function SchedulePage() {
                       </p>
                     )}
                   </div>
+                </section>
+
+                <section>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted-soft)]">
+                      최근 작업 이력
+                    </p>
+                    <Link
+                      href="/timeline"
+                      className="text-[10.5px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-accent)]"
+                    >
+                      전체 보기
+                    </Link>
+                  </div>
+                  {recentActivityLogs.length > 0 ? (
+                    <ul>{recentActivityLogs.map((log) => renderActivityLog(log))}</ul>
+                  ) : (
+                    <p className="px-2 py-2 text-[12px] text-[var(--color-text-muted)]">
+                      아직 작업 이력이 없습니다
+                    </p>
+                  )}
                 </section>
               </div>
             </div>
