@@ -106,6 +106,8 @@ export interface ContentActivityLog {
   description: string | null
   metadata: Record<string, unknown>
   created_at: string
+  card?: Pick<ContentCard, 'id' | 'title'> | null
+  project?: ContentProjectSummary | null
 }
 
 export interface Scene {
@@ -197,10 +199,10 @@ export type Database = {
       }
       content_activity_logs: {
         Row: ContentActivityLog
-        Insert: Omit<ContentActivityLog, 'id' | 'created_at'> & {
+        Insert: Omit<ContentActivityLog, 'id' | 'created_at' | 'card' | 'project'> & {
           id?: string; created_at?: string
         }
-        Update: Partial<Omit<ContentActivityLog, 'id' | 'created_at'>>
+        Update: Partial<Omit<ContentActivityLog, 'id' | 'created_at' | 'card' | 'project'>>
       }
       ideas: {
         Row: Idea

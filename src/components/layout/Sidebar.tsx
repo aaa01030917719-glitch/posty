@@ -8,6 +8,7 @@ import {
   FileText,
   Lightbulb,
   Network,
+  History,
   BarChart2,
   LogOut,
 } from 'lucide-react'
@@ -17,6 +18,7 @@ import { createClient } from '@/lib/supabase/client'
 const NAV_ITEMS = [
   { href: '/schedule', label: '\uC77C\uC815', icon: Calendar },
   { href: '/content', label: '\uCF58\uD150\uCE20', icon: LayoutGrid },
+  { href: '/timeline', label: '\uD0C0\uC784\uB77C\uC778', icon: History },
   { href: '/scripts', label: '\uC2A4\uD06C\uB9BD\uD2B8', icon: FileText },
   { href: '/ideas', label: '\uC544\uC774\uB514\uC5B4', icon: Lightbulb },
   { href: '/mindmap', label: '\uB9C8\uC778\uB4DC\uB9F5', icon: Network },
