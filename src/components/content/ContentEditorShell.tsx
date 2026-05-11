@@ -375,6 +375,13 @@ function getActivityLogDescription(nextStatus: 'writing' | 'published') {
   return nextStatus === 'writing' ? '임시저장했습니다' : '작성 완료했습니다'
 }
 
+function normalizeScheduledAtForCompare(value: string | null) {
+  if (!value) return null
+
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toISOString()
+}
+
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const [card, setCard] = useState<ContentCard | null>(null)
@@ -545,6 +552,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
     try {
       const supabase = createClient()
+      const previousScheduledAt = card.scheduled_at
       const nextSceneBody = serializeSceneDrafts(sceneDrafts)
       const nextChecklist = serializeChecklistDrafts(checklistDrafts)
       const nextPanelTitle = panelTitle.trim() || DEFAULT_PANEL_TITLE
@@ -605,6 +613,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         Boolean(nextScript.caption?.trim()) ||
         Boolean(nextScript.hashtags?.trim()) ||
         Boolean(nextScript.thumbnail_text?.trim())
+      const scheduleChanged =
+        normalizeScheduledAtForCompare(previousScheduledAt) !==
+        normalizeScheduledAtForCompare(nextCard.scheduled_at)
 
       try {
         await recordContentActivityLog({
@@ -624,6 +635,29 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         })
       } catch (activityLogError) {
         console.warn('Failed to record content activity log', activityLogError)
+      }
+
+      if (scheduleChanged) {
+        try {
+          await recordContentActivityLog({
+            user_id: nextCard.user_id,
+            card_id: nextCard.id,
+            project_id: nextCard.project_id ?? null,
+            action: 'schedule_changed',
+            title: nextCard.title?.trim() || 'Untitled content',
+            description: '업로드 일정을 변경했습니다',
+            metadata: {
+              previous_scheduled_at: previousScheduledAt,
+              next_scheduled_at: nextCard.scheduled_at,
+              status: nextStatus,
+              project_id: nextCard.project_id,
+              has_script: hasScript,
+              checklist_count: nextChecklist.length,
+            },
+          })
+        } catch (activityLogError) {
+          console.warn('Failed to record schedule change activity log', activityLogError)
+        }
       }
 
       setCard(nextCard)

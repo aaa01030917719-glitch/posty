@@ -26,6 +26,7 @@ const ACTION_FILTERS = [
   { label: '완료', value: 'completed' },
   { label: '상태 변경', value: 'status_changed' },
   { label: '체크리스트', value: 'checklist_updated' },
+  { label: '일정 변경', value: 'schedule_changed' },
 ] as const
 
 type TimelineActionFilter = (typeof ACTION_FILTERS)[number]['value']
@@ -113,6 +114,10 @@ function formatMetadataSummary(metadata: unknown) {
     typeof metadata.previous_status === 'string' ? metadata.previous_status : null
   const nextStatus = typeof metadata.next_status === 'string' ? metadata.next_status : null
   const scheduledAt = typeof metadata.scheduled_at === 'string' ? metadata.scheduled_at : null
+  const previousScheduledAt =
+    typeof metadata.previous_scheduled_at === 'string' ? metadata.previous_scheduled_at : null
+  const nextScheduledAt =
+    typeof metadata.next_scheduled_at === 'string' ? metadata.next_scheduled_at : null
   const hasScript = typeof metadata.has_script === 'boolean' ? metadata.has_script : null
   const checklistCount =
     typeof metadata.checklist_count === 'number' ? metadata.checklist_count : null
@@ -133,6 +138,14 @@ function formatMetadataSummary(metadata: unknown) {
 
   if (scheduledAt) {
     summary.push(`예약 ${formatDateTime(scheduledAt)}`)
+  }
+
+  if (previousScheduledAt || nextScheduledAt) {
+    summary.push(
+      `예약 ${previousScheduledAt ? formatDateTime(previousScheduledAt) : '미정'} → ${
+        nextScheduledAt ? formatDateTime(nextScheduledAt) : '미정'
+      }`
+    )
   }
 
   if (hasScript !== null) {
