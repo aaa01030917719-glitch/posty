@@ -14,8 +14,15 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { CHANNEL_COLORS } from '@/lib/constants'
+import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
-import type { ChecklistItem, ContentCard, ContentProjectSummary, Script } from '@/lib/types'
+import type {
+  ChecklistItem,
+  ContentActivityAction,
+  ContentCard,
+  ContentProjectSummary,
+  Script,
+} from '@/lib/types'
 
 interface ContentEditorShellProps {
   cardId: string
@@ -360,6 +367,14 @@ function getChannelBadgeLabel(card: ContentCard) {
   }
 }
 
+function getActivityLogAction(nextStatus: 'writing' | 'published'): ContentActivityAction {
+  return nextStatus === 'writing' ? 'draft_saved' : 'completed'
+}
+
+function getActivityLogDescription(nextStatus: 'writing' | 'published') {
+  return nextStatus === 'writing' ? '임시저장했습니다' : '작성 완료했습니다'
+}
+
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const [card, setCard] = useState<ContentCard | null>(null)
@@ -585,6 +600,31 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const nextScheduled = splitScheduledFields(
         nextCard.scheduled_at ?? nextCard.published_at ?? null
       )
+      const hasScript =
+        Boolean(nextScript.body?.trim()) ||
+        Boolean(nextScript.caption?.trim()) ||
+        Boolean(nextScript.hashtags?.trim()) ||
+        Boolean(nextScript.thumbnail_text?.trim())
+
+      try {
+        await recordContentActivityLog({
+          user_id: nextCard.user_id,
+          card_id: nextCard.id,
+          project_id: nextCard.project_id ?? null,
+          action: getActivityLogAction(nextStatus),
+          title: nextCard.title?.trim() || 'Untitled content',
+          description: getActivityLogDescription(nextStatus),
+          metadata: {
+            status: nextStatus,
+            scheduled_at: nextCard.scheduled_at,
+            project_id: nextCard.project_id,
+            has_script: hasScript,
+            checklist_count: nextChecklist.length,
+          },
+        })
+      } catch (activityLogError) {
+        console.warn('Failed to record content activity log', activityLogError)
+      }
 
       setCard(nextCard)
       setScriptRecord(nextScript)

@@ -86,6 +86,28 @@ export interface Script {
   card?: ContentCard
 }
 
+export type ContentActivityAction =
+  | 'draft_saved'
+  | 'completed'
+  | 'deleted'
+  | 'status_changed'
+  | 'schedule_changed'
+  | 'content_created'
+  | 'script_updated'
+  | 'checklist_updated'
+
+export interface ContentActivityLog {
+  id: string
+  user_id: string
+  card_id: string | null
+  project_id: string | null
+  action: ContentActivityAction | string
+  title: string | null
+  description: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
 export interface Scene {
   id: string
   script_id: string
@@ -172,6 +194,13 @@ export type Database = {
           id?: string; created_at?: string; updated_at?: string
         }
         Update: Partial<Omit<Script, 'id' | 'card'>>
+      }
+      content_activity_logs: {
+        Row: ContentActivityLog
+        Insert: Omit<ContentActivityLog, 'id' | 'created_at'> & {
+          id?: string; created_at?: string
+        }
+        Update: Partial<Omit<ContentActivityLog, 'id' | 'created_at'>>
       }
       ideas: {
         Row: Idea
