@@ -93,6 +93,7 @@ export type ContentActivityAction =
   | 'draft_saved'
   | 'completed'
   | 'deleted'
+  | 'restored'
   | 'status_changed'
   | 'schedule_changed'
   | 'content_created'

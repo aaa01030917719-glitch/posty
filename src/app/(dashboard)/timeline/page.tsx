@@ -17,6 +17,7 @@ const ACTION_LABELS: Record<string, string> = {
   script_updated: '대본 수정',
   checklist_updated: '체크리스트',
   deleted: '삭제됨',
+  restored: '복구됨',
 }
 
 const ACTION_FILTERS = [
@@ -28,6 +29,7 @@ const ACTION_FILTERS = [
   { label: '체크리스트', value: 'checklist_updated' },
   { label: '일정 변경', value: 'schedule_changed' },
   { label: '삭제됨', value: 'deleted' },
+  { label: '복구됨', value: 'restored' },
 ] as const
 
 type TimelineActionFilter = (typeof ACTION_FILTERS)[number]['value']
