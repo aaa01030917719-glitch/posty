@@ -27,6 +27,7 @@ const ACTION_FILTERS = [
   { label: '상태 변경', value: 'status_changed' },
   { label: '체크리스트', value: 'checklist_updated' },
   { label: '일정 변경', value: 'schedule_changed' },
+  { label: '삭제됨', value: 'deleted' },
 ] as const
 
 type TimelineActionFilter = (typeof ACTION_FILTERS)[number]['value']

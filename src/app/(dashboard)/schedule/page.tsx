@@ -150,6 +150,7 @@ export default function SchedulePage() {
         supabase
           .from('content_cards')
           .select('*, channel:channels(*), project:content_projects(id,title)')
+          .eq('is_deleted', false)
           .not('scheduled_at', 'is', null)
           .order('scheduled_at', { ascending: true }),
         supabase

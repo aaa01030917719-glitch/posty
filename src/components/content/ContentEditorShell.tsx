@@ -10,6 +10,7 @@ import {
   Plus,
   Save,
   Share2,
+  Trash2,
   X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -91,6 +92,9 @@ const SAMPLE_CARD: ContentCard = {
   ],
   idea_id: null,
   project_id: null,
+  is_deleted: false,
+  deleted_at: null,
+  deleted_reason: null,
   created_at: '2026-05-04T10:00:00+09:00',
   updated_at: '2026-05-04T14:43:00+09:00',
   channel: {
@@ -405,6 +409,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     normalizeChecklistDrafts(SAMPLE_CARD.checklist)
   )
   const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [deleting, setDeleting] = useState(false)
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [scriptRecord, setScriptRecord] = useState<Script | null>(null)
@@ -546,7 +551,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const handlePersist = async (nextStatus: 'writing' | 'published') => {
-    if (isPreview || !card || saveState === 'saving') return
+    if (isPreview || !card || saveState === 'saving' || deleting) return
 
     setSaveState('saving')
 
@@ -680,6 +685,69 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       console.error('Failed to save content card', error)
       setSaveState('error')
       window.alert('저장하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    }
+  }
+
+  const handleSoftDelete = async () => {
+    if (isPreview || !card || saveState === 'saving' || deleting) return
+
+    const confirmed = window.confirm(
+      '이 콘텐츠를 삭제하시겠습니까? 삭제된 콘텐츠는 기본 목록에서 숨겨집니다.'
+    )
+
+    if (!confirmed) return
+
+    setDeleting(true)
+
+    try {
+      const supabase = createClient()
+      const deletedAt = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('content_cards')
+        .update({
+          is_deleted: true,
+          deleted_at: deletedAt,
+          deleted_reason: null,
+        })
+        .eq('id', card.id)
+        .select('*, channel:channels(*), project:content_projects(id,title)')
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      const deletedCard = data as ContentCard
+
+      try {
+        await recordContentActivityLog(
+          {
+            user_id: deletedCard.user_id,
+            card_id: deletedCard.id,
+            project_id: deletedCard.project_id ?? null,
+            action: 'deleted',
+            title: deletedCard.title?.trim() || 'Untitled content',
+            description: '콘텐츠를 삭제했습니다',
+            metadata: {
+              status: deletedCard.status,
+              scheduled_at: deletedCard.scheduled_at,
+              project_id: deletedCard.project_id,
+              deleted_at: deletedCard.deleted_at ?? deletedAt,
+              source: 'content_editor',
+            },
+          },
+          supabase
+        )
+      } catch (activityLogError) {
+        console.warn('Failed to record content delete activity log', activityLogError)
+      }
+
+      router.push('/content')
+    } catch (error) {
+      console.error('Failed to soft delete content card', error)
+      window.alert('삭제하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -903,7 +971,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const saveLabel =
-    saveState === 'saving'
+    deleting
+      ? '삭제 중...'
+      : saveState === 'saving'
       ? '저장 중...'
       : saveState === 'saved'
         ? '저장됨'
@@ -936,7 +1006,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               <button
                 type="button"
                 onClick={() => handlePersist('writing')}
-                disabled={isPreview || saveState === 'saving'}
+                disabled={isPreview || saveState === 'saving' || deleting}
                 className="inline-flex h-7 items-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
               >
                 임시저장
@@ -944,7 +1014,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               <button
                 type="button"
                 onClick={() => handlePersist('published')}
-                disabled={isPreview || saveState === 'saving'}
+                disabled={isPreview || saveState === 'saving' || deleting}
                 className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
               >
                 <Save size={13} />
@@ -952,9 +1022,18 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </button>
               <button
                 type="button"
+                onClick={handleSoftDelete}
+                disabled={isPreview || saveState === 'saving' || deleting}
+                className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-danger)] transition-[background-color,color,border-color] hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+              >
+                <Trash2 size={13} />
+                {deleting ? '\uc0ad\uc81c \uc911' : '\uc0ad\uc81c'}
+              </button>
+              <button
+                type="button"
                 disabled
                 className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] disabled:opacity-100"
-                aria-label="공유 준비 중"
+                aria-label="\uacf5\uc720 \uc900\ube44 \uc911"
               >
                 <Share2 size={14} />
               </button>

@@ -62,6 +62,9 @@ export interface ContentCard {
   checklist: ChecklistItem[]
   idea_id: string | null
   project_id: string | null
+  is_deleted: boolean
+  deleted_at: string | null
+  deleted_reason: string | null
   created_at: string
   updated_at: string
   channel?: Channel
@@ -186,7 +189,16 @@ export type Database = {
         Row: ContentCard
         Insert: Omit<
           ContentCard,
-          'id' | 'created_at' | 'updated_at' | 'channel' | 'tags' | 'project' | 'editor_memo'
+          | 'id'
+          | 'created_at'
+          | 'updated_at'
+          | 'channel'
+          | 'tags'
+          | 'project'
+          | 'editor_memo'
+          | 'is_deleted'
+          | 'deleted_at'
+          | 'deleted_reason'
         > & { id?: string; created_at?: string; updated_at?: string; editor_memo?: string | null }
         Update: Partial<Omit<ContentCard, 'id' | 'channel' | 'tags' | 'project'>>
       }

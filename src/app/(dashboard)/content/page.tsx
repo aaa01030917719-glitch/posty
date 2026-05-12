@@ -108,6 +108,7 @@ export default function ContentPage() {
           supabase
             .from('content_cards')
             .select('*, channel:channels(*), project:content_projects(id,title)')
+            .eq('is_deleted', false)
             .order('created_at', { ascending: false }),
           supabase
             .from('content_projects')
