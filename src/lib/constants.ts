@@ -1,4 +1,4 @@
-import type { ChannelType, ContentStatus, Priority } from './types'
+import type { ChannelType, ContentActivityAction, ContentStatus, Priority } from './types'
 
 export const CHANNEL_COLORS: Record<ChannelType, string> = {
   instagram: '#E1306C',
@@ -51,6 +51,30 @@ export const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {
   blog: '\uBE14\uB85C\uADF8',
   custom: '\uCEE4\uC2A4\uD140',
 }
+
+export const ACTIVITY_ACTION_LABELS: Record<ContentActivityAction, string> = {
+  content_created: '\uCF58\uD150\uCE20 \uC0DD\uC131',
+  draft_saved: '\uC784\uC2DC\uC800\uC7A5',
+  completed: '\uC644\uB8CC',
+  status_changed: '\uC0C1\uD0DC \uBCC0\uACBD',
+  checklist_updated: '\uCCB4\uD06C\uB9AC\uC2A4\uD2B8',
+  schedule_changed: '\uC77C\uC815 \uBCC0\uACBD',
+  script_updated: '\uB300\uBCF8 \uC218\uC815',
+  deleted: '\uC0AD\uC81C\uB428',
+  restored: '\uBCF5\uAD6C\uB428',
+}
+
+export const ACTIVITY_ACTION_FILTERS = [
+  { label: '\uC804\uCCB4', value: 'all' },
+  { label: '\uC0DD\uC131', value: 'content_created' },
+  { label: '\uC784\uC2DC\uC800\uC7A5', value: 'draft_saved' },
+  { label: '\uC644\uB8CC', value: 'completed' },
+  { label: '\uC0C1\uD0DC \uBCC0\uACBD', value: 'status_changed' },
+  { label: '\uCCB4\uD06C\uB9AC\uC2A4\uD2B8', value: 'checklist_updated' },
+  { label: '\uC77C\uC815 \uBCC0\uACBD', value: 'schedule_changed' },
+  { label: '\uC0AD\uC81C\uB428', value: 'deleted' },
+  { label: '\uBCF5\uAD6C\uB428', value: 'restored' },
+] as const
 
 export const NAV_ITEMS = [
   { href: '/schedule', label: '\uC77C\uC815', icon: 'Calendar' },

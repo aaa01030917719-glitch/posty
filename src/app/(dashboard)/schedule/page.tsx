@@ -26,7 +26,12 @@ import { createContentCard } from '@/components/content/createContentCard'
 import { CalendarDay } from '@/components/schedule/CalendarDay'
 import { CalendarMonth } from '@/components/schedule/CalendarMonth'
 import { CalendarWeek } from '@/components/schedule/CalendarWeek'
-import { CHANNEL_COLORS, STATUS_BADGE_CLASSES, STATUS_LABELS } from '@/lib/constants'
+import {
+  ACTIVITY_ACTION_LABELS,
+  CHANNEL_COLORS,
+  STATUS_BADGE_CLASSES,
+  STATUS_LABELS,
+} from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
 import type { ChannelType, ContentActivityLog, ContentCard } from '@/lib/types'
 
@@ -44,17 +49,6 @@ const CHANNEL_SHORT_LABELS: Record<ChannelType, string> = {
   youtube: 'YT',
   blog: 'BL',
   custom: 'ETC',
-}
-
-const ACTIVITY_ACTION_LABELS: Record<string, string> = {
-  content_created: '생성',
-  draft_saved: '임시저장',
-  completed: '완료',
-  status_changed: '상태 변경',
-  checklist_updated: '체크리스트',
-  schedule_changed: '일정 변경',
-  script_updated: '대본 수정',
-  deleted: '삭제됨',
 }
 
 function getTargetDate(card: ContentCard) {
@@ -122,7 +116,7 @@ function getViewSubtitle(view: ViewMode, currentDate: Date) {
 }
 
 function formatActivityActionLabel(action: string) {
-  return ACTIVITY_ACTION_LABELS[action] ?? action
+  return ACTIVITY_ACTION_LABELS[action as keyof typeof ACTIVITY_ACTION_LABELS] ?? action
 }
 
 function formatActivityTime(value: string) {

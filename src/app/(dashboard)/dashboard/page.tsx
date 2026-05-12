@@ -46,6 +46,7 @@ export default function DashboardPage() {
       const { data } = await supabase
         .from('content_cards')
         .select('*, channel:channels(*)')
+        .eq('is_deleted', false)
 
       setCards((data as ContentCard[]) ?? [])
       setLoading(false)
