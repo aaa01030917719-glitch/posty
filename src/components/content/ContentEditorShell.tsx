@@ -410,6 +410,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   )
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [deleting, setDeleting] = useState(false)
+  const [restoring, setRestoring] = useState(false)
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [scriptRecord, setScriptRecord] = useState<Script | null>(null)
@@ -551,7 +552,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const handlePersist = async (nextStatus: 'writing' | 'published') => {
-    if (isPreview || !card || saveState === 'saving' || deleting) return
+    if (isPreview || !card || card.is_deleted || saveState === 'saving' || deleting) return
 
     setSaveState('saving')
 
@@ -689,7 +690,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const handleSoftDelete = async () => {
-    if (isPreview || !card || saveState === 'saving' || deleting) return
+    if (isPreview || !card || card.is_deleted || saveState === 'saving' || deleting) return
 
     const confirmed = window.confirm(
       '이 콘텐츠를 삭제하시겠습니까? 삭제된 콘텐츠는 기본 목록에서 숨겨집니다.'
@@ -748,6 +749,80 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       window.alert('삭제하지 못했습니다. 잠시 후 다시 시도해주세요.')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleRestoreDeletedCard = async () => {
+    if (!card || restoring) return
+
+    const confirmed = window.confirm('이 콘텐츠를 복구하시겠습니까?')
+
+    if (!confirmed) return
+
+    setRestoring(true)
+
+    try {
+      const supabase = createClient()
+      const restoredAt = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('content_cards')
+        .update({
+          is_deleted: false,
+          deleted_at: null,
+          deleted_reason: null,
+        })
+        .eq('id', card.id)
+        .select('*, channel:channels(*), project:content_projects(id,title)')
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      const restoredCard = data as ContentCard
+
+      try {
+        await recordContentActivityLog(
+          {
+            user_id: restoredCard.user_id,
+            card_id: restoredCard.id,
+            project_id: restoredCard.project_id ?? null,
+            action: 'restored',
+            title: restoredCard.title?.trim() || 'Untitled content',
+            description: '콘텐츠를 복구했습니다',
+            metadata: {
+              status: restoredCard.status,
+              scheduled_at: restoredCard.scheduled_at,
+              project_id: restoredCard.project_id,
+              restored_at: restoredAt,
+              source: 'content_deleted_notice',
+            },
+          },
+          supabase
+        )
+      } catch (activityLogError) {
+        console.warn('Failed to record content restore activity log', activityLogError)
+      }
+
+      const nextScheduled = splitScheduledFields(
+        restoredCard.scheduled_at ?? restoredCard.published_at ?? null
+      )
+
+      setCard(restoredCard)
+      setTitleDraft(restoredCard.title)
+      setScheduledDateDraft(nextScheduled.date)
+      setScheduledTimeDraft(nextScheduled.time)
+      setBodyDraft(restoredCard.memo ?? '')
+      setMemoDraft(restoredCard.editor_memo ?? '')
+      setChecklistDrafts(normalizeChecklistDrafts(restoredCard.checklist))
+      setSelectedProjectId(restoredCard.project_id ?? '')
+      setSaveState('idle')
+      router.refresh()
+    } catch (error) {
+      console.error('Failed to restore content card', error)
+      window.alert('콘텐츠를 복구하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -966,6 +1041,61 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </Link>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  if (card.is_deleted) {
+    const deletedTitle = card.title?.trim() || 'Untitled content'
+    const projectTitle = card.project?.title?.trim()
+
+    return (
+      <div className="flex min-h-full flex-1 bg-[var(--color-bg-surface)] px-5 py-8 md:px-8">
+        <section className="w-full max-w-2xl">
+          <p className="text-xs font-semibold text-[var(--color-danger)]">삭제된 콘텐츠입니다</p>
+          <h1 className="mt-2 text-[22px] font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">
+            {deletedTitle}
+          </h1>
+          <div className="mt-4 grid gap-2 border-y border-[var(--color-border-soft)] py-4 text-sm md:grid-cols-2">
+            {projectTitle ? (
+              <p className="text-[var(--color-text-muted)]">
+                캠페인 <span className="font-medium text-[var(--color-text-body)]">{projectTitle}</span>
+              </p>
+            ) : null}
+            <p className="text-[var(--color-text-muted)]">
+              삭제일{' '}
+              <time className="font-medium text-[var(--color-text-body)]">
+                {formatDate(card.deleted_at, true)}
+              </time>
+            </p>
+          </div>
+          <p className="mt-4 text-sm leading-6 text-[var(--color-text-body)]">
+            이 콘텐츠는 휴지통에 보관되어 있습니다. 복구하기 전에는 편집하거나 저장할 수 없습니다.
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <Link
+              href="/trash"
+              className="inline-flex h-9 items-center rounded-[6px] border border-[var(--color-border-default)] px-4 text-sm font-semibold text-[var(--color-text-body)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)]"
+            >
+              휴지통으로 이동
+            </Link>
+            <button
+              type="button"
+              onClick={handleRestoreDeletedCard}
+              disabled={restoring}
+              className="inline-flex h-9 items-center rounded-[6px] bg-[var(--color-accent)] px-4 text-sm font-semibold text-[var(--color-on-accent)] transition-[background-color] hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:bg-[var(--color-accent-disabled)]"
+            >
+              {restoring ? '복구 중...' : '복구하기'}
+            </button>
+            <Link
+              href="/content"
+              className="inline-flex h-9 items-center rounded-[6px] px-4 text-sm font-semibold text-[var(--color-text-muted)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)]"
+            >
+              콘텐츠 목록으로 돌아가기
+            </Link>
+          </div>
+        </section>
       </div>
     )
   }
