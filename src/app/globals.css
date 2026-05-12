@@ -5,6 +5,7 @@
   --color-bg-canvas: #ffffff;
   --color-bg-surface: #ffffff;
   --color-bg-subtle: #f7f7f7;
+  --color-bg-surface-soft: #fafafa;
   --color-bg-surface-strong: #f2f2f2;
   --color-bg-accent-soft: #ffd1da;
   --color-border-default: #dddddd;
@@ -65,6 +66,7 @@
   --color-bg-canvas: var(--color-bg-canvas);
   --color-bg-surface: var(--color-bg-surface);
   --color-bg-subtle: var(--color-bg-subtle);
+  --color-bg-surface-soft: var(--color-bg-surface-soft);
   --color-bg-surface-strong: var(--color-bg-surface-strong);
   --color-bg-accent-soft: var(--color-bg-accent-soft);
   --color-border-default: var(--color-border-default);
