@@ -409,6 +409,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     normalizeChecklistDrafts(SAMPLE_CARD.checklist)
   )
   const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [saveFeedbackLabel, setSaveFeedbackLabel] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
@@ -432,7 +433,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   useEffect(() => {
     if (saveState !== 'saved') return
 
-    const timer = window.setTimeout(() => setSaveState('idle'), 1500)
+    const timer = window.setTimeout(() => {
+      setSaveState('idle')
+      setSaveFeedbackLabel(null)
+    }, 1500)
     return () => window.clearTimeout(timer)
   }, [saveState])
 
@@ -461,6 +465,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setChecklistDrafts(normalizeChecklistDrafts(nextCard?.checklist))
       setSelectedProjectId(nextCard?.project_id ?? '')
       setSaveState('idle')
+      setSaveFeedbackLabel(null)
       setLoading(false)
     }
 
@@ -555,6 +560,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     if (isPreview || !card || card.is_deleted || saveState === 'saving' || deleting) return
 
     setSaveState('saving')
+    setSaveFeedbackLabel(null)
 
     try {
       const supabase = createClient()
@@ -680,11 +686,16 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setSceneDrafts(createEditableSceneDrafts(nextScript))
       setChecklistDrafts(normalizeChecklistDrafts(nextCard.checklist))
       setSelectedProjectId(nextCard.project_id ?? '')
+      setSaveFeedbackLabel(
+        nextStatus === 'writing' ? '임시저장되었습니다' : '저장되었습니다'
+      )
       setSaveState('saved')
+      await new Promise((resolve) => window.setTimeout(resolve, 250))
       router.push('/content')
     } catch (error) {
       console.error('Failed to save content card', error)
       setSaveState('error')
+      setSaveFeedbackLabel(null)
       window.alert('저장하지 못했습니다. 잠시 후 다시 시도해주세요.')
     }
   }
@@ -693,7 +704,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     if (isPreview || !card || card.is_deleted || saveState === 'saving' || deleting) return
 
     const confirmed = window.confirm(
-      '이 콘텐츠를 삭제하시겠습니까? 삭제된 콘텐츠는 기본 목록에서 숨겨집니다.'
+      '이 콘텐츠를 삭제하시겠습니까? 삭제된 콘텐츠는 휴지통에 보관됩니다.'
     )
 
     if (!confirmed) return
@@ -1074,12 +1085,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-2">
-            <Link
-              href="/trash"
-              className="inline-flex h-9 items-center rounded-[6px] border border-[var(--color-border-default)] px-4 text-sm font-semibold text-[var(--color-text-body)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)]"
-            >
-              휴지통으로 이동
-            </Link>
             <button
               type="button"
               onClick={handleRestoreDeletedCard}
@@ -1088,6 +1093,12 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             >
               {restoring ? '복구 중...' : '복구하기'}
             </button>
+            <Link
+              href="/trash"
+              className="inline-flex h-9 items-center rounded-[6px] border border-[var(--color-border-default)] px-4 text-sm font-semibold text-[var(--color-text-body)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)]"
+            >
+              휴지통으로 이동
+            </Link>
             <Link
               href="/content"
               className="inline-flex h-9 items-center rounded-[6px] px-4 text-sm font-semibold text-[var(--color-text-muted)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)]"
@@ -1106,11 +1117,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       : saveState === 'saving'
       ? '저장 중...'
       : saveState === 'saved'
-        ? '저장됨'
+        ? saveFeedbackLabel
         : saveState === 'error'
           ? '저장 실패'
           : isPreview
-            ? '미리보기'
+            ? '미리보기 화면에서는 저장할 수 없습니다.'
             : null
 
   return (
