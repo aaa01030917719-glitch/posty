@@ -22,6 +22,7 @@ import type {
   ContentActivityAction,
   ContentCard,
   ContentProjectSummary,
+  ContentShareLink,
   Script,
 } from '@/lib/types'
 
@@ -386,6 +387,21 @@ function normalizeScheduledAtForCompare(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toISOString()
 }
 
+function createShareToken() {
+  const browserCrypto = globalThis.crypto
+
+  if (browserCrypto?.randomUUID) {
+    return browserCrypto.randomUUID().replaceAll('-', '')
+  }
+
+  const randomValues =
+    browserCrypto?.getRandomValues
+      ? Array.from(browserCrypto.getRandomValues(new Uint8Array(24)))
+      : Array.from({ length: 24 }, () => Math.floor(Math.random() * 256))
+
+  return randomValues.map((value) => value.toString(16).padStart(2, '0')).join('')
+}
+
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const [card, setCard] = useState<ContentCard | null>(null)
@@ -415,6 +431,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [scriptRecord, setScriptRecord] = useState<Script | null>(null)
+  const [shareLink, setShareLink] = useState<ContentShareLink | null>(null)
+  const [shareBusy, setShareBusy] = useState(false)
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null)
 
   const isPreview = PREVIEW_IDS.has(cardId)
 
@@ -429,6 +448,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       ? projects
       : [card.project, ...projects]
   }, [card?.project, projects])
+  const activeShareLink = shareLink?.is_enabled ? shareLink : null
+  const shareUrl = shareLink
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/content/${shareLink.token}`
+    : null
 
   useEffect(() => {
     if (saveState !== 'saved') return
@@ -439,6 +462,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }, 1500)
     return () => window.clearTimeout(timer)
   }, [saveState])
+
+  useEffect(() => {
+    if (!shareFeedback) return
+
+    const timer = window.setTimeout(() => {
+      setShareFeedback(null)
+    }, 1800)
+    return () => window.clearTimeout(timer)
+  }, [shareFeedback])
 
   useEffect(() => {
     let cancelled = false
@@ -474,6 +506,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
       if (isPreview) {
         setProjects([])
+        setShareLink(null)
         applyState(SAMPLE_CARD, SAMPLE_SCRIPT)
         return
       }
@@ -483,6 +516,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         { data: cardData, error: cardError },
         { data: scriptData, error: scriptError },
         { data: projectData, error: projectError },
+        { data: shareLinkData, error: shareLinkError },
       ] = await Promise.all([
         supabase
           .from('content_cards')
@@ -491,6 +525,13 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           .maybeSingle(),
         supabase.from('scripts').select('*').eq('card_id', cardId).maybeSingle(),
         supabase.from('content_projects').select('id, title').order('created_at', { ascending: false }),
+        supabase
+          .from('content_share_links')
+          .select('*')
+          .eq('card_id', cardId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ])
 
       if (cardError) {
@@ -505,7 +546,12 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         console.error('Failed to fetch content projects', projectError)
       }
 
+      if (shareLinkError) {
+        console.error('Failed to fetch content share link', shareLinkError)
+      }
+
       setProjects((projectData as ContentProjectSummary[] | null) ?? [])
+      setShareLink((shareLinkData as ContentShareLink | null) ?? null)
       applyState((cardData as ContentCard | null) ?? null, (scriptData as Script | null) ?? null)
     }
 
@@ -834,6 +880,89 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       window.alert('콘텐츠를 복구하지 못했습니다. 잠시 후 다시 시도해주세요.')
     } finally {
       setRestoring(false)
+    }
+  }
+
+  const handleCreateShareLink = async () => {
+    if (isPreview || !card || card.is_deleted || shareBusy) return
+
+    setShareBusy(true)
+    setShareFeedback(null)
+
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('content_share_links')
+        .insert({
+          user_id: card.user_id,
+          card_id: card.id,
+          token: createShareToken(),
+          is_enabled: true,
+          expires_at: null,
+        })
+        .select('*')
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      setShareLink(data as ContentShareLink)
+      setShareFeedback('공유 링크가 생성되었습니다')
+    } catch (error) {
+      console.error('Failed to create content share link', error)
+      window.alert('공유 링크를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  const handleCopyShareLink = async () => {
+    if (!shareUrl) return
+
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setShareFeedback('링크가 복사되었습니다')
+    } catch (error) {
+      console.error('Failed to copy content share link', error)
+      window.alert('링크를 복사하지 못했습니다. 직접 선택해서 복사해주세요.')
+    }
+  }
+
+  const handleDisableShareLink = async () => {
+    if (!activeShareLink || shareBusy) return
+
+    const confirmed = window.confirm('공유를 중지하시겠습니까? 이 링크로는 더 이상 접근할 수 없습니다.')
+
+    if (!confirmed) return
+
+    setShareBusy(true)
+    setShareFeedback(null)
+
+    try {
+      const supabase = createClient()
+      const disabledAt = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('content_share_links')
+        .update({
+          is_enabled: false,
+          disabled_at: disabledAt,
+        })
+        .eq('id', activeShareLink.id)
+        .select('*')
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      setShareLink(data as ContentShareLink)
+      setShareFeedback('공유가 중지되었습니다')
+    } catch (error) {
+      console.error('Failed to disable content share link', error)
+      window.alert('공유를 중지하지 못했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setShareBusy(false)
     }
   }
 
@@ -1172,9 +1301,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </button>
               <button
                 type="button"
-                disabled
-                className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] disabled:opacity-100"
-                aria-label="\uacf5\uc720 \uc900\ube44 \uc911"
+                onClick={activeShareLink ? handleCopyShareLink : handleCreateShareLink}
+                disabled={isPreview || shareBusy}
+                className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                aria-label={activeShareLink ? '공유 링크 복사' : '공유 링크 생성'}
               >
                 <Share2 size={14} />
               </button>
@@ -1272,6 +1402,73 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               <p className="mb-4 text-xs text-[var(--color-text-muted)]">
                 미리보기 화면에서는 저장할 수 없습니다.
               </p>
+            )}
+
+            {!isPreview && (
+              <div className="mb-4 max-w-[680px] border-t border-[var(--color-border-soft)] pt-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-[var(--color-text-body)]">
+                    공유 링크
+                  </span>
+                  <span
+                    className={clsx(
+                      'rounded-[4px] px-2 py-0.5 text-[11px] font-semibold',
+                      activeShareLink
+                        ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
+                        : 'bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)]'
+                    )}
+                  >
+                    {activeShareLink ? '공유 중' : shareLink ? '비활성화됨' : '없음'}
+                  </span>
+                  {shareFeedback && (
+                    <span className="text-[11px] font-medium text-[var(--color-text-muted)]">
+                      {shareFeedback}
+                    </span>
+                  )}
+                </div>
+
+                {activeShareLink && shareUrl ? (
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="text"
+                      readOnly
+                      value={shareUrl}
+                      className="h-9 min-w-0 flex-1 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] px-3 text-xs text-[var(--color-text-body)] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyShareLink}
+                      disabled={shareBusy}
+                      className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                    >
+                      복사
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDisableShareLink}
+                      disabled={shareBusy}
+                      className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-danger)] transition-[background-color,color] hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                    >
+                      {shareBusy ? '처리 중' : '공유 중지'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCreateShareLink}
+                      disabled={shareBusy}
+                      className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                    >
+                      <Share2 size={13} />
+                      {shareBusy ? '생성 중' : '공유 링크 생성'}
+                    </button>
+                    <span className="text-[11px] text-[var(--color-text-muted)]">
+                      공개 확인 페이지는 후속 작업에서 연결됩니다.
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

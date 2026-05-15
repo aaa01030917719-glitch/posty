@@ -89,6 +89,17 @@ export interface Script {
   card?: ContentCard
 }
 
+export interface ContentShareLink {
+  id: string
+  user_id: string
+  card_id: string
+  token: string
+  is_enabled: boolean
+  expires_at: string | null
+  created_at: string
+  disabled_at: string | null
+}
+
 export type ContentActivityAction =
   | 'draft_saved'
   | 'completed'
@@ -209,6 +220,13 @@ export type Database = {
           id?: string; created_at?: string; updated_at?: string
         }
         Update: Partial<Omit<Script, 'id' | 'card'>>
+      }
+      content_share_links: {
+        Row: ContentShareLink
+        Insert: Omit<ContentShareLink, 'id' | 'created_at' | 'disabled_at'> & {
+          id?: string; created_at?: string; disabled_at?: string | null
+        }
+        Update: Partial<Omit<ContentShareLink, 'id' | 'created_at'>>
       }
       content_activity_logs: {
         Row: ContentActivityLog
