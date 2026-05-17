@@ -346,6 +346,14 @@ function createAddedSceneDraft(number: number): SceneDraft {
   }
 }
 
+function getSceneBodyRows(value: string) {
+  const rows = value.split('\n').reduce((total, line) => {
+    return total + Math.max(1, Math.ceil(line.length / 34))
+  }, 0)
+
+  return Math.max(4, rows)
+}
+
 function createChecklistDraft(): ChecklistDraft {
   return {
     id: `checklist-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -407,8 +415,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [card, setCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(true)
-  const [sectionMenuOpen, setSectionMenuOpen] = useState(false)
-  const [activeSection, setActiveSection] = useState<EditorSection>('scenes')
+  const [expandedSections, setExpandedSections] = useState<Record<EditorSection, boolean>>({
+    body: true,
+    scenes: true,
+    caption: false,
+    hashtags: false,
+    thumbnail: false,
+    checklist: false,
+    memo: false,
+  })
   const [titleDraft, setTitleDraft] = useState('')
   const [scheduledDateDraft, setScheduledDateDraft] = useState('')
   const [scheduledTimeDraft, setScheduledTimeDraft] = useState('')
@@ -437,10 +452,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
   const isPreview = PREVIEW_IDS.has(cardId)
 
-  const activeSectionLabel = useMemo(
-    () => SECTION_ITEMS.find((item) => item.value === activeSection)?.label ?? DEFAULT_PANEL_TITLE,
-    [activeSection]
-  )
   const campaignOptions = useMemo(() => {
     if (!card?.project) return projects
 
@@ -966,8 +977,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
-  const renderPanelBody = () => {
-    switch (activeSection) {
+  const togglePanelSection = (section: EditorSection) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }))
+  }
+
+  const renderPanelBody = (section: EditorSection) => {
+    switch (section) {
       case 'body':
         return (
           <div className="space-y-3">
@@ -1000,7 +1018,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                   key={scene.id}
                   className="overflow-hidden rounded-[7px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]"
                 >
-                  <div className="flex items-center gap-2 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-3 py-2">
+                  <div className="flex items-center gap-2 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-3.5 py-3">
                     <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--color-text-muted-soft)]">
                       씬 {scene.number}
                     </span>
@@ -1008,7 +1026,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                       type="text"
                       value={scene.title}
                       onChange={(event) => updateSceneDraft(scene.id, 'title', event.target.value)}
-                      className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] font-semibold text-[var(--color-text-primary)] outline-none"
+                      className="min-w-0 flex-1 border-0 bg-transparent text-[13px] font-semibold text-[var(--color-text-primary)] outline-none"
                     />
                     <button
                       type="button"
@@ -1021,12 +1039,12 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                     </button>
                     <GripVertical size={13} className="text-[var(--color-text-muted-soft)]" />
                   </div>
-                  <div className="px-3 py-3">
+                  <div className="px-3.5 py-4">
                     <textarea
                       value={scene.body}
                       onChange={(event) => updateSceneDraft(scene.id, 'body', event.target.value)}
-                      rows={3}
-                      className="min-h-[72px] w-full resize-none border-0 bg-transparent text-[12px] leading-[1.7] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
+                      rows={getSceneBodyRows(scene.body)}
+                      className="min-h-[112px] w-full resize-y overflow-hidden border-0 bg-transparent text-[12.5px] leading-[1.8] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
                       placeholder="씬 내용을 작성해보세요."
                     />
                   </div>
@@ -1542,43 +1560,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         {panelOpen && (
           <aside className="right-panel flex w-[320px] shrink-0 flex-col overflow-hidden border-l border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:w-[340px]">
             <div className="rp-head flex items-center gap-[5px] border-b border-[var(--color-border-soft)] px-3 py-2.5">
-              <div className="relative min-w-0 flex-1">
-                <button
-                  type="button"
-                  onClick={() => setSectionMenuOpen((prev) => !prev)}
-                  className="flex w-full items-center gap-1.5 rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-1.5 text-left"
-                >
-                  <span className="truncate text-[13px] font-semibold text-[var(--color-text-primary)]">
-                    {activeSectionLabel}
-                  </span>
-                  <ChevronDown
-                    size={12}
-                    className="ml-auto shrink-0 text-[var(--color-text-muted)]"
-                  />
-                </button>
-
-                {sectionMenuOpen && (
-                  <div className="absolute left-0 top-9 z-20 min-w-[150px] rounded-[7px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-1 shadow-[var(--shadow-lg)]">
-                    {SECTION_ITEMS.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => {
-                          setActiveSection(item.value)
-                          setSectionMenuOpen(false)
-                        }}
-                        className={clsx(
-                          'flex w-full items-center rounded-[4px] px-3 py-1.5 text-left text-[12.5px]',
-                          activeSection === item.value
-                            ? 'bg-[var(--color-bg-accent-soft)] font-semibold text-[var(--color-accent)]'
-                            : 'text-[var(--color-text-body)] hover:bg-[var(--color-bg-subtle)]'
-                        )}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate px-1 text-[13px] font-semibold text-[var(--color-text-primary)]">
+                  편집 패널
+                </p>
               </div>
 
               <button
@@ -1607,7 +1592,42 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </button>
             </div>
 
-            <div className="rp-body flex-1 overflow-y-auto px-3 py-3">{renderPanelBody()}</div>
+            <div className="rp-body flex-1 overflow-y-auto px-3">
+              {SECTION_ITEMS.map((item) => {
+                const isExpanded = expandedSections[item.value]
+
+                return (
+                  <section
+                    key={item.value}
+                    className="border-b border-[var(--color-border-soft)] last:border-b-0"
+                  >
+                    <button
+                      type="button"
+                      aria-expanded={isExpanded}
+                      onClick={() => togglePanelSection(item.value)}
+                      className="flex w-full items-center gap-2 py-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                    >
+                      <ChevronDown
+                        size={13}
+                        className={clsx(
+                          'shrink-0 text-[var(--color-text-muted)] transition-transform',
+                          !isExpanded && '-rotate-90'
+                        )}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-[var(--color-text-secondary)]">
+                        {item.label}
+                      </span>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="pb-4">
+                        {renderPanelBody(item.value)}
+                      </div>
+                    )}
+                  </section>
+                )
+              })}
+            </div>
           </aside>
         )}
       </div>

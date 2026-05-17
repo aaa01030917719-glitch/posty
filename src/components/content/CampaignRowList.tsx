@@ -154,10 +154,10 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
               <span className="min-w-0 flex-1">
                 <span
                   className={clsx(
-                    'block truncate text-sm font-semibold',
+                    'block truncate text-[13px] font-medium',
                     group.isVirtual
                       ? 'text-[var(--color-text-secondary)]'
-                      : 'text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-secondary)]'
                   )}
                 >
                   {group.title}
@@ -191,7 +191,7 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
                         className="group flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
                       >
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm font-medium text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-accent)]">
+                          <span className="block truncate text-[12.5px] font-normal text-[var(--color-text-body)] transition-colors group-hover:text-[var(--color-text-primary)]">
                             {card.title}
                           </span>
                         </span>
