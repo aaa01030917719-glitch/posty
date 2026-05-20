@@ -52,6 +52,20 @@ export const CHANNEL_TYPE_LABELS: Record<ChannelType, string> = {
   custom: '\uCEE4\uC2A4\uD140',
 }
 
+export const SCRIPT_PART_LABELS = {
+  body: '\uB300\uBCF8',
+  caption: '\uCEA1\uC158',
+  hashtags: '\uD574\uC2DC\uD0DC\uADF8',
+  thumbnail: '\uC378\uB124\uC77C',
+} as const
+
+export const SCRIPT_PART_BADGE_CLASSES = {
+  body: 'bg-[#f4efff] text-[#6b4bb7]',
+  caption: 'bg-[#eef6ff] text-[#2563a8]',
+  hashtags: 'bg-[#eaf7f4] text-[#247568]',
+  thumbnail: 'bg-[#fff4e3] text-[#9a5c16]',
+} as const
+
 export const ACTIVITY_ACTION_LABELS: Record<ContentActivityAction, string> = {
   content_created: '\uCF58\uD150\uCE20 \uC0DD\uC131',
   draft_saved: '\uC784\uC2DC\uC800\uC7A5',

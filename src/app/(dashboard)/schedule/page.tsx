@@ -215,8 +215,9 @@ export default function SchedulePage() {
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 })
   const todayDate = new Date()
 
-  const title = getViewTitle(view, currentDate)
+  const viewTitle = getViewTitle(view, currentDate)
   const subtitle = getViewSubtitle(view, currentDate)
+  const greetingTitle = '사용자님 안녕하세요! 오늘도 행복한 하루 보내세요 ☀️'
 
   const todayCards = cards
     .filter((card) => {
@@ -480,9 +481,11 @@ export default function SchedulePage() {
               <div className="flex flex-col gap-4 px-[18px] pb-0 pt-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex flex-wrap items-end gap-[10px]">
                   <h1 className="text-[14px] font-bold tracking-[-0.02em] text-[var(--color-text-primary)] md:text-[15px]">
-                    {title}
+                    {greetingTitle}
                   </h1>
-                  <p className="text-[12px] text-[var(--color-text-muted)]">{subtitle}</p>
+                  <p className="text-[12px] text-[var(--color-text-muted)]">
+                    {viewTitle} · {subtitle}
+                  </p>
 
                   <div className="ml-1 flex items-center gap-[3px]">
                     <button

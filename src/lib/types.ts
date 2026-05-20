@@ -52,6 +52,11 @@ export interface ShareSection {
   body: string
 }
 
+export type ContentScriptSummary = Pick<
+  Script,
+  'body' | 'caption' | 'hashtags' | 'thumbnail_text'
+>
+
 export interface ContentCard {
   id: string
   user_id: string
@@ -77,6 +82,7 @@ export interface ContentCard {
   channel?: Channel
   tags?: Tag[]
   project?: ContentProjectSummary | null
+  scripts?: ContentScriptSummary[]
 }
 
 export interface Script {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Search } from 'lucide-react'
 import { clsx } from 'clsx'
-import { CampaignRowList, type CampaignRowGroup } from '@/components/content/CampaignRowList'
+import { CampaignRowList } from '@/components/content/CampaignRowList'
 import { createContentCard } from '@/components/content/createContentCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -47,8 +47,6 @@ const CREATE_CAMPAIGN_ERROR =
   '\uCEA0\uD398\uC778\uC744 \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
 const CAMPAIGN_SECTION_TITLE = '\uCEA0\uD398\uC778'
 const CAMPAIGN_COUNT_SUFFIX = '\uAC1C'
-const CAMPAIGN_HELP_TEXT =
-  '\uC0DD\uC131\uD55C \uCEA0\uD398\uC778\uC740 \uD558\uC704 \uCF58\uD150\uCE20\uB97C \uD3BC\uCCD0 \uBE60\uB974\uAC8C \uD655\uC778\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.'
 const NO_CAMPAIGNS_TEXT =
   '\uC544\uC9C1 \uC0DD\uC131\uB41C \uCEA0\uD398\uC778\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC0C8 \uCEA0\uD398\uC778\uC744 \uCD94\uAC00\uD574 \uCF58\uD150\uCE20\uB97C \uBB36\uC5B4\uBCF4\uC138\uC694.'
 const CAMPAIGN_TITLE_LABEL = '\uCEA0\uD398\uC778 \uC81C\uBAA9'
@@ -81,6 +79,7 @@ export default function ContentPage() {
   const [campaignToastOpen, setCampaignToastOpen] = useState(false)
   const [campaignToastNonce, setCampaignToastNonce] = useState(0)
   const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [activeProjectFilter, setActiveProjectFilter] = useState<string>('all')
 
   const normalizedCampaignTitle = normalizeCampaignTitle(campaignTitle)
   const campaignTitleError =
@@ -106,7 +105,9 @@ export default function ContentPage() {
         await Promise.all([
           supabase
             .from('content_cards')
-            .select('*, channel:channels(*), project:content_projects(id,title)')
+            .select(
+              '*, channel:channels(*), project:content_projects(id,title), scripts(body,caption,hashtags,thumbnail_text)'
+            )
             .eq('is_deleted', false)
             .order('created_at', { ascending: false }),
           supabase
@@ -133,72 +134,30 @@ export default function ContentPage() {
 
   const trimmedSearch = search.trim().toLowerCase()
 
-  const contentRows = useMemo<{
-    groupedCampaigns: CampaignRowGroup[]
-    ungroupedCards: ContentCard[]
-  }>(() => {
-    const cardsByProjectId = new Map<string, ContentCard[]>()
-    const uncategorizedCards: ContentCard[] = []
-
-    cards.forEach((card) => {
+  const projectCardCounts = useMemo(() => {
+    return cards.reduce<Record<string, number>>((acc, card) => {
       if (card.project_id) {
-        const nextCards = cardsByProjectId.get(card.project_id) ?? []
-        nextCards.push(card)
-        cardsByProjectId.set(card.project_id, nextCards)
-        return
+        acc[card.project_id] = (acc[card.project_id] ?? 0) + 1
       }
 
-      uncategorizedCards.push(card)
-    })
+      return acc
+    }, {})
+  }, [cards])
 
-    const groups: CampaignRowGroup[] = projects.flatMap((project) => {
-      const projectCards = cardsByProjectId.get(project.id) ?? []
-      const matchesProjectTitle =
-        trimmedSearch.length > 0 && project.title.toLowerCase().includes(trimmedSearch)
-
-      const visibleCards = projectCards.filter((card) => {
-        const matchesStatus = statusFilter === 'all' || card.status === statusFilter
-        const matchesSearch =
-          trimmedSearch.length === 0 ||
-          matchesProjectTitle ||
-          card.title.toLowerCase().includes(trimmedSearch)
-
-        return matchesStatus && matchesSearch
-      })
-
-      const shouldShowEmptyProject =
-        projectCards.length === 0 &&
-        statusFilter === 'all' &&
-        (trimmedSearch.length === 0 || matchesProjectTitle)
-
-      if (!matchesProjectTitle && visibleCards.length === 0 && !shouldShowEmptyProject) {
-        return []
-      }
-
-      return [
-        {
-          id: project.id,
-          title: project.title,
-          cards: visibleCards,
-        },
-      ]
-    })
-
-    const visibleUncategorizedCards = uncategorizedCards.filter((card) => {
+  const visibleContentCards = useMemo(() => {
+    return cards.filter((card) => {
+      const projectTitle = card.project?.title?.toLowerCase() ?? ''
       const matchesStatus = statusFilter === 'all' || card.status === statusFilter
+      const matchesProject =
+        activeProjectFilter === 'all' || card.project_id === activeProjectFilter
       const matchesSearch =
-        trimmedSearch.length === 0 || card.title.toLowerCase().includes(trimmedSearch)
+        trimmedSearch.length === 0 ||
+        card.title.toLowerCase().includes(trimmedSearch) ||
+        projectTitle.includes(trimmedSearch)
 
-      return matchesStatus && matchesSearch
+      return matchesStatus && matchesProject && matchesSearch
     })
-
-    return {
-      groupedCampaigns: groups,
-      ungroupedCards: visibleUncategorizedCards,
-    }
-  }, [cards, projects, statusFilter, trimmedSearch])
-
-  const { groupedCampaigns, ungroupedCards } = contentRows
+  }, [activeProjectFilter, cards, statusFilter, trimmedSearch])
 
   const statusCounts = useMemo(() => {
     return cards.reduce<Record<ContentStatus, number>>(
@@ -285,6 +244,8 @@ export default function ContentPage() {
       const nextProject = data as ContentProjectSummary
 
       setProjects((prev) => [nextProject, ...prev])
+      setActiveProjectFilter(nextProject.id)
+      setSelectedProjectId(nextProject.id)
       setCampaignTitle('')
       setCampaignDescription('')
       setCampaignFormOpen(false)
@@ -299,7 +260,7 @@ export default function ContentPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+    <div className="flex min-h-full flex-col gap-5 bg-[var(--color-bg-surface-soft)] p-5 md:p-6">
       {campaignToastOpen && (
         <Toast
           message={CAMPAIGN_SUCCESS_TOAST}
@@ -387,113 +348,168 @@ export default function ContentPage() {
           ))}
         </div>
 
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                {CAMPAIGN_SECTION_TITLE}
-              </p>
-              <span className="text-xs text-[var(--color-text-muted)]">
-                {projects.length}
-                {CAMPAIGN_COUNT_SUFFIX}
-              </span>
-            </div>
-            {!campaignFormOpen && !loading && projects.length > 0 && (
-              <p className="text-xs text-[var(--color-text-muted)]">{CAMPAIGN_HELP_TEXT}</p>
-            )}
-          </div>
+        {campaignFormOpen && (
+          <form
+            onSubmit={handleCreateCampaign}
+            className="flex flex-col gap-3 border-t border-[var(--color-border-soft)] pt-3"
+          >
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] lg:items-start">
+              <Input
+                label={CAMPAIGN_TITLE_LABEL}
+                type="text"
+                value={campaignTitle}
+                onChange={(event) => setCampaignTitle(event.target.value)}
+                placeholder={CAMPAIGN_TITLE_PLACEHOLDER}
+                maxLength={120}
+                disabled={campaignCreating}
+                error={campaignTitleError}
+              />
 
-          {campaignFormOpen && (
-            <form
-              onSubmit={handleCreateCampaign}
-              className="flex flex-col gap-3 border-t border-[var(--color-border-soft)] pt-3"
-            >
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] lg:items-start">
-                <Input
-                  label={CAMPAIGN_TITLE_LABEL}
-                  type="text"
-                  value={campaignTitle}
-                  onChange={(event) => setCampaignTitle(event.target.value)}
-                  placeholder={CAMPAIGN_TITLE_PLACEHOLDER}
-                  maxLength={120}
+              <Input
+                label={CAMPAIGN_DESCRIPTION_LABEL}
+                type="text"
+                value={campaignDescription}
+                onChange={(event) => setCampaignDescription(event.target.value)}
+                placeholder={OPTIONAL_PLACEHOLDER}
+                maxLength={200}
+                disabled={campaignCreating}
+              />
+
+              <div className="flex gap-2 lg:pt-6">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={campaignCreating || !campaignTitle.trim() || Boolean(campaignTitleError)}
+                >
+                  {campaignCreating ? CREATING_CAMPAIGN_LABEL : NEW_CAMPAIGN_LABEL}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
                   disabled={campaignCreating}
-                  error={campaignTitleError}
-                />
-
-                <Input
-                  label={CAMPAIGN_DESCRIPTION_LABEL}
-                  type="text"
-                  value={campaignDescription}
-                  onChange={(event) => setCampaignDescription(event.target.value)}
-                  placeholder={OPTIONAL_PLACEHOLDER}
-                  maxLength={200}
-                  disabled={campaignCreating}
-                />
-
-                <div className="flex gap-2 lg:pt-6">
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={campaignCreating || !campaignTitle.trim() || Boolean(campaignTitleError)}
-                  >
-                    {campaignCreating ? CREATING_CAMPAIGN_LABEL : NEW_CAMPAIGN_LABEL}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    disabled={campaignCreating}
-                    onClick={() => {
-                      setCampaignFormOpen(false)
-                      setCampaignTitle('')
-                      setCampaignDescription('')
-                      setCampaignRequestError(null)
-                    }}
-                  >
-                    {CANCEL_LABEL}
-                  </Button>
-                </div>
+                  onClick={() => {
+                    setCampaignFormOpen(false)
+                    setCampaignTitle('')
+                    setCampaignDescription('')
+                    setCampaignRequestError(null)
+                  }}
+                >
+                  {CANCEL_LABEL}
+                </Button>
               </div>
-              {campaignRequestError && (
-                <p className="text-xs text-[var(--color-danger)]">{campaignRequestError}</p>
-              )}
-            </form>
-          )}
-
-          {!loading && projects.length === 0 && (
-            <p className="text-xs text-[var(--color-text-muted)]">{NO_CAMPAIGNS_TEXT}</p>
-          )}
-        </div>
+            </div>
+            {campaignRequestError && (
+              <p className="text-xs text-[var(--color-danger)]">{campaignRequestError}</p>
+            )}
+          </form>
+        )}
       </section>
 
       {loading ? (
         <div className="flex items-center justify-center rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] py-24">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
-      ) : cards.length === 0 && projects.length === 0 ? (
-        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-20 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
-            +
-          </div>
-          <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_STATE_TITLE}</p>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_STATE_DESCRIPTION}</p>
-          <div className="mt-4 flex justify-center">
-            <Button size="sm" onClick={() => router.push('/content/preview')}>
-              {PREVIEW_LABEL}
-            </Button>
-          </div>
-        </div>
-      ) : groupedCampaigns.length === 0 && ungroupedCards.length === 0 ? (
-        <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-16 text-center">
-          <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_FILTERED_TITLE}</p>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_FILTERED_DESCRIPTION}</p>
-        </div>
       ) : (
-        <CampaignRowList
-          groups={groupedCampaigns}
-          ungroupedCards={ungroupedCards}
-          onCardClick={openDetail}
-        />
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3">
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  {CAMPAIGN_SECTION_TITLE}
+                </p>
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  {projects.length}
+                  {CAMPAIGN_COUNT_SUFFIX}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCampaignFormOpen((prev) => !prev)
+                  setCampaignRequestError(null)
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                aria-label={NEW_CAMPAIGN_LABEL}
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setActiveProjectFilter('all')}
+                className={clsx(
+                  'flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                  activeProjectFilter === 'all'
+                    ? 'bg-[var(--color-bg-surface-soft)] text-[var(--color-text-primary)]'
+                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]'
+                )}
+              >
+                <span className="font-semibold">{ALL_LABEL}</span>
+                <span className="text-[var(--color-text-muted)]">{cards.length}</span>
+              </button>
+
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  onClick={() => setActiveProjectFilter(project.id)}
+                  className={clsx(
+                    'flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                    activeProjectFilter === project.id
+                      ? 'bg-[var(--color-bg-surface-soft)] text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)]'
+                  )}
+                >
+                  <span className="min-w-0 truncate font-medium">{project.title}</span>
+                  <span className="shrink-0 text-[var(--color-text-muted)]">
+                    {projectCardCounts[project.id] ?? 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {projects.length === 0 && (
+              <p className="mt-3 px-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                {NO_CAMPAIGNS_TEXT}
+              </p>
+            )}
+          </aside>
+
+          <section className="min-w-0">
+            {cards.length === 0 && projects.length === 0 ? (
+              <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-20 text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--color-bg-accent-soft)] text-lg font-semibold text-[var(--color-accent)]">
+                  +
+                </div>
+                <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                  {EMPTY_STATE_TITLE}
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  {EMPTY_STATE_DESCRIPTION}
+                </p>
+                <div className="mt-4 flex justify-center">
+                  <Button size="sm" onClick={() => router.push('/content/preview')}>
+                    {PREVIEW_LABEL}
+                  </Button>
+                </div>
+              </div>
+            ) : visibleContentCards.length === 0 ? (
+              <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-16 text-center">
+                <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                  {EMPTY_FILTERED_TITLE}
+                </p>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  {EMPTY_FILTERED_DESCRIPTION}
+                </p>
+              </div>
+            ) : (
+              <CampaignRowList cards={visibleContentCards} onCardClick={openDetail} />
+            )}
+          </section>
+        </div>
       )}
     </div>
   )

@@ -3,7 +3,12 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
-import { CHANNEL_TYPE_LABELS, STATUS_LABELS } from '@/lib/constants'
+import {
+  CHANNEL_TYPE_LABELS,
+  SCRIPT_PART_BADGE_CLASSES,
+  SCRIPT_PART_LABELS,
+  STATUS_LABELS,
+} from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
 import type { Script } from '@/lib/types'
 
@@ -50,24 +55,24 @@ function getChannelLabel(script: Script) {
 function getScriptParts(script: Script) {
   return [
     {
-      label: '대본 있음',
+      label: SCRIPT_PART_LABELS.body,
       active: hasText(script.body),
-      className: 'bg-[#f4efff] text-[#6b4bb7]',
+      className: SCRIPT_PART_BADGE_CLASSES.body,
     },
     {
-      label: '캡션 있음',
+      label: SCRIPT_PART_LABELS.caption,
       active: hasText(script.caption),
-      className: 'bg-[#eef6ff] text-[#2563a8]',
+      className: SCRIPT_PART_BADGE_CLASSES.caption,
     },
     {
-      label: '해시태그 있음',
+      label: SCRIPT_PART_LABELS.hashtags,
       active: hasText(script.hashtags),
-      className: 'bg-[#eaf7f4] text-[#247568]',
+      className: SCRIPT_PART_BADGE_CLASSES.hashtags,
     },
     {
-      label: '썸네일 문구 있음',
+      label: SCRIPT_PART_LABELS.thumbnail,
       active: hasText(script.thumbnail_text),
-      className: 'bg-[#fff4e3] text-[#9a5c16]',
+      className: SCRIPT_PART_BADGE_CLASSES.thumbnail,
     },
   ].filter((item) => item.active)
 }
@@ -104,14 +109,14 @@ export default function ScriptsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center bg-[var(--color-bg-surface-soft)] py-24">
+      <div className="flex min-h-full items-center justify-center bg-[var(--color-bg-surface-soft)] py-24">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5 bg-[var(--color-bg-surface-soft)] p-5 md:p-6">
+    <div className="flex min-h-full flex-col gap-5 bg-[var(--color-bg-surface-soft)] p-5 md:p-6">
       <section className="space-y-1">
         <h1 className="text-[22px] font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">
           {PAGE_TITLE}
