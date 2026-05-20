@@ -91,6 +91,7 @@ const SAMPLE_CARD: ContentCard = {
     { id: 'check-2', text: '썸네일 문구 검토', done: false },
     { id: 'check-3', text: '캡션과 해시태그 정리', done: false },
   ],
+  share_sections: [],
   idea_id: null,
   project_id: null,
   is_deleted: false,

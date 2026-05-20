@@ -46,6 +46,12 @@ export interface ChecklistItem {
   done: boolean
 }
 
+export interface ShareSection {
+  id: string
+  title: string
+  body: string
+}
+
 export interface ContentCard {
   id: string
   user_id: string
@@ -60,6 +66,7 @@ export interface ContentCard {
   editor_memo: string | null
   reference_url: string | null
   checklist: ChecklistItem[]
+  share_sections: ShareSection[]
   idea_id: string | null
   project_id: string | null
   is_deleted: boolean
@@ -208,10 +215,17 @@ export type Database = {
           | 'tags'
           | 'project'
           | 'editor_memo'
+          | 'share_sections'
           | 'is_deleted'
           | 'deleted_at'
           | 'deleted_reason'
-        > & { id?: string; created_at?: string; updated_at?: string; editor_memo?: string | null }
+        > & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          editor_memo?: string | null
+          share_sections?: ShareSection[]
+        }
         Update: Partial<Omit<ContentCard, 'id' | 'channel' | 'tags' | 'project'>>
       }
       scripts: {

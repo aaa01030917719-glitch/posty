@@ -6,6 +6,7 @@ import {
   Calendar,
   LayoutGrid,
   FileText,
+  Share2,
   Lightbulb,
   Network,
   History,
@@ -16,6 +17,7 @@ import { clsx } from 'clsx'
 const NAV_ITEMS = [
   { href: '/schedule', label: '\uC77C\uC815', icon: Calendar },
   { href: '/content', label: '\uCF58\uD150\uCE20', icon: LayoutGrid },
+  { href: '/share-materials', label: '\uACF5\uC720', icon: Share2 },
   { href: '/timeline', label: '\uAE30\uB85D', icon: History },
   { href: '/trash', label: '\uD734\uC9C0\uD1B5', icon: Trash2 },
   { href: '/scripts', label: '\uC2A4\uD06C\uB9BD\uD2B8', icon: FileText },
