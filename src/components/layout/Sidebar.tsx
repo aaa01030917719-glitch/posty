@@ -45,14 +45,18 @@ export function Sidebar() {
   return (
     <aside className="hidden h-full w-[168px] shrink-0 flex-col border-r border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] md:flex">
       <div className="px-3 pb-2.5 pt-4">
-        <div className="flex items-center gap-2">
+        <Link
+          href="/schedule"
+          className="flex items-center gap-2 rounded-[5px] outline-none transition-[background-color,box-shadow] hover:bg-[var(--color-bg-surface-soft)] focus-visible:[box-shadow:var(--focus-ring)]"
+          aria-label="Posty 홈으로 이동"
+        >
           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-[var(--color-accent)]">
             <span className="text-[11px] font-bold text-[var(--color-on-accent)]">P</span>
           </div>
           <span className="text-sm font-bold tracking-[-0.02em] text-[var(--color-text-primary)]">
             Posty
           </span>
-        </div>
+        </Link>
       </div>
 
       <nav className="flex flex-1 flex-col overflow-y-auto px-2 py-1">

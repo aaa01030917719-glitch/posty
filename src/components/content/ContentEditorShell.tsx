@@ -1592,7 +1592,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </button>
             </div>
 
-            <div className="rp-body flex-1 overflow-y-auto px-3">
+            <div className="rp-body flex-1 overflow-y-auto">
               {SECTION_ITEMS.map((item) => {
                 const isExpanded = expandedSections[item.value]
 
@@ -1605,7 +1605,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                       type="button"
                       aria-expanded={isExpanded}
                       onClick={() => togglePanelSection(item.value)}
-                      className="flex w-full items-center gap-2 py-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                      className="flex w-full items-center gap-2 px-3 py-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
                     >
                       <ChevronDown
                         size={13}
@@ -1620,7 +1620,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                     </button>
 
                     {isExpanded && (
-                      <div className="pb-4">
+                      <div className="px-3 pb-4">
                         {renderPanelBody(item.value)}
                       </div>
                     )}

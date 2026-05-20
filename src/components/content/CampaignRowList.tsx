@@ -54,12 +54,12 @@ function ContentRow({
       type="button"
       onClick={() => onCardClick?.(card)}
       className={clsx(
-        'group flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+        'group flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
         !nested && 'border-b border-[var(--color-border-soft)] last:border-b-0'
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] font-normal text-[var(--color-text-body)] transition-colors group-hover:text-[var(--color-text-primary)]">
+        <span className="block truncate text-[12.5px] font-normal text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-text-primary)]">
           {card.title}
         </span>
       </span>
@@ -183,7 +183,7 @@ export function CampaignRowList({ groups, ungroupedCards = [], onCardClick }: Ca
                   [group.id]: !isExpanded,
                 }))
               }
-              className="flex w-full items-center gap-3 py-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+              className="flex w-full items-center gap-3 py-2 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
             >
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-muted)]">
                 {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
@@ -191,7 +191,7 @@ export function CampaignRowList({ groups, ungroupedCards = [], onCardClick }: Ca
 
               <span className="min-w-0 flex-1">
                 <span
-                  className="block truncate text-[13px] font-medium text-[var(--color-text-secondary)]"
+                  className="block truncate text-[13px] font-medium text-[var(--color-text-primary)]"
                 >
                   {group.title}
                 </span>
@@ -212,7 +212,7 @@ export function CampaignRowList({ groups, ungroupedCards = [], onCardClick }: Ca
 
             {isExpanded && (
               group.cards.length > 0 ? (
-                <div className="pb-2 pl-10">
+                <div className="pb-1 pl-10">
                   {group.cards.map((card) => (
                     <ContentRow
                       key={card.id}

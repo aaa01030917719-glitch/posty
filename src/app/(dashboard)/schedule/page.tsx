@@ -27,13 +27,14 @@ import { CalendarDay } from '@/components/schedule/CalendarDay'
 import { CalendarMonth } from '@/components/schedule/CalendarMonth'
 import { CalendarWeek } from '@/components/schedule/CalendarWeek'
 import {
-  ACTIVITY_ACTION_LABELS,
+  ACTIVITY_ACTION_COMPACT_BADGE_CLASSES,
+  ACTIVITY_ACTION_COMPACT_LABELS,
   CHANNEL_COLORS,
   STATUS_BADGE_CLASSES,
   STATUS_LABELS,
 } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
-import type { ChannelType, ContentActivityLog, ContentCard } from '@/lib/types'
+import type { ChannelType, ContentActivityAction, ContentActivityLog, ContentCard } from '@/lib/types'
 
 type ViewMode = 'month' | 'week' | 'day'
 
@@ -116,12 +117,17 @@ function getViewSubtitle(view: ViewMode, currentDate: Date) {
 }
 
 function formatActivityActionLabel(action: string) {
-  return ACTIVITY_ACTION_LABELS[action as keyof typeof ACTIVITY_ACTION_LABELS] ?? action
+  return ACTIVITY_ACTION_COMPACT_LABELS[action as ContentActivityAction] ?? action.slice(0, 1)
 }
 
-function formatActivityTime(value: string) {
+function getActivityActionBadgeClass(action: string) {
+  return ACTIVITY_ACTION_COMPACT_BADGE_CLASSES[action as ContentActivityAction] ??
+    'bg-[var(--color-bg-surface-soft)] text-[var(--color-text-secondary)]'
+}
+
+function formatActivityDateTime(value: string) {
   try {
-    return format(new Date(value), 'HH:mm')
+    return format(new Date(value), 'M/d(EEE) HH:mm', { locale: ko })
   } catch {
     return value
   }
@@ -309,27 +315,32 @@ export default function SchedulePage() {
 
   const renderActivityLog = (log: ContentActivityLog) => {
     const actionLabel = formatActivityActionLabel(log.action)
+    const actionBadgeClass = getActivityActionBadgeClass(log.action)
     const title = log.card?.title?.trim() || log.title?.trim() || '제목 없음'
     const projectTitle = log.project?.title?.trim()
     const rowBody = (
-      <div className="flex w-full items-start justify-between gap-2 px-2 py-2 text-left transition-[background-color]">
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span className="shrink-0 rounded-[3px] bg-[var(--color-bg-surface-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text-secondary)]">
-              {actionLabel}
-            </span>
-            <span className="truncate text-[12px] font-medium leading-5 text-[var(--color-text-primary)]">
-              {title}
-            </span>
+      <div className="flex w-full flex-col gap-1 px-2 py-2.5 text-left transition-[background-color]">
+        {projectTitle ? (
+          <span className="block truncate text-[10.5px] font-medium text-[var(--color-text-muted-soft)]">
+            {projectTitle}
           </span>
-          {projectTitle ? (
-            <span className="mt-0.5 block truncate text-[10.5px] text-[var(--color-text-muted-soft)]">
-              {projectTitle}
-            </span>
-          ) : null}
+        ) : null}
+        <span className="flex min-w-0 items-start justify-between gap-2">
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium leading-5 text-[var(--color-text-primary)]">
+            {title}
+          </span>
+          <span
+            className={clsx(
+              'mt-0.5 inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-[4px] px-1.5 text-[10px] font-bold leading-none',
+              actionBadgeClass
+            )}
+          >
+            <span className="sr-only">{log.action}</span>
+            {actionLabel}
+          </span>
         </span>
-        <time className="shrink-0 pt-0.5 text-[10.5px] text-[var(--color-text-muted-soft)]">
-          {formatActivityTime(log.created_at)}
+        <time className="text-[10.5px] text-[var(--color-text-muted-soft)]">
+          {formatActivityDateTime(log.created_at)}
         </time>
       </div>
     )

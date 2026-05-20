@@ -64,6 +64,30 @@ export const ACTIVITY_ACTION_LABELS: Record<ContentActivityAction, string> = {
   restored: '\uBCF5\uAD6C\uB428',
 }
 
+export const ACTIVITY_ACTION_COMPACT_LABELS: Record<ContentActivityAction, string> = {
+  content_created: '\uC0DD',
+  draft_saved: '\uC784',
+  completed: '\uC644',
+  status_changed: '\uC0C1',
+  checklist_updated: '\uCCB4',
+  schedule_changed: '\uC77C',
+  script_updated: '\uB300',
+  deleted: '\uC0AD',
+  restored: '\uBCF5',
+}
+
+export const ACTIVITY_ACTION_COMPACT_BADGE_CLASSES: Record<ContentActivityAction, string> = {
+  content_created: 'bg-[#eef6ff] text-[#2563a8]',
+  draft_saved: 'bg-[#f5f3ff] text-[#6d5fb8]',
+  completed: 'bg-[#edf8f0] text-[#2f7a4f]',
+  status_changed: 'bg-[#fff4e8] text-[#a65f17]',
+  checklist_updated: 'bg-[#eef7f6] text-[#24756f]',
+  schedule_changed: 'bg-[#fff8db] text-[#806b16]',
+  script_updated: 'bg-[#f3f4f6] text-[#56606d]',
+  deleted: 'bg-[#fff0f3] text-[#b33f5d]',
+  restored: 'bg-[#eaf7fb] text-[#247388]',
+}
+
 export const ACTIVITY_ACTION_FILTERS = [
   { label: '\uC804\uCCB4', value: 'all' },
   { label: '\uC0DD\uC131', value: 'content_created' },
