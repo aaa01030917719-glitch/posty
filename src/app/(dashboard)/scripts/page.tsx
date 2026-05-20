@@ -49,10 +49,26 @@ function getChannelLabel(script: Script) {
 
 function getScriptParts(script: Script) {
   return [
-    { label: '대본 있음', active: hasText(script.body) },
-    { label: '캡션 있음', active: hasText(script.caption) },
-    { label: '해시태그 있음', active: hasText(script.hashtags) },
-    { label: '썸네일 문구 있음', active: hasText(script.thumbnail_text) },
+    {
+      label: '대본 있음',
+      active: hasText(script.body),
+      className: 'bg-[#f4efff] text-[#6b4bb7]',
+    },
+    {
+      label: '캡션 있음',
+      active: hasText(script.caption),
+      className: 'bg-[#eef6ff] text-[#2563a8]',
+    },
+    {
+      label: '해시태그 있음',
+      active: hasText(script.hashtags),
+      className: 'bg-[#eaf7f4] text-[#247568]',
+    },
+    {
+      label: '썸네일 문구 있음',
+      active: hasText(script.thumbnail_text),
+      className: 'bg-[#fff4e3] text-[#9a5c16]',
+    },
   ].filter((item) => item.active)
 }
 
@@ -88,14 +104,14 @@ export default function ScriptsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center bg-[var(--color-bg-canvas)] py-24">
+      <div className="flex items-center justify-center bg-[var(--color-bg-surface-soft)] py-24">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+    <div className="flex flex-col gap-5 bg-[var(--color-bg-surface-soft)] p-5 md:p-6">
       <section className="space-y-1">
         <h1 className="text-[22px] font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">
           {PAGE_TITLE}
@@ -106,14 +122,14 @@ export default function ScriptsPage() {
       </section>
 
       {visibleScripts.length === 0 ? (
-        <div className="border-t border-[var(--color-border-soft)] pt-8">
+        <div className="pt-4">
           <div className="flex items-center gap-3 text-[var(--color-text-muted)]">
             <FileText size={18} />
             <p className="text-sm">{EMPTY_TITLE}</p>
           </div>
         </div>
       ) : (
-        <ul className="border-t border-[var(--color-border-soft)]">
+        <ul className="flex flex-col gap-2">
           {visibleScripts.map((script) => {
             const card = script.card
 
@@ -125,10 +141,10 @@ export default function ScriptsPage() {
             const channelLabel = getChannelLabel(script)
 
             return (
-              <li key={script.id} className="border-b border-[var(--color-border-soft)]">
+              <li key={script.id}>
                 <Link
                   href={`/content/${card.id}`}
-                  className="group grid gap-3 px-1 py-4 transition-colors hover:bg-[var(--color-bg-surface-soft)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                  className="group grid gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3.5 transition-[background-color,border-color,box-shadow] hover:border-[var(--color-border-default)] hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-text-muted)]">
@@ -146,7 +162,7 @@ export default function ScriptsPage() {
                         parts.map((part) => (
                           <span
                             key={`${script.id}-${part.label}`}
-                            className="rounded-[3px] bg-[var(--color-bg-surface-soft)] px-1.5 py-0.5 text-[10.5px] font-semibold text-[var(--color-text-secondary)]"
+                            className={`rounded-[4px] px-1.5 py-0.5 text-[10.5px] font-semibold ${part.className}`}
                           >
                             {part.label}
                           </span>
