@@ -67,13 +67,13 @@ export const ACTIVITY_ACTION_LABELS: Record<ContentActivityAction, string> = {
 export const ACTIVITY_ACTION_COMPACT_LABELS: Record<ContentActivityAction, string> = {
   content_created: '\uC0DD',
   draft_saved: '\uC784',
-  completed: '\uC644',
+  completed: '\uC644\uB8CC',
   status_changed: '\uC0C1',
   checklist_updated: '\uCCB4',
   schedule_changed: '\uC77C',
   script_updated: '\uB300',
-  deleted: '\uC0AD',
-  restored: '\uBCF5',
+  deleted: '\uC0AD\uC81C',
+  restored: '\uBCF5\uAD6C',
 }
 
 export const ACTIVITY_ACTION_COMPACT_BADGE_CLASSES: Record<ContentActivityAction, string> = {

@@ -53,10 +53,7 @@ function ContentRow({
     <button
       type="button"
       onClick={() => onCardClick?.(card)}
-      className={clsx(
-        'group flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
-        !nested && 'border-b border-[var(--color-border-soft)] last:border-b-0'
-      )}
+      className="group flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
     >
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[12.5px] font-normal text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-text-primary)]">
