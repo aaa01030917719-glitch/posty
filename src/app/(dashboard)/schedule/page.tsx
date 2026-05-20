@@ -20,7 +20,7 @@ import {
   subWeeks,
 } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { ChevronLeft, ChevronRight, ListTodo, Plus, Share2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Share2 } from 'lucide-react'
 import { CardModal } from '@/components/content/CardModal'
 import { createContentCard } from '@/components/content/createContentCard'
 import { CalendarDay } from '@/components/schedule/CalendarDay'
@@ -39,9 +39,9 @@ import type { ChannelType, ContentActivityAction, ContentActivityLog, ContentCar
 type ViewMode = 'month' | 'week' | 'day'
 
 const VIEW_LABELS: Record<ViewMode, string> = {
-  month: '월',
-  week: '주',
-  day: '일',
+  month: '\uC6D4',
+  week: '\uC8FC',
+  day: '\uC77C',
 }
 
 const CHANNEL_SHORT_LABELS: Record<ChannelType, string> = {
@@ -80,7 +80,7 @@ function getPanelMeta(card: ContentCard) {
   if (targetDate) {
     return {
       kind: 'time' as const,
-      label: format(targetDate, 'a h시', { locale: ko }),
+      label: format(targetDate, 'a h\uC2DC', { locale: ko }),
     }
   }
 
@@ -92,28 +92,28 @@ function getPanelMeta(card: ContentCard) {
 
 function getViewTitle(view: ViewMode, currentDate: Date) {
   if (view === 'month') {
-    return format(currentDate, 'yyyy년 M월', { locale: ko })
+    return format(currentDate, 'yyyy\uB144 M\uC6D4', { locale: ko })
   }
 
   if (view === 'day') {
-    return format(currentDate, 'yyyy년 M월 d일', { locale: ko })
+    return format(currentDate, 'yyyy\uB144 M\uC6D4 d\uC77C', { locale: ko })
   }
 
-  return `${format(currentDate, 'yyyy년 M월', { locale: ko })} ${getWeekOfMonth(currentDate)}주차`
+  return `${format(currentDate, 'yyyy\uB144 M\uC6D4', { locale: ko })} ${getWeekOfMonth(currentDate)}\uC8FC\uCC28`
 }
 
 function getViewSubtitle(view: ViewMode, currentDate: Date) {
   if (view === 'month') {
-    return '월간 일정'
+    return '\uC6D4\uAC04 \uC77C\uC815'
   }
 
   if (view === 'day') {
-    return format(currentDate, 'M월 d일 EEEE', { locale: ko })
+    return format(currentDate, 'M\uC6D4 d\uC77C EEEE', { locale: ko })
   }
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 })
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 })
-  return `${format(weekStart, 'M월 d일', { locale: ko })} - ${format(weekEnd, 'M월 d일', { locale: ko })}`
+  return `${format(weekStart, 'M\uC6D4 d\uC77C', { locale: ko })} - ${format(weekEnd, 'M\uC6D4 d\uC77C', { locale: ko })}`
 }
 
 function formatActivityActionLabel(action: string) {
@@ -189,7 +189,7 @@ export default function SchedulePage() {
       router.push(`/content/${nextId}`)
     } catch (error) {
       console.error('Failed to create content card', error)
-      window.alert('새 콘텐츠를 생성하지 못했습니다. 잠시 후 다시 시도해주세요.')
+      window.alert('\uC0C8 \uCF58\uD150\uCE20\uB97C \uC0DD\uC131\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.')
     } finally {
       setCreating(false)
     }
@@ -217,7 +217,11 @@ export default function SchedulePage() {
 
   const viewTitle = getViewTitle(view, currentDate)
   const subtitle = getViewSubtitle(view, currentDate)
-  const greetingTitle = '사용자님 안녕하세요! 오늘도 행복한 하루 보내세요 ☀️'
+  const greetingTitle = '\uC548\uB155\uD558\uC138\uC694! \uC624\uB298\uB3C4 \uD589\uBCF5\uD55C \uD558\uB8E8 \uBCF4\uB0B4\uC138\uC694 \u2600\uFE0F'
+  const periodLabel =
+    view === 'week'
+      ? `${format(weekStart, 'yyyy')}\uB144 ${format(weekStart, 'M')}\uC6D4 ${getWeekOfMonth(weekStart)}\uC8FC\uCC28 - ${format(weekEnd, 'yyyy')}\uB144 ${format(weekEnd, 'M')}\uC6D4 ${getWeekOfMonth(weekEnd)}\uC8FC\uCC28`
+      : `${viewTitle} \u00B7 ${subtitle}`
 
   const todayCards = cards
     .filter((card) => {
@@ -317,7 +321,7 @@ export default function SchedulePage() {
   const renderActivityLog = (log: ContentActivityLog) => {
     const actionLabel = formatActivityActionLabel(log.action)
     const actionBadgeClass = getActivityActionBadgeClass(log.action)
-    const title = log.card?.title?.trim() || log.title?.trim() || '제목 없음'
+    const title = log.card?.title?.trim() || log.title?.trim() || '\uC81C\uBAA9 \uC5C6\uC74C'
     const projectTitle = log.project?.title?.trim()
     const rowBody = (
       <div className="flex w-full flex-col gap-1 px-2 py-2.5 text-left transition-[background-color]">
@@ -377,10 +381,10 @@ export default function SchedulePage() {
           <aside className="w-[248px] shrink-0 border-r border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
             <div className="h-full overflow-y-auto px-4 pb-5 pt-[18px]">
               <p className="mb-1 text-[11px] font-medium text-[var(--color-text-muted-soft)]">
-                {format(todayDate, 'yyyy년 M월 d일 EEEE', { locale: ko })}
+                {format(todayDate, 'yyyy\uB144 M\uC6D4 d\uC77C EEEE', { locale: ko })}
               </p>
               <h2 className="text-[15px] font-bold tracking-[-0.02em] text-[var(--color-text-primary)]">
-                오늘의 작업
+                {'\uC624\uB298\uC758 \uC791\uC5C5'}
               </h2>
 
               <div className="mt-4 grid grid-cols-3 gap-1.5">
@@ -388,26 +392,26 @@ export default function SchedulePage() {
                   <p className="text-[17px] font-bold leading-none tracking-[-0.03em] text-[var(--color-accent)]">
                     {todayCards.length}
                   </p>
-                  <p className="mt-1 text-[10px] text-[var(--color-text-muted-soft)]">오늘 일정</p>
+                  <p className="mt-1 text-[10px] text-[var(--color-text-muted-soft)]">{'\uC624\uB298 \uC77C\uC815'}</p>
                 </div>
                 <div className="rounded-[6px] bg-[var(--color-bg-surface-soft)] px-1.5 py-2 text-center">
                   <p className="text-[17px] font-bold leading-none tracking-[-0.03em] text-[var(--color-text-primary)]">
                     {writingCount}
                   </p>
-                  <p className="mt-1 text-[10px] text-[var(--color-text-muted-soft)]">작성 중</p>
+                  <p className="mt-1 text-[10px] text-[var(--color-text-muted-soft)]">{'\uC791\uC131 \uC911'}</p>
                 </div>
                 <div className="rounded-[6px] bg-[var(--color-bg-surface-soft)] px-1.5 py-2 text-center">
                   <p className="text-[17px] font-bold leading-none tracking-[-0.03em] text-[var(--color-text-primary)]">
                     {weekCount}
                   </p>
-                  <p className="mt-1 text-[10px] text-[var(--color-text-muted-soft)]">이번 주</p>
+                  <p className="mt-1 text-[10px] text-[var(--color-text-muted-soft)]">{'\uC774\uBC88 \uC8FC'}</p>
                 </div>
               </div>
 
               <div className="mt-5 space-y-5">
                 <section>
                   <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted-soft)]">
-                    오늘 할 일
+                    {'\uC624\uB298 \uD560 \uC77C'}
                   </p>
                   <div className="space-y-1">
                     {todayCards.length > 0 ? (
@@ -416,7 +420,7 @@ export default function SchedulePage() {
                       )
                     ) : (
                       <p className="rounded-[6px] bg-[var(--color-bg-surface-soft)] px-3 py-4 text-sm text-[var(--color-text-muted)]">
-                        오늘 등록된 일정이 없습니다.
+                        {'\uC624\uB298 \uB4F1\uB85D\uB41C \uC77C\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.'}
                       </p>
                     )}
                   </div>
@@ -424,14 +428,14 @@ export default function SchedulePage() {
 
                 <section>
                   <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted-soft)]">
-                    컨펌 필요
+                    {'\uCEE8\uD38C \uD544\uC694'}
                   </p>
                   <div className="space-y-1">
                     {reviewCards.length > 0 ? (
                       reviewCards.map((card) => renderPanelCard(card, 'review'))
                     ) : (
                       <p className="rounded-[6px] bg-[var(--color-bg-surface-soft)] px-3 py-4 text-sm text-[var(--color-text-muted)]">
-                        지금 확인이 필요한 콘텐츠가 없습니다.
+                        {'\uC9C0\uAE08 \uD655\uC778\uC774 \uD544\uC694\uD55C \uCF58\uD150\uCE20\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.'}
                       </p>
                     )}
                   </div>
@@ -439,14 +443,14 @@ export default function SchedulePage() {
 
                 <section>
                   <p className="mb-2 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted-soft)]">
-                    이번 주 주요 일정
+                    {'\uC774\uBC88 \uC8FC \uC8FC\uC694 \uC77C\uC815'}
                   </p>
                   <div className="space-y-1">
                     {visibleWeekCards.length > 0 ? (
                       visibleWeekCards.slice(0, 5).map((card) => renderPanelCard(card, 'default'))
                     ) : (
                       <p className="rounded-[6px] bg-[var(--color-bg-surface-soft)] px-3 py-4 text-sm text-[var(--color-text-muted)]">
-                        이번 주에 등록된 일정이 없습니다.
+                        {'\uC774\uBC88 \uC8FC\uC5D0 \uB4F1\uB85D\uB41C \uC77C\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.'}
                       </p>
                     )}
                   </div>
@@ -455,20 +459,20 @@ export default function SchedulePage() {
                 <section>
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[var(--color-text-muted-soft)]">
-                      최근 작업 이력
+                      {'\uCD5C\uADFC \uC791\uC5C5 \uC774\uB825'}
                     </p>
                     <Link
                       href="/timeline"
                       className="text-[10.5px] font-medium text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-accent)]"
                     >
-                      전체 보기
+                      {'\uC804\uCCB4 \uBCF4\uAE30'}
                     </Link>
                   </div>
                   {recentActivityLogs.length > 0 ? (
                     <ul>{recentActivityLogs.map((log) => renderActivityLog(log))}</ul>
                   ) : (
                     <p className="px-2 py-2 text-[12px] text-[var(--color-text-muted)]">
-                      아직 작업 이력이 없습니다
+                      {'\uC544\uC9C1 \uC791\uC5C5 \uC774\uB825\uC774 \uC5C6\uC2B5\uB2C8\uB2E4'}
                     </p>
                   )}
                 </section>
@@ -478,86 +482,78 @@ export default function SchedulePage() {
 
           <main className="min-w-0 flex-1 overflow-hidden bg-[var(--color-bg-surface-soft)]">
             <div className="flex h-full min-h-0 flex-col">
-              <div className="flex flex-col gap-4 px-[18px] pb-0 pt-4 md:flex-row md:items-center md:justify-between">
-                <div className="flex flex-wrap items-end gap-[10px]">
-                  <h1 className="text-[14px] font-bold tracking-[-0.02em] text-[var(--color-text-primary)] md:text-[15px]">
-                    {greetingTitle}
-                  </h1>
-                  <p className="text-[12px] text-[var(--color-text-muted)]">
-                    {viewTitle} · {subtitle}
-                  </p>
+              <div className="flex flex-col gap-2 px-[18px] pb-0 pt-4">
+                <h1 className="text-[14px] font-bold tracking-[-0.02em] text-[var(--color-text-primary)] md:text-[15px]">
+                  {greetingTitle}
+                </h1>
 
-                  <div className="ml-1 flex items-center gap-[3px]">
-                    <button
-                      type="button"
-                      onClick={() => moveRange('prev')}
-                      className="flex h-[26px] w-[26px] items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-body)] transition-[background-color] hover:bg-[var(--color-bg-surface-soft)]"
-                    >
-                      <ChevronLeft size={10} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentDate(new Date())}
-                      className="h-[26px] rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-[9px] text-[11.5px] font-semibold text-[var(--color-text-body)] transition-[background-color] hover:bg-[var(--color-bg-surface-soft)]"
-                    >
-                      오늘
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveRange('next')}
-                      className="flex h-[26px] w-[26px] items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-body)] transition-[background-color] hover:bg-[var(--color-bg-surface-soft)]"
-                    >
-                      <ChevronRight size={10} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-[5px]">
-                  <div className="flex items-center gap-px rounded-[5px] bg-[var(--color-bg-surface-strong)] p-[2px]">
-                    {(['month', 'week', 'day'] as const).map((targetView) => (
-                      <button
-                        key={targetView}
-                        type="button"
-                        aria-pressed={view === targetView}
-                        onClick={() => setView(targetView)}
-                        className={viewButtonClass(targetView)}
-                      >
-                        {VIEW_LABELS[targetView]}
-                      </button>
-                    ))}
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-wrap items-center gap-[5px]">
+                    <p className="text-[12px] text-[var(--color-text-muted)]">{periodLabel}</p>
+                    {view !== 'week' && (
+                      <div className="flex items-center gap-[3px]">
+                        <button
+                          type="button"
+                          onClick={() => moveRange('prev')}
+                          className="flex h-[26px] w-[26px] items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-body)] transition-[background-color] hover:bg-[var(--color-bg-surface-soft)]"
+                        >
+                          <ChevronLeft size={10} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentDate(new Date())}
+                          className="h-[26px] rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-[9px] text-[11.5px] font-semibold text-[var(--color-text-body)] transition-[background-color] hover:bg-[var(--color-bg-surface-soft)]"
+                        >
+                          오늘
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveRange('next')}
+                          className="flex h-[26px] w-[26px] items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-body)] transition-[background-color] hover:bg-[var(--color-bg-surface-soft)]"
+                        >
+                          <ChevronRight size={10} />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    type="button"
-                    disabled
-                    aria-disabled="true"
-                    title="작업 타임라인은 추후 지원됩니다."
-                    className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-body)]"
-                  >
-                    <ListTodo size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    disabled
-                    aria-disabled="true"
-                    title="공유 기능은 추후 지원됩니다."
-                    className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-body)]"
-                  >
-                    <Share2 size={13} />
-                  </button>
+                  <div className="flex flex-wrap items-center gap-[5px] md:justify-end">
+                    <div className="flex items-center gap-px rounded-[5px] bg-[var(--color-bg-surface-strong)] p-[2px]">
+                      {(['month', 'week', 'day'] as const).map((targetView) => (
+                        <button
+                          key={targetView}
+                          type="button"
+                          aria-pressed={view === targetView}
+                          onClick={() => setView(targetView)}
+                          className={viewButtonClass(targetView)}
+                        >
+                          {VIEW_LABELS[targetView]}
+                        </button>
+                      ))}
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={handleCreateContent}
-                    disabled={creating}
-                    className="inline-flex h-7 items-center gap-[5px] rounded-[5px] bg-[var(--color-accent)] px-3 text-[12px] font-bold tracking-[-0.01em] text-[var(--color-on-accent)] transition-[background-color] hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:bg-[var(--color-accent-disabled)]"
-                  >
-                    <Plus size={11} />
-                    {creating ? '생성 중...' : '새 콘텐츠'}
-                  </button>
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      title="공유 기능은 추후 지원됩니다."
+                      className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-body)]"
+                    >
+                      <Share2 size={13} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCreateContent}
+                      disabled={creating}
+                      className="inline-flex h-7 items-center gap-[5px] rounded-[5px] bg-[var(--color-accent)] px-3 text-[12px] font-bold tracking-[-0.01em] text-[var(--color-on-accent)] transition-[background-color] hover:bg-[var(--color-accent-hover)] disabled:cursor-not-allowed disabled:bg-[var(--color-accent-disabled)]"
+                    >
+                      <Plus size={11} />
+                      {creating ? '생성 중...' : '새 콘텐츠'}
+                    </button>
+                  </div>
                 </div>
               </div>
-
               <div className="min-h-0 flex-1 px-4 pb-[14px] pt-[10px]">
                 {view === 'month' && (
                   <CalendarMonth
