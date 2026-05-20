@@ -11,26 +11,16 @@ export interface CampaignRowGroup {
   id: string
   title: string
   cards: ContentCard[]
-  isVirtual?: boolean
 }
 
 interface CampaignRowListProps {
   groups: CampaignRowGroup[]
+  ungroupedCards?: ContentCard[]
   onCardClick?: (card: ContentCard) => void
 }
 
 const EMPTY_GROUP_MESSAGE = '\uC544\uC9C1 \uCF58\uD150\uCE20\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
 const EXPANDED_ROWS_STORAGE_KEY = 'posty:content:expanded-campaign-rows'
-const NO_PROJECT_GROUP_ID = 'no-campaign'
-const NO_PROJECT_STORAGE_ID = '__no_project__'
-
-function toStorageGroupId(groupId: string) {
-  return groupId === NO_PROJECT_GROUP_ID ? NO_PROJECT_STORAGE_ID : groupId
-}
-
-function fromStorageGroupId(groupId: string) {
-  return groupId === NO_PROJECT_STORAGE_ID ? NO_PROJECT_GROUP_ID : groupId
-}
 
 function getGroupChannels(cards: ContentCard[]) {
   const uniqueChannels = new Map<string, Channel>()
@@ -48,7 +38,55 @@ function getGroupChannels(cards: ContentCard[]) {
   return Array.from(uniqueChannels.values())
 }
 
-export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
+function ContentRow({
+  card,
+  nested = false,
+  onCardClick,
+}: {
+  card: ContentCard
+  nested?: boolean
+  onCardClick?: (card: ContentCard) => void
+}) {
+  const scheduled = card.scheduled_at || card.published_at
+
+  return (
+    <button
+      type="button"
+      onClick={() => onCardClick?.(card)}
+      className={clsx(
+        'group flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+        !nested && 'border-b border-[var(--color-border-soft)] last:border-b-0'
+      )}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[12.5px] font-normal text-[var(--color-text-body)] transition-colors group-hover:text-[var(--color-text-primary)]">
+          {card.title}
+        </span>
+      </span>
+
+      {card.channel && (
+        <span className="hidden shrink-0 text-xs text-[var(--color-text-secondary)] sm:block">
+          {card.channel.name}
+        </span>
+      )}
+
+      <span className="shrink-0">
+        <Badge label={STATUS_LABELS[card.status]} color={STATUS_COLORS[card.status]} />
+      </span>
+
+      {scheduled && (
+        <span className="hidden shrink-0 items-center gap-1 text-xs text-[var(--color-text-muted)] lg:flex">
+          <Calendar size={11} />
+          <span className="font-mono">
+            {format(new Date(scheduled), 'M/d(E)', { locale: ko })}
+          </span>
+        </span>
+      )}
+    </button>
+  )
+}
+
+export function CampaignRowList({ groups, ungroupedCards = [], onCardClick }: CampaignRowListProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
   const [storageHydrated, setStorageHydrated] = useState(false)
 
@@ -72,7 +110,7 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
           parsedValue.forEach((value) => {
             if (typeof value !== 'string') return
 
-            const groupId = fromStorageGroupId(value)
+            const groupId = value
 
             if (availableGroupIds.has(groupId)) {
               expandedGroupIds.add(groupId)
@@ -99,7 +137,7 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
 
     const expandedGroupIds = groups
       .filter((group) => expandedGroups[group.id])
-      .map((group) => toStorageGroupId(group.id))
+      .map((group) => group.id)
 
     try {
       window.localStorage.setItem(
@@ -121,7 +159,7 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
     return next
   }, [groups])
 
-  if (groups.length === 0) {
+  if (groups.length === 0 && ungroupedCards.length === 0) {
     return null
   }
 
@@ -153,12 +191,7 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
 
               <span className="min-w-0 flex-1">
                 <span
-                  className={clsx(
-                    'block truncate text-[13px] font-medium',
-                    group.isVirtual
-                      ? 'text-[var(--color-text-secondary)]'
-                      : 'text-[var(--color-text-secondary)]'
-                  )}
+                  className="block truncate text-[13px] font-medium text-[var(--color-text-secondary)]"
                 >
                   {group.title}
                 </span>
@@ -180,43 +213,14 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
             {isExpanded && (
               group.cards.length > 0 ? (
                 <div className="pb-2 pl-10">
-                  {group.cards.map((card) => {
-                    const scheduled = card.scheduled_at || card.published_at
-
-                    return (
-                      <button
-                        key={card.id}
-                        type="button"
-                        onClick={() => onCardClick?.(card)}
-                        className="group flex w-full items-center gap-3 rounded-[var(--radius-md)] px-2 py-2.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[12.5px] font-normal text-[var(--color-text-body)] transition-colors group-hover:text-[var(--color-text-primary)]">
-                            {card.title}
-                          </span>
-                        </span>
-
-                        {card.channel && (
-                          <span className="hidden shrink-0 text-xs text-[var(--color-text-secondary)] sm:block">
-                            {card.channel.name}
-                          </span>
-                        )}
-
-                        <span className="shrink-0">
-                          <Badge label={STATUS_LABELS[card.status]} color={STATUS_COLORS[card.status]} />
-                        </span>
-
-                        {scheduled && (
-                          <span className="hidden shrink-0 items-center gap-1 text-xs text-[var(--color-text-muted)] lg:flex">
-                            <Calendar size={11} />
-                            <span className="font-mono">
-                              {format(new Date(scheduled), 'M/d(E)', { locale: ko })}
-                            </span>
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
+                  {group.cards.map((card) => (
+                    <ContentRow
+                      key={card.id}
+                      card={card}
+                      nested
+                      onCardClick={onCardClick}
+                    />
+                  ))}
                 </div>
               ) : (
                 <p className="pb-3 pl-10 text-xs text-[var(--color-text-muted)]">
@@ -227,6 +231,14 @@ export function CampaignRowList({ groups, onCardClick }: CampaignRowListProps) {
           </section>
         )
       })}
+
+      {ungroupedCards.length > 0 && (
+        <div className={clsx(groups.length > 0 && 'pt-1')}>
+          {ungroupedCards.map((card) => (
+            <ContentRow key={card.id} card={card} onCardClick={onCardClick} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

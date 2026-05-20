@@ -33,7 +33,6 @@ const CREATING_LABEL = '\uC0DD\uC131 \uC911...'
 const CREATING_CAMPAIGN_LABEL = '\uCEA0\uD398\uC778 \uC0DD\uC131 \uC911...'
 const PREVIEW_LABEL = '\uC5D0\uB514\uD130 \uBBF8\uB9AC\uBCF4\uAE30'
 const CAMPAIGN_SUCCESS_TOAST = '\uCEA0\uD398\uC778\uC774 \uCD94\uAC00\uB418\uC5C8\uC2B5\uB2C8\uB2E4'
-const NO_CAMPAIGN_GROUP_TITLE = '\uCEA0\uD398\uC778 \uC5C6\uC74C'
 const EMPTY_STATE_TITLE = '\uCF58\uD150\uCE20\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
 const EMPTY_STATE_DESCRIPTION =
   '\uBAA9\uB85D\uC740 \uBE44\uC5B4 \uC788\uC9C0\uB9CC \uAE00 \uC791\uC131 \uD654\uBA74 shell\uC740 \uBC14\uB85C \uBBF8\uB9AC\uBCFC \uC218 \uC788\uC2B5\uB2C8\uB2E4.'
@@ -134,7 +133,10 @@ export default function ContentPage() {
 
   const trimmedSearch = search.trim().toLowerCase()
 
-  const groupedCampaigns = useMemo<CampaignRowGroup[]>(() => {
+  const contentRows = useMemo<{
+    groupedCampaigns: CampaignRowGroup[]
+    ungroupedCards: ContentCard[]
+  }>(() => {
     const cardsByProjectId = new Map<string, ContentCard[]>()
     const uncategorizedCards: ContentCard[] = []
 
@@ -190,17 +192,13 @@ export default function ContentPage() {
       return matchesStatus && matchesSearch
     })
 
-    if (visibleUncategorizedCards.length > 0) {
-      groups.push({
-        id: 'no-campaign',
-        title: NO_CAMPAIGN_GROUP_TITLE,
-        cards: visibleUncategorizedCards,
-        isVirtual: true,
-      })
+    return {
+      groupedCampaigns: groups,
+      ungroupedCards: visibleUncategorizedCards,
     }
-
-    return groups
   }, [cards, projects, statusFilter, trimmedSearch])
+
+  const { groupedCampaigns, ungroupedCards } = contentRows
 
   const statusCounts = useMemo(() => {
     return cards.reduce<Record<ContentStatus, number>>(
@@ -485,13 +483,17 @@ export default function ContentPage() {
             </Button>
           </div>
         </div>
-      ) : groupedCampaigns.length === 0 ? (
+      ) : groupedCampaigns.length === 0 && ungroupedCards.length === 0 ? (
         <div className="rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-6 py-16 text-center">
           <p className="text-sm font-medium text-[var(--color-text-primary)]">{EMPTY_FILTERED_TITLE}</p>
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">{EMPTY_FILTERED_DESCRIPTION}</p>
         </div>
       ) : (
-        <CampaignRowList groups={groupedCampaigns} onCardClick={openDetail} />
+        <CampaignRowList
+          groups={groupedCampaigns}
+          ungroupedCards={ungroupedCards}
+          onCardClick={openDetail}
+        />
       )}
     </div>
   )
