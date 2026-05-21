@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ChevronDown,
   Columns2,
@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { CHANNEL_COLORS } from '@/lib/constants'
+import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
 import type {
@@ -28,6 +28,18 @@ import type {
 
 interface ContentEditorShellProps {
   cardId: string
+}
+
+type SidebarContentCard = Pick<
+  ContentCard,
+  'id' | 'title' | 'project_id' | 'status' | 'scheduled_at' | 'is_deleted'
+> & {
+  channel?: {
+    id: string
+    name: string
+    type: string
+    color: string
+  } | null
 }
 
 type EditorSection =
@@ -63,6 +75,11 @@ const DEFAULT_PANEL_TITLE = '대본'
 const EDITOR_PLACEHOLDER = '원고를 작성해보세요...'
 const EMPTY_SECTION_MESSAGE = '아직 입력된 내용이 없습니다.'
 const NO_CAMPAIGN_LABEL = '캠페인 없음'
+const CAMPAIGN_SECTION_TITLE = '캠페인'
+const ALL_CONTENT_LABEL = '전체'
+const UNCATEGORIZED_GROUP_ID = '__uncategorized__'
+const UNCATEGORIZED_CONTENT_LABEL = '일반 콘텐츠'
+const EMPTY_CAMPAIGN_CONTENTS_LABEL = '콘텐츠 없음'
 const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
   { value: 'body', label: '원고' },
   { value: 'scenes', label: '대본' },
@@ -445,6 +462,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [deleting, setDeleting] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
+  const [sidebarCards, setSidebarCards] = useState<SidebarContentCard[]>([])
+  const [expandedCampaignIds, setExpandedCampaignIds] = useState<string[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [scriptRecord, setScriptRecord] = useState<Script | null>(null)
   const [shareLink, setShareLink] = useState<ContentShareLink | null>(null)
@@ -460,6 +479,20 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       ? projects
       : [card.project, ...projects]
   }, [card?.project, projects])
+  const sidebarCardsByProject = useMemo(() => {
+    return sidebarCards.reduce<Record<string, SidebarContentCard[]>>((acc, sidebarCard) => {
+      if (!sidebarCard.project_id) return acc
+
+      acc[sidebarCard.project_id] = acc[sidebarCard.project_id] ?? []
+      acc[sidebarCard.project_id].push(sidebarCard)
+      return acc
+    }, {})
+  }, [sidebarCards])
+  const uncategorizedSidebarCards = useMemo(
+    () => sidebarCards.filter((sidebarCard) => !sidebarCard.project_id),
+    [sidebarCards]
+  )
+  const activeSidebarProjectId = card?.project_id ?? null
   const activeShareLink = shareLink?.is_enabled ? shareLink : null
   const shareUrl = shareLink
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/content/${shareLink.token}`
@@ -518,6 +551,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
       if (isPreview) {
         setProjects([])
+        setSidebarCards([])
+        setExpandedCampaignIds([])
         setShareLink(null)
         applyState(SAMPLE_CARD, SAMPLE_SCRIPT)
         return
@@ -528,6 +563,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         { data: cardData, error: cardError },
         { data: scriptData, error: scriptError },
         { data: projectData, error: projectError },
+        { data: sidebarCardData, error: sidebarCardError },
         { data: shareLinkData, error: shareLinkError },
       ] = await Promise.all([
         supabase
@@ -537,6 +573,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           .maybeSingle(),
         supabase.from('scripts').select('*').eq('card_id', cardId).maybeSingle(),
         supabase.from('content_projects').select('id, title').order('created_at', { ascending: false }),
+        supabase
+          .from('content_cards')
+          .select('id, title, project_id, status, scheduled_at, is_deleted, channel:channels(id,name,type,color)')
+          .eq('is_deleted', false)
+          .order('created_at', { ascending: false }),
         supabase
           .from('content_share_links')
           .select('*')
@@ -558,13 +599,25 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         console.error('Failed to fetch content projects', projectError)
       }
 
+      if (sidebarCardError) {
+        console.error('Failed to fetch content sidebar cards', sidebarCardError)
+      }
+
       if (shareLinkError) {
         console.error('Failed to fetch content share link', shareLinkError)
       }
 
+      const nextCard = (cardData as ContentCard | null) ?? null
+      const nextExpandedIds =
+        nextCard && !nextCard.is_deleted
+          ? [nextCard.project_id ?? UNCATEGORIZED_GROUP_ID]
+          : []
+
       setProjects((projectData as ContentProjectSummary[] | null) ?? [])
+      setSidebarCards((sidebarCardData as SidebarContentCard[] | null) ?? [])
+      setExpandedCampaignIds(nextExpandedIds)
       setShareLink((shareLinkData as ContentShareLink | null) ?? null)
-      applyState((cardData as ContentCard | null) ?? null, (scriptData as Script | null) ?? null)
+      applyState(nextCard, (scriptData as Script | null) ?? null)
     }
 
     fetchDetail()
@@ -985,6 +1038,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }))
   }
 
+  const toggleCampaignSection = (campaignId: string) => {
+    setExpandedCampaignIds((prev) =>
+      prev.includes(campaignId)
+        ? prev.filter((expandedId) => expandedId !== campaignId)
+        : [...prev, campaignId]
+    )
+  }
+
   const renderPanelBody = (section: EditorSection) => {
     switch (section) {
       case 'body':
@@ -1167,17 +1228,183 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
-  if (loading) {
+  const renderSidebarCardLink = (sidebarCard: SidebarContentCard) => {
+    const isActive = sidebarCard.id === cardId
+    const scheduledLabel = sidebarCard.scheduled_at ? formatDate(sidebarCard.scheduled_at) : null
+    const channelLabel = sidebarCard.channel?.name?.trim()
+
     return (
-      <div className="flex min-h-full flex-1 items-center justify-center bg-[var(--color-bg-subtle)]">
+      <Link
+        key={sidebarCard.id}
+        href={`/content/${sidebarCard.id}`}
+        aria-current={isActive ? 'page' : undefined}
+        className={clsx(
+          'block rounded-[var(--radius-md)] px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+          isActive
+            ? 'bg-[var(--color-bg-surface-soft)] text-[var(--color-text-primary)]'
+            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]'
+        )}
+      >
+        <span className="block truncate text-xs font-semibold">{sidebarCard.title}</span>
+        <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-[var(--color-text-muted)]">
+          <span className="truncate">{STATUS_LABELS[sidebarCard.status]}</span>
+          {channelLabel && (
+            <>
+              <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--color-border-default)]" />
+              <span className="truncate">{channelLabel}</span>
+            </>
+          )}
+          {scheduledLabel && (
+            <>
+              <span className="h-1 w-1 shrink-0 rounded-full bg-[var(--color-border-default)]" />
+              <span className="shrink-0">{scheduledLabel}</span>
+            </>
+          )}
+        </span>
+      </Link>
+    )
+  }
+
+  const renderCampaignSidebar = () => {
+    const hasUncategorizedCards = uncategorizedSidebarCards.length > 0
+    const isUncategorizedExpanded = expandedCampaignIds.includes(UNCATEGORIZED_GROUP_ID)
+    const isUncategorizedActive = Boolean(card) && activeSidebarProjectId === null && !isPreview
+
+    return (
+      <aside className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3 lg:min-h-0 lg:overflow-y-auto">
+        <div className="mb-2 flex items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+              {CAMPAIGN_SECTION_TITLE}
+            </p>
+            <span className="text-xs text-[var(--color-text-muted)]">{projects.length}</span>
+          </div>
+          <span className="text-xs text-[var(--color-text-muted)]">{sidebarCards.length}</span>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Link
+            href="/content"
+            className="flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs font-semibold text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+          >
+            <span>{ALL_CONTENT_LABEL}</span>
+            <span className="text-[var(--color-text-muted)]">{sidebarCards.length}</span>
+          </Link>
+
+          {hasUncategorizedCards && (
+            <div>
+              <button
+                type="button"
+                onClick={() => toggleCampaignSection(UNCATEGORIZED_GROUP_ID)}
+                aria-expanded={isUncategorizedExpanded}
+                className={clsx(
+                  'flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                  isUncategorizedActive
+                    ? 'bg-[var(--color-bg-surface-soft)] text-[var(--color-text-primary)]'
+                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]'
+                )}
+              >
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <ChevronDown
+                    size={13}
+                    className={clsx(
+                      'shrink-0 text-[var(--color-text-muted)] transition-transform',
+                      !isUncategorizedExpanded && '-rotate-90'
+                    )}
+                  />
+                  <span className="truncate font-medium">{UNCATEGORIZED_CONTENT_LABEL}</span>
+                </span>
+                <span className="shrink-0 text-[var(--color-text-muted)]">
+                  {uncategorizedSidebarCards.length}
+                </span>
+              </button>
+
+              {isUncategorizedExpanded && (
+                <div className="mt-1 space-y-1 pl-4">
+                  {uncategorizedSidebarCards.map(renderSidebarCardLink)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {projects.map((project) => {
+            const projectCards = sidebarCardsByProject[project.id] ?? []
+            const isExpanded = expandedCampaignIds.includes(project.id)
+            const isActiveProject = activeSidebarProjectId === project.id
+
+            return (
+              <div key={project.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleCampaignSection(project.id)}
+                  aria-expanded={isExpanded}
+                  className={clsx(
+                    'flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                    isActiveProject
+                      ? 'bg-[var(--color-bg-surface-soft)] text-[var(--color-text-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]'
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <ChevronDown
+                      size={13}
+                      className={clsx(
+                        'shrink-0 text-[var(--color-text-muted)] transition-transform',
+                        !isExpanded && '-rotate-90'
+                      )}
+                    />
+                    <span className="truncate font-medium">{project.title}</span>
+                  </span>
+                  <span className="shrink-0 text-[var(--color-text-muted)]">
+                    {projectCards.length}
+                  </span>
+                </button>
+
+                {isExpanded && (
+                  <div className="mt-1 space-y-1 pl-4">
+                    {projectCards.length > 0 ? (
+                      projectCards.map(renderSidebarCardLink)
+                    ) : (
+                      <p className="px-2.5 py-2 text-xs text-[var(--color-text-muted)]">
+                        {EMPTY_CAMPAIGN_CONTENTS_LABEL}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </aside>
+    )
+  }
+
+  const renderContentLayout = (children: ReactNode, contentClassName?: string) => (
+    <div className="grid h-full min-h-0 w-full gap-4 overflow-y-auto bg-[var(--color-bg-surface-soft)] p-5 md:p-6 lg:grid-cols-[240px_minmax(0,1180px)] lg:items-stretch lg:justify-center lg:overflow-hidden">
+      {renderCampaignSidebar()}
+      <section
+        className={clsx(
+          'min-w-0 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]',
+          contentClassName
+        )}
+      >
+        {children}
+      </section>
+    </div>
+  )
+
+  if (loading) {
+    return renderContentLayout(
+      <div className="flex min-h-[360px] flex-1 items-center justify-center">
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
-      </div>
+      </div>,
+      'flex min-h-[360px]'
     )
   }
 
   if (!card) {
-    return (
-      <div className="flex min-h-full flex-1 items-center justify-center bg-[var(--color-bg-subtle)] px-6">
+    return renderContentLayout(
+      <div className="flex min-h-[420px] flex-1 items-center justify-center px-6">
         <div className="max-w-md rounded-[12px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-6 py-8 text-center">
           <p className="text-sm font-semibold text-[var(--color-text-primary)]">
             콘텐츠를 찾을 수 없습니다.
@@ -1200,7 +1427,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </Link>
           </div>
         </div>
-      </div>
+      </div>,
+      'flex min-h-[420px]'
     )
   }
 
@@ -1208,8 +1436,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     const deletedTitle = card.title?.trim() || 'Untitled content'
     const projectTitle = card.project?.title?.trim()
 
-    return (
-      <div className="flex min-h-full flex-1 bg-[var(--color-bg-surface)] px-5 py-8 md:px-8">
+    return renderContentLayout(
+      <div className="flex min-h-[520px] flex-1 px-5 py-8 md:px-8">
         <section className="w-full max-w-2xl">
           <p className="text-xs font-semibold text-[var(--color-danger)]">삭제된 콘텐츠입니다</p>
           <h1 className="mt-2 text-[22px] font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">
@@ -1255,7 +1483,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </Link>
           </div>
         </section>
-      </div>
+      </div>,
+      'flex min-h-[520px]'
     )
   }
 
@@ -1272,10 +1501,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             ? '미리보기 화면에서는 저장할 수 없습니다.'
             : null
 
-  return (
-    <div className="flex h-full min-h-0 w-full flex-1 overflow-hidden bg-[var(--color-bg-surface)]">
-      <div className="flex min-w-0 flex-1 overflow-hidden bg-[var(--color-bg-surface)]">
-        <div className="editor-wrap flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-bg-surface)]">
+  return renderContentLayout(
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-[var(--color-bg-surface)] xl:flex-row">
+        <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-bg-surface)]">
           <div className="topbar flex items-center justify-between border-b border-[var(--color-border-soft)] px-5 py-3">
             <div className="breadcrumb flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
               <Link href="/content" className="transition-colors hover:text-[var(--color-text-body)]">
@@ -1559,7 +1787,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         </div>
 
         {panelOpen && (
-          <aside className="right-panel flex w-[320px] shrink-0 flex-col overflow-hidden border-l border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:w-[340px]">
+          <aside className="right-panel flex max-h-[420px] w-full shrink-0 flex-col overflow-hidden border-t border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:max-h-none xl:w-[340px] xl:border-l xl:border-t-0">
             <div className="rp-head flex items-center gap-[5px] border-b border-[var(--color-border-soft)] px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate px-1 text-[13px] font-semibold text-[var(--color-text-primary)]">
@@ -1631,7 +1859,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </aside>
         )}
-      </div>
-    </div>
+    </div>,
+    'min-h-[720px] lg:h-full lg:min-h-0'
   )
 }
