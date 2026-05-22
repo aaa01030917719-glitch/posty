@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   ChevronDown,
   Columns2,
@@ -430,6 +430,7 @@ function createShareToken() {
 
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
+  const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [card, setCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(true)
@@ -516,6 +517,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }, 1800)
     return () => window.clearTimeout(timer)
   }, [shareFeedback])
+
+  useEffect(() => {
+    const textarea = bodyTextareaRef.current
+
+    if (!textarea) return
+
+    textarea.style.height = 'auto'
+    textarea.style.height = `${textarea.scrollHeight}px`
+  }, [bodyDraft])
 
   useEffect(() => {
     let cancelled = false
@@ -1380,7 +1390,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const renderContentLayout = (children: ReactNode, contentClassName?: string) => (
-    <div className="grid h-full min-h-0 w-full gap-4 overflow-y-auto bg-[var(--color-bg-surface-soft)] p-5 md:p-6 lg:grid-cols-[240px_minmax(0,1180px)] lg:items-stretch lg:justify-center lg:overflow-hidden">
+    <div className="grid h-full min-h-0 w-full gap-4 overflow-y-auto bg-[var(--color-bg-surface-soft)] p-5 md:p-6 lg:grid-cols-[240px_minmax(0,1180px)] lg:items-start lg:justify-center">
       {renderCampaignSidebar()}
       <section
         className={clsx(
@@ -1502,8 +1512,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             : null
 
   return renderContentLayout(
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-[var(--color-bg-surface)] xl:flex-row">
-        <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-bg-surface)]">
+    <div className="flex min-h-[720px] w-full flex-col bg-[var(--color-bg-surface)] xl:flex-row">
+        <div className="editor-wrap flex min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
           <div className="topbar flex items-center justify-between border-b border-[var(--color-border-soft)] px-5 py-3">
             <div className="breadcrumb flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
               <Link href="/content" className="transition-colors hover:text-[var(--color-text-body)]">
@@ -1772,15 +1782,16 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </div>
 
-          <div className="editor-body-wrap flex-1 overflow-y-auto px-11 py-5">
+          <div className="editor-body-wrap px-11 py-5">
             <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted-soft)]">
               원고
             </div>
             <textarea
+              ref={bodyTextareaRef}
               value={bodyDraft}
               onChange={(event) => setBodyDraft(event.target.value)}
               rows={16}
-              className="min-h-[320px] w-full max-w-[620px] resize-none border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
+              className="min-h-[360px] w-full max-w-[620px] resize-none overflow-hidden border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
               placeholder={EDITOR_PLACEHOLDER}
             />
           </div>
@@ -1860,6 +1871,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           </aside>
         )}
     </div>,
-    'min-h-[720px] lg:h-full lg:min-h-0'
+    'min-h-[720px]'
   )
 }
