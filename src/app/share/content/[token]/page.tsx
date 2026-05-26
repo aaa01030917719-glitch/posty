@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { ReactNode } from 'react'
 import { SharedMediaCarousel, type SharedMediaCarouselItem } from '@/components/content/SharedMediaCarousel'
+import { FormattedText } from '@/lib/text-format'
 import type { ChecklistItem, ContentMediaType, Database, ShareSection } from '@/lib/types'
 
 type SharePageProps = {
@@ -416,9 +417,10 @@ export default async function ShareContentPage({ params }: SharePageProps) {
           <div className="space-y-5">
             {bodyContent ? (
               <SharedContentSection id={SHARE_SECTION_IDS.body} label="원고">
-                <div className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]">
-                  {bodyContent}
-                </div>
+                <FormattedText
+                  text={bodyContent}
+                  className="text-sm leading-7 text-[var(--color-text-body)]"
+                />
               </SharedContentSection>
             ) : null}
 
@@ -432,42 +434,47 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                           {scene.number}. {scene.title}
                         </p>
                         {scene.body ? (
-                          <div className="mt-1 whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]">
-                            {scene.body}
-                          </div>
+                          <FormattedText
+                            text={scene.body}
+                            className="mt-1 text-sm leading-7 text-[var(--color-text-body)]"
+                          />
                         ) : null}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]">
-                    {plainScriptBody}
-                  </div>
+                  <FormattedText
+                    text={plainScriptBody}
+                    className="text-sm leading-7 text-[var(--color-text-body)]"
+                  />
                 )}
               </SharedContentSection>
             ) : null}
 
             {captionContent ? (
               <SharedContentSection id={SHARE_SECTION_IDS.caption} label="캡션">
-                <div className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]">
-                  {captionContent}
-                </div>
+                <FormattedText
+                  text={captionContent}
+                  className="text-sm leading-7 text-[var(--color-text-body)]"
+                />
               </SharedContentSection>
             ) : null}
 
             {hashtagsContent ? (
               <SharedContentSection id={SHARE_SECTION_IDS.hashtags} label="해시태그">
-                <div className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]">
-                  {hashtagsContent}
-                </div>
+                <FormattedText
+                  text={hashtagsContent}
+                  className="text-sm leading-7 text-[var(--color-text-body)]"
+                />
               </SharedContentSection>
             ) : null}
 
             {thumbnailContent ? (
               <SharedContentSection id={SHARE_SECTION_IDS.thumbnail} label="썸네일 문구">
-                <div className="whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]">
-                  {thumbnailContent}
-                </div>
+                <FormattedText
+                  text={thumbnailContent}
+                  className="text-sm leading-7 text-[var(--color-text-body)]"
+                />
               </SharedContentSection>
             ) : null}
 
@@ -499,15 +506,14 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                   </h2>
                 ) : null}
                 {section.body ? (
-                  <div
+                  <FormattedText
+                    text={section.body}
                     className={
                       section.title.trim()
-                        ? 'mt-3 whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]'
-                        : 'whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]'
+                        ? 'mt-3 text-sm leading-7 text-[var(--color-text-body)]'
+                        : 'text-sm leading-7 text-[var(--color-text-body)]'
                     }
-                  >
-                    {section.body}
-                  </div>
+                  />
                 ) : null}
               </SharedContentSection>
             ))}

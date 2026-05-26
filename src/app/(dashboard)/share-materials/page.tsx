@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ClipboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Copy, ExternalLink, Plus, Save, Share2, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -8,6 +8,7 @@ import { createContentCard } from '@/components/content/createContentCard'
 import { Button } from '@/components/ui/Button'
 import { Toast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
+import { getMarkdownTableFromClipboard, insertTextAtSelection } from '@/lib/table-paste'
 import type { ContentShareLink, Database, ShareSection } from '@/lib/types'
 
 type ShareMaterialCard = {
@@ -269,6 +270,33 @@ export default function ShareMaterialsPage() {
         section.id === sectionId ? { ...section, [key]: value } : section
       ),
     }))
+  }
+
+  const handleSectionBodyPaste = (
+    event: ClipboardEvent<HTMLTextAreaElement>,
+    sectionId: string
+  ) => {
+    const markdownTable = getMarkdownTableFromClipboard(event.clipboardData)
+
+    if (!markdownTable) return
+
+    event.preventDefault()
+
+    const textarea = event.currentTarget
+    const nextDraft = insertTextAtSelection(
+      textarea.value,
+      markdownTable,
+      textarea.selectionStart,
+      textarea.selectionEnd
+    )
+
+    updateSection(sectionId, 'body', nextDraft.value)
+
+    window.requestAnimationFrame(() => {
+      textarea.selectionStart = nextDraft.cursorPosition
+      textarea.selectionEnd = nextDraft.cursorPosition
+      textarea.focus()
+    })
   }
 
   const addSection = () => {
@@ -575,6 +603,7 @@ export default function ShareMaterialsPage() {
                               onChange={(event) =>
                                 updateSection(section.id, 'body', event.target.value)
                               }
+                              onPaste={(event) => handleSectionBodyPaste(event, section.id)}
                               rows={5}
                               placeholder="고객에게 보낼 안내 내용을 입력하세요."
                               className="mt-1 min-h-[120px] w-full resize-y rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-2 text-sm leading-6 text-[var(--color-text-body)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)]"

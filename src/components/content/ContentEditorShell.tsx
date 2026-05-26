@@ -2,7 +2,15 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ClipboardEvent,
+  type ReactNode,
+} from 'react'
 import {
   ChevronDown,
   Columns2,
@@ -17,6 +25,7 @@ import { clsx } from 'clsx'
 import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
+import { getMarkdownTableFromClipboard, insertTextAtSelection } from '@/lib/table-paste'
 import { Modal } from '@/components/ui/Modal'
 import type {
   ChecklistItem,
@@ -1257,6 +1266,30 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
+  const handleBodyPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const markdownTable = getMarkdownTableFromClipboard(event.clipboardData)
+
+    if (!markdownTable) return
+
+    event.preventDefault()
+
+    const textarea = event.currentTarget
+    const nextDraft = insertTextAtSelection(
+      textarea.value,
+      markdownTable,
+      textarea.selectionStart,
+      textarea.selectionEnd
+    )
+
+    setBodyDraft(nextDraft.value)
+
+    window.requestAnimationFrame(() => {
+      textarea.selectionStart = nextDraft.cursorPosition
+      textarea.selectionEnd = nextDraft.cursorPosition
+      textarea.focus()
+    })
+  }
+
   const togglePanelSection = (section: EditorSection) => {
     setExpandedSections((prev) => ({
       ...prev,
@@ -2141,6 +2174,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               ref={bodyTextareaRef}
               value={bodyDraft}
               onChange={(event) => setBodyDraft(event.target.value)}
+              onPaste={handleBodyPaste}
               rows={16}
               className="min-h-[360px] w-full max-w-[620px] resize-none overflow-hidden border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
               placeholder={EDITOR_PLACEHOLDER}
