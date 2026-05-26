@@ -538,15 +538,12 @@ export default function ShareMaterialsPage() {
                     </div>
                   ) : (
                     <div className="flex flex-col gap-3">
-                      {selectedSections.map((section, index) => (
+                      {selectedSections.map((section) => (
                         <article
                           key={section.id}
                           className="rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] p-4"
                         >
-                          <div className="mb-3 flex items-center justify-between gap-3">
-                            <p className="text-xs font-semibold text-[var(--color-text-muted)]">
-                              섹션 {index + 1}
-                            </p>
+                          <div className="mb-3 flex items-center justify-end gap-3">
                             <button
                               type="button"
                               onClick={() => removeSection(section.id)}
@@ -566,7 +563,6 @@ export default function ShareMaterialsPage() {
                               onChange={(event) =>
                                 updateSection(section.id, 'title', event.target.value)
                               }
-                              placeholder="예: 상담 전 준비사항"
                               className="mt-1 h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)]"
                             />
                           </label>

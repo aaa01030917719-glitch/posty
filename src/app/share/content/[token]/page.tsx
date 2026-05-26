@@ -228,7 +228,7 @@ function normalizeShareSections(value: ShareSection[] | null) {
           typeof section.id === 'string' && section.id.trim()
             ? section.id
             : `section-${index + 1}`,
-        title: title || `섹션 ${index + 1}`,
+        title,
         body,
       }
     })
@@ -375,10 +375,12 @@ export default async function ShareContentPage({ params }: SharePageProps) {
     ...(checklistItems.length > 0
       ? [{ id: SHARE_SECTION_IDS.checklist, label: '체크리스트' }]
       : []),
-    ...shareSections.map((section, index) => ({
-      id: getCustomShareSectionAnchorId(index),
-      label: section.title,
-    })),
+    ...shareSections
+      .map((section, index) => ({
+        id: getCustomShareSectionAnchorId(index),
+        label: section.title.trim(),
+      }))
+      .filter((section) => section.label),
   ]
 
   return (
@@ -491,11 +493,19 @@ export default async function ShareContentPage({ params }: SharePageProps) {
 
             {shareSections.map((section, index) => (
               <SharedContentSection key={section.id} id={getCustomShareSectionAnchorId(index)}>
-                <h2 className="text-[15px] font-bold text-[var(--color-text-primary)]">
-                  {section.title}
-                </h2>
+                {section.title.trim() ? (
+                  <h2 className="text-[15px] font-bold text-[var(--color-text-primary)]">
+                    {section.title}
+                  </h2>
+                ) : null}
                 {section.body ? (
-                  <div className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]">
+                  <div
+                    className={
+                      section.title.trim()
+                        ? 'mt-3 whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]'
+                        : 'whitespace-pre-wrap text-sm leading-7 text-[var(--color-text-body)]'
+                    }
+                  >
                     {section.body}
                   </div>
                 ) : null}
