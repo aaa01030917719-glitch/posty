@@ -27,6 +27,10 @@ import { CalendarDay } from '@/components/schedule/CalendarDay'
 import { CalendarMonth } from '@/components/schedule/CalendarMonth'
 import { CalendarWeek } from '@/components/schedule/CalendarWeek'
 import {
+  ScheduleCardPreview,
+  getScheduleCardToneStyle,
+} from '@/components/schedule/ScheduleCardPreview'
+import {
   ACTIVITY_ACTION_COMPACT_BADGE_CLASSES,
   ACTIVITY_ACTION_COMPACT_LABELS,
   CHANNEL_COLORS,
@@ -262,59 +266,65 @@ export default function SchedulePage() {
     const panelMeta = getPanelMeta(card)
 
     return (
-      <button
+      <ScheduleCardPreview
         key={`${variant}-${card.id}`}
-        type="button"
-        onClick={() => setSelectedCard(card)}
-        className="flex w-full items-start gap-2 rounded-[5px] px-2 py-1.5 text-left transition-[background-color] hover:bg-[var(--color-bg-surface-soft)]"
+        card={card}
+        className="group relative min-w-0 max-w-full"
       >
-        <span
-          className={clsx(
-            'mt-0.5 h-[14px] w-[14px] shrink-0 rounded-[3px] border',
-            variant === 'done'
-              ? 'border-[var(--color-text-body)] bg-[var(--color-text-body)]'
-              : variant === 'review'
-                ? 'border-[var(--color-link-legal)]'
-                : 'border-[var(--color-border-default)]'
-          )}
-        />
-
-        <span className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={() => setSelectedCard(card)}
+          style={getScheduleCardToneStyle(card)}
+          className="box-border flex w-full max-w-full min-w-0 items-start gap-2 rounded-[5px] border border-[var(--schedule-card-border)] bg-[var(--schedule-card-bg)] px-2 py-1.5 text-left transition-[border-color] hover:border-[var(--schedule-card-border-hover)]"
+        >
           <span
             className={clsx(
-              'block truncate text-[12.5px] leading-5 text-[var(--color-text-primary)]',
-              variant === 'done' && 'text-[var(--color-text-muted)] line-through'
+              'mt-0.5 h-[14px] w-[14px] shrink-0 rounded-[3px] border',
+              variant === 'done'
+                ? 'border-[var(--color-text-body)] bg-[var(--color-text-body)]'
+                : variant === 'review'
+                  ? 'border-[var(--color-link-legal)]'
+                  : 'border-[var(--color-border-default)]'
             )}
-          >
-            {card.title}
+          />
+
+          <span className="min-w-0 flex-1">
+            <span
+              className={clsx(
+                'block truncate text-[12.5px] leading-5 text-[var(--color-text-primary)]',
+                variant === 'done' && 'text-[var(--color-text-muted)] line-through'
+              )}
+            >
+              {card.title}
+            </span>
+            <span className="mt-1 flex items-center gap-1.5">
+              {channelLabel && (
+                <span
+                  className="inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    backgroundColor: `${channelColor}14`,
+                    color: channelColor,
+                  }}
+                >
+                  {channelLabel}
+                </span>
+              )}
+              {panelMeta.kind === 'time' ? (
+                <span className="text-[10.5px] text-[var(--color-text-muted)]">{panelMeta.label}</span>
+              ) : (
+                <span
+                  className={clsx(
+                    'inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold',
+                    STATUS_BADGE_CLASSES[card.status]
+                  )}
+                >
+                  {panelMeta.label}
+                </span>
+              )}
+            </span>
           </span>
-          <span className="mt-1 flex items-center gap-1.5">
-            {channelLabel && (
-              <span
-                className="inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold"
-                style={{
-                  backgroundColor: `${channelColor}14`,
-                  color: channelColor,
-                }}
-              >
-                {channelLabel}
-              </span>
-            )}
-            {panelMeta.kind === 'time' ? (
-              <span className="text-[10.5px] text-[var(--color-text-muted)]">{panelMeta.label}</span>
-            ) : (
-              <span
-                className={clsx(
-                  'inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold',
-                  STATUS_BADGE_CLASSES[card.status]
-                )}
-              >
-                {panelMeta.label}
-              </span>
-            )}
-          </span>
-        </span>
-      </button>
+        </button>
+      </ScheduleCardPreview>
     )
   }
 

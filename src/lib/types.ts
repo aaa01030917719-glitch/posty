@@ -1,5 +1,6 @@
 export type ChannelType = 'instagram' | 'threads' | 'youtube' | 'blog' | 'custom'
 export type ContentStatus = 'idea' | 'planning' | 'writing' | 'review' | 'scheduled' | 'published' | 'hold'
+export type ContentMediaType = 'image' | 'video'
 export type Priority = 'low' | 'normal' | 'high'
 
 export interface Profile {
@@ -57,6 +58,18 @@ export type ContentScriptSummary = Pick<
   'body' | 'caption' | 'hashtags' | 'thumbnail_text'
 >
 
+export interface ContentCardMedia {
+  id: string
+  user_id: string
+  card_id: string
+  storage_path: string
+  file_name: string | null
+  mime_type: string | null
+  media_type: ContentMediaType
+  sort_order: number
+  created_at: string
+}
+
 export interface ContentCard {
   id: string
   user_id: string
@@ -83,6 +96,7 @@ export interface ContentCard {
   tags?: Tag[]
   project?: ContentProjectSummary | null
   scripts?: ContentScriptSummary[]
+  media?: ContentCardMedia[]
 }
 
 export interface Script {
@@ -233,6 +247,13 @@ export type Database = {
           share_sections?: ShareSection[]
         }
         Update: Partial<Omit<ContentCard, 'id' | 'channel' | 'tags' | 'project'>>
+      }
+      content_card_media: {
+        Row: ContentCardMedia
+        Insert: Omit<ContentCardMedia, 'id' | 'created_at'> & {
+          id?: string; created_at?: string
+        }
+        Update: Partial<Omit<ContentCardMedia, 'id' | 'created_at'>>
       }
       scripts: {
         Row: Script

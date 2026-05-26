@@ -13,7 +13,7 @@ import {
 } from 'date-fns'
 import { clsx } from 'clsx'
 import type { ContentCard } from '@/lib/types'
-import { STATUS_COLORS } from '@/lib/constants'
+import { ScheduleCardPreview, getScheduleCardToneStyle } from './ScheduleCardPreview'
 
 interface CalendarMonthProps {
   cards: ContentCard[]
@@ -99,26 +99,24 @@ export function CalendarMonth({ cards, currentDate, onDateClick, onCardClick }: 
 
               <div className="flex flex-col gap-1">
                 {dayCards.slice(0, 3).map((card) => (
-                  <button
-                    key={card.id}
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onCardClick?.(card)
-                    }}
-                    className="truncate rounded-[4px] px-1.5 py-0.5 text-left text-[10px] font-medium transition-opacity hover:opacity-80"
-                    style={{
-                      backgroundColor: `${STATUS_COLORS[card.status]}20`,
-                      color: STATUS_COLORS[card.status],
-                    }}
-                  >
-                    {card.project?.title && (
-                      <span className="block truncate text-[9px] font-medium opacity-70">
-                        {card.project.title}
-                      </span>
-                    )}
-                    <span className="block truncate">{card.title}</span>
-                  </button>
+                  <ScheduleCardPreview key={card.id} card={card} className="group relative min-w-0 max-w-full">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onCardClick?.(card)
+                      }}
+                      style={getScheduleCardToneStyle(card)}
+                      className="box-border w-full max-w-full min-w-0 rounded-[4px] border border-[var(--schedule-card-border)] bg-[var(--schedule-card-bg)] px-1.5 py-0.5 text-left text-[10px] font-medium text-[var(--color-text-primary)] transition-[border-color] hover:border-[var(--schedule-card-border-hover)]"
+                    >
+                      {card.project?.title && (
+                        <span className="block truncate text-[9px] font-medium opacity-70">
+                          {card.project.title}
+                        </span>
+                      )}
+                      <span className="block min-w-0 truncate">{card.title}</span>
+                    </button>
+                  </ScheduleCardPreview>
                 ))}
                 {dayCards.length > 3 && (
                   <span className="pl-1 text-[10px] text-[var(--color-text-muted)]">

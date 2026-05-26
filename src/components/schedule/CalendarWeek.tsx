@@ -5,6 +5,7 @@ import { eachDayOfInterval, endOfWeek, format, isSameDay, isToday, startOfWeek }
 import { ko } from 'date-fns/locale'
 import { CHANNEL_COLORS, STATUS_BADGE_CLASSES, STATUS_LABELS } from '@/lib/constants'
 import type { ContentCard } from '@/lib/types'
+import { ScheduleCardPreview, getScheduleCardToneStyle } from './ScheduleCardPreview'
 
 interface CalendarWeekProps {
   cards: ContentCard[]
@@ -125,47 +126,49 @@ export function CalendarWeek({ cards, currentDate, onCardClick }: CalendarWeekPr
                 const channelShortLabel = getChannelShortLabel(card)
 
                 return (
-                  <button
-                    key={card.id}
-                    type="button"
-                    onClick={() => onCardClick?.(card)}
-                    className="min-w-0 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2 py-[7px] text-left transition-[border-color,background-color] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg-surface-soft)]"
-                  >
-                    <div className="mb-1 flex items-center gap-1">
-                      {channelShortLabel && (
-                        <span
-                          className="inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold"
-                          style={{
-                            backgroundColor: `${channelColor}14`,
-                            color: channelColor,
-                          }}
-                        >
-                          {channelShortLabel}
-                        </span>
-                      )}
-                    </div>
-                    {card.project?.title && (
-                      <div className="truncate text-[10px] font-medium text-[var(--color-text-muted)]">
-                        {card.project.title}
-                      </div>
-                    )}
-                    <div className="truncate text-[13px] font-semibold leading-[1.35] text-[var(--color-text-primary)]">
-                      {card.title}
-                    </div>
-                    {targetDate && (
-                      <div className="mt-1 text-[10.5px] text-[var(--color-text-muted)]">
-                        {format(targetDate, 'a h시', { locale: ko })}
-                      </div>
-                    )}
-                    <span
-                      className={clsx(
-                        'mt-[3px] inline-flex rounded-[3px] px-[5px] py-[1.5px] text-[10px] font-semibold',
-                        STATUS_BADGE_CLASSES[card.status]
-                      )}
+                  <ScheduleCardPreview key={card.id} card={card} className="group relative min-w-0 max-w-full">
+                    <button
+                      type="button"
+                      onClick={() => onCardClick?.(card)}
+                      style={getScheduleCardToneStyle(card)}
+                      className="box-border w-full max-w-full min-w-0 rounded-[6px] border border-[var(--schedule-card-border)] bg-[var(--schedule-card-bg)] px-2 py-[7px] text-left transition-[border-color] hover:border-[var(--schedule-card-border-hover)]"
                     >
-                      {STATUS_LABELS[card.status]}
-                    </span>
-                  </button>
+                      <div className="mb-1 flex items-center gap-1">
+                        {channelShortLabel && (
+                          <span
+                            className="inline-flex rounded-[3px] px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{
+                              backgroundColor: `${channelColor}14`,
+                              color: channelColor,
+                            }}
+                          >
+                            {channelShortLabel}
+                          </span>
+                        )}
+                      </div>
+                      {card.project?.title && (
+                        <div className="truncate text-[10px] font-medium text-[var(--color-text-muted)]">
+                          {card.project.title}
+                        </div>
+                      )}
+                      <div className="min-w-0 break-words text-[13px] font-semibold leading-[1.35] text-[var(--color-text-primary)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                        {card.title}
+                      </div>
+                      {targetDate && (
+                        <div className="mt-1 text-[10.5px] text-[var(--color-text-muted)]">
+                          {format(targetDate, 'a h시', { locale: ko })}
+                        </div>
+                      )}
+                      <span
+                        className={clsx(
+                          'mt-[3px] inline-flex rounded-[3px] px-[5px] py-[1.5px] text-[10px] font-semibold',
+                          STATUS_BADGE_CLASSES[card.status]
+                        )}
+                      >
+                        {STATUS_LABELS[card.status]}
+                      </span>
+                    </button>
+                  </ScheduleCardPreview>
                 )
               })}
             </div>

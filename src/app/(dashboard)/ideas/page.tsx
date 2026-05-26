@@ -119,10 +119,10 @@ export default function IdeasPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+    <div className="flex flex-col gap-3 bg-[var(--color-bg-canvas)] p-5 md:p-6">
       <form
         onSubmit={handleCreate}
-        className="flex max-w-3xl items-center gap-3 border-b border-[var(--color-border-soft)] pb-3"
+        className="flex w-full items-center gap-3 pb-1"
       >
         <input
           type="text"
@@ -142,7 +142,7 @@ export default function IdeasPage() {
       </form>
 
       {loading ? (
-        <div className="flex max-w-3xl items-center justify-center py-16">
+        <div className="flex w-full items-center justify-center py-16">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
       ) : (

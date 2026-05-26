@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import {
   ChevronDown,
   Columns2,
@@ -17,10 +17,13 @@ import { clsx } from 'clsx'
 import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
+import { Modal } from '@/components/ui/Modal'
 import type {
   ChecklistItem,
   ContentActivityAction,
   ContentCard,
+  ContentCardMedia,
+  ContentMediaType,
   ContentProjectSummary,
   ContentShareLink,
   Script,
@@ -65,23 +68,39 @@ type ChecklistDraft = {
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+type MediaItem = ContentCardMedia & {
+  signedUrl: string | null
+}
 type PersistedSceneDraft = Pick<SceneDraft, 'id' | 'number' | 'title' | 'body'>
 type PersistedChecklistDraft = Partial<ChecklistItem> & {
   checked?: boolean
 }
 
 const PREVIEW_IDS = new Set(['preview', 'demo'])
+const MEDIA_BUCKET_NAME = 'content-card-media'
+const MEDIA_SIGNED_URL_EXPIRES_IN = 60 * 60
+const MEDIA_SECTION_LABEL = '\uCCA8\uBD80 \uBBF8\uB514\uC5B4'
+const MEDIA_UPLOAD_LABEL = '\uC774\uBBF8\uC9C0/\uB3D9\uC601\uC0C1 \uCCA8\uBD80'
+const MEDIA_UPLOADING_LABEL = '\uC5C5\uB85C\uB4DC \uC911...'
+const MEDIA_EMPTY_LABEL = '\uCCA8\uBD80\uB41C \uBBF8\uB514\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
+const MEDIA_DELETE_LABEL = '\uC0AD\uC81C'
+const MEDIA_DELETING_LABEL = '\uC0AD\uC81C \uC911'
+const MEDIA_UNTITLED_FILE_LABEL = '\uD30C\uC77C\uBA85 \uC5C6\uC74C'
+const MEDIA_UPLOAD_ERROR =
+  '\uBBF8\uB514\uC5B4\uB97C \uC5C5\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
+const MEDIA_DELETE_ERROR =
+  '\uBBF8\uB514\uC5B4\uB97C \uC0AD\uC81C\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
+const MEDIA_STORAGE_DELETE_WARNING =
+  '\uCCA8\uBD80 \uBAA9\uB85D\uC5D0\uC11C\uB294 \uC81C\uAC70\uD588\uC9C0\uB9CC \uC800\uC7A5\uC18C \uD30C\uC77C \uC815\uB9AC\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.'
 const DEFAULT_PANEL_TITLE = '대본'
 const EDITOR_PLACEHOLDER = '원고를 작성해보세요...'
 const EMPTY_SECTION_MESSAGE = '아직 입력된 내용이 없습니다.'
-const NO_CAMPAIGN_LABEL = '캠페인 없음'
 const CAMPAIGN_SECTION_TITLE = '캠페인'
 const ALL_CONTENT_LABEL = '전체'
 const UNCATEGORIZED_GROUP_ID = '__uncategorized__'
 const UNCATEGORIZED_CONTENT_LABEL = '일반 콘텐츠'
 const EMPTY_CAMPAIGN_CONTENTS_LABEL = '콘텐츠 없음'
 const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
-  { value: 'body', label: '원고' },
   { value: 'scenes', label: '대본' },
   { value: 'caption', label: '캡션' },
   { value: 'hashtags', label: '해시태그' },
@@ -428,6 +447,61 @@ function createShareToken() {
   return randomValues.map((value) => value.toString(16).padStart(2, '0')).join('')
 }
 
+function getMediaType(mimeType: string): ContentMediaType | null {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+
+  return null
+}
+
+function sanitizeMediaFileName(fileName: string) {
+  const safeName = fileName
+    .trim()
+    .replace(/[\\/:*?"<>|#%&{}$!'@+=`]/g, '-')
+    .replace(/\s+/g, '-')
+
+  return safeName || 'media'
+}
+
+function createMediaStoragePath(userId: string, cardId: string, file: File, index: number) {
+  const safeName = sanitizeMediaFileName(file.name)
+  const token = createShareToken().slice(0, 12)
+
+  return `${userId}/${cardId}/${Date.now()}-${index + 1}-${token}-${safeName}`
+}
+
+function sortMediaItems<T extends Pick<ContentCardMedia, 'sort_order' | 'created_at'>>(items: T[]) {
+  return [...items].sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
+
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+}
+
+async function createSignedMediaItems(
+  supabase: ReturnType<typeof createClient>,
+  rows: ContentCardMedia[]
+): Promise<MediaItem[]> {
+  const sortedRows = sortMediaItems(rows)
+
+  return Promise.all(
+    sortedRows.map(async (row) => {
+      const { data, error } = await supabase.storage
+        .from(MEDIA_BUCKET_NAME)
+        .createSignedUrl(row.storage_path, MEDIA_SIGNED_URL_EXPIRES_IN)
+
+      if (error) {
+        console.error('Failed to create content media signed URL', error)
+      }
+
+      return {
+        ...row,
+        signedUrl: data?.signedUrl ?? null,
+      }
+    })
+  )
+}
+
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -470,16 +544,13 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [shareLink, setShareLink] = useState<ContentShareLink | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
+  const [shareModalOpen, setShareModalOpen] = useState(false)
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
+  const [mediaUploading, setMediaUploading] = useState(false)
+  const [mediaDeletingIds, setMediaDeletingIds] = useState<string[]>([])
 
   const isPreview = PREVIEW_IDS.has(cardId)
 
-  const campaignOptions = useMemo(() => {
-    if (!card?.project) return projects
-
-    return projects.some((project) => project.id === card.project?.id)
-      ? projects
-      : [card.project, ...projects]
-  }, [card?.project, projects])
   const sidebarCardsByProject = useMemo(() => {
     return sidebarCards.reduce<Record<string, SidebarContentCard[]>>((acc, sidebarCard) => {
       if (!sidebarCard.project_id) return acc
@@ -498,6 +569,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const shareUrl = shareLink
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/content/${shareLink.token}`
     : null
+  const createdDateLabel = card ? formatDate(card.created_at) : ''
+  const updatedDateLabel = card ? formatDate(card.updated_at, true) : ''
 
   useEffect(() => {
     if (saveState !== 'saved') return
@@ -564,6 +637,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         setSidebarCards([])
         setExpandedCampaignIds([])
         setShareLink(null)
+        setMediaItems([])
         applyState(SAMPLE_CARD, SAMPLE_SCRIPT)
         return
       }
@@ -575,6 +649,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         { data: projectData, error: projectError },
         { data: sidebarCardData, error: sidebarCardError },
         { data: shareLinkData, error: shareLinkError },
+        { data: mediaData, error: mediaError },
       ] = await Promise.all([
         supabase
           .from('content_cards')
@@ -595,6 +670,12 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase
+          .from('content_card_media')
+          .select('id, user_id, card_id, storage_path, file_name, mime_type, media_type, sort_order, created_at')
+          .eq('card_id', cardId)
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true }),
       ])
 
       if (cardError) {
@@ -617,16 +698,26 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         console.error('Failed to fetch content share link', shareLinkError)
       }
 
+      if (mediaError) {
+        console.error('Failed to fetch content card media', mediaError)
+      }
+
       const nextCard = (cardData as ContentCard | null) ?? null
+      const nextMediaItems = mediaError
+        ? []
+        : await createSignedMediaItems(supabase, (mediaData as ContentCardMedia[] | null) ?? [])
       const nextExpandedIds =
         nextCard && !nextCard.is_deleted
           ? [nextCard.project_id ?? UNCATEGORIZED_GROUP_ID]
           : []
 
+      if (cancelled) return
+
       setProjects((projectData as ContentProjectSummary[] | null) ?? [])
       setSidebarCards((sidebarCardData as SidebarContentCard[] | null) ?? [])
       setExpandedCampaignIds(nextExpandedIds)
       setShareLink((shareLinkData as ContentShareLink | null) ?? null)
+      setMediaItems(nextMediaItems)
       applyState(nextCard, (scriptData as Script | null) ?? null)
     }
 
@@ -1041,6 +1132,131 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
+  const handleMediaUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const files = Array.from(input.files ?? [])
+
+    if (!files.length || isPreview || !card || card.is_deleted || mediaUploading) {
+      input.value = ''
+      return
+    }
+
+    const uploadableFiles = files
+      .map((file) => ({
+        file,
+        mediaType: getMediaType(file.type),
+      }))
+      .filter(
+        (entry): entry is { file: File; mediaType: ContentMediaType } =>
+          entry.mediaType !== null
+      )
+
+    if (uploadableFiles.length === 0) {
+      input.value = ''
+      return
+    }
+
+    setMediaUploading(true)
+
+    try {
+      const supabase = createClient()
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+
+      if (userError || !userData.user) {
+        throw userError ?? new Error('Missing authenticated user')
+      }
+
+      const userId = userData.user.id
+      const baseSortOrder = mediaItems.reduce(
+        (maxSortOrder, item) => Math.max(maxSortOrder, item.sort_order),
+        -1
+      )
+      const uploadedItems: MediaItem[] = []
+
+      for (const [index, { file, mediaType }] of uploadableFiles.entries()) {
+        const storagePath = createMediaStoragePath(userId, card.id, file, index)
+        const { error: uploadError } = await supabase.storage
+          .from(MEDIA_BUCKET_NAME)
+          .upload(storagePath, file, {
+            contentType: file.type || undefined,
+            upsert: false,
+          })
+
+        if (uploadError) {
+          throw uploadError
+        }
+
+        const { data: insertedMedia, error: insertError } = await supabase
+          .from('content_card_media')
+          .insert({
+            user_id: userId,
+            card_id: card.id,
+            storage_path: storagePath,
+            file_name: file.name,
+            mime_type: file.type || null,
+            media_type: mediaType,
+            sort_order: baseSortOrder + index + 1,
+          })
+          .select('*')
+          .single()
+
+        if (insertError) {
+          await supabase.storage.from(MEDIA_BUCKET_NAME).remove([storagePath])
+          throw insertError
+        }
+
+        const [signedItem] = await createSignedMediaItems(supabase, [
+          insertedMedia as ContentCardMedia,
+        ])
+        uploadedItems.push(signedItem)
+      }
+
+      setMediaItems((prev) => sortMediaItems([...prev, ...uploadedItems]))
+    } catch (error) {
+      console.error('Failed to upload content media', error)
+      window.alert(MEDIA_UPLOAD_ERROR)
+    } finally {
+      setMediaUploading(false)
+      input.value = ''
+    }
+  }
+
+  const handleDeleteMedia = async (media: MediaItem) => {
+    if (isPreview || mediaDeletingIds.includes(media.id)) return
+
+    setMediaDeletingIds((prev) => [...prev, media.id])
+
+    try {
+      const supabase = createClient()
+      const { error: storageError } = await supabase.storage
+        .from(MEDIA_BUCKET_NAME)
+        .remove([media.storage_path])
+
+      if (storageError) {
+        console.warn('Failed to remove content media object', storageError)
+      }
+
+      const { error: deleteError } = await supabase
+        .from('content_card_media')
+        .delete()
+        .eq('id', media.id)
+
+      if (deleteError) {
+        throw deleteError
+      }
+
+      setMediaItems((prev) => prev.filter((item) => item.id !== media.id))
+      if (storageError) {
+        window.alert(MEDIA_STORAGE_DELETE_WARNING)
+      }
+    } catch (error) {
+      console.error('Failed to delete content media', error)
+      window.alert(MEDIA_DELETE_ERROR)
+    } finally {
+      setMediaDeletingIds((prev) => prev.filter((mediaId) => mediaId !== media.id))
+    }
+  }
+
   const togglePanelSection = (section: EditorSection) => {
     setExpandedSections((prev) => ({
       ...prev,
@@ -1053,6 +1269,170 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       prev.includes(campaignId)
         ? prev.filter((expandedId) => expandedId !== campaignId)
         : [...prev, campaignId]
+    )
+  }
+
+  const renderShareModal = () => {
+    if (!card || card.is_deleted) return null
+
+    return (
+      <Modal
+        isOpen={shareModalOpen}
+        onClose={() => setShareModalOpen(false)}
+        title="공유 링크 관리"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-[var(--color-text-body)]">
+              공유 상태
+            </span>
+            <span
+              className={clsx(
+                'rounded-[4px] px-2 py-0.5 text-[11px] font-semibold',
+                activeShareLink
+                  ? 'bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
+                  : 'bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)]'
+              )}
+            >
+              {activeShareLink ? '공유 중' : shareLink ? '비활성화됨' : '없음'}
+            </span>
+            {shareFeedback && (
+              <span className="text-[11px] font-medium text-[var(--color-text-muted)]">
+                {shareFeedback}
+              </span>
+            )}
+          </div>
+
+          {activeShareLink && shareUrl ? (
+            <div className="space-y-3">
+              <input
+                type="text"
+                readOnly
+                value={shareUrl}
+                className="h-9 w-full rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] px-3 text-xs text-[var(--color-text-body)] outline-none"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyShareLink}
+                  disabled={shareBusy}
+                  className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                >
+                  복사
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDisableShareLink}
+                  disabled={shareBusy}
+                  className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-danger)] transition-[background-color,color] hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                >
+                  {shareBusy ? '처리 중' : '공유 중지'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs leading-5 text-[var(--color-text-muted)]">
+                공개 확인 페이지에서 볼 수 있는 공유 링크를 생성합니다.
+              </p>
+              <button
+                type="button"
+                onClick={handleCreateShareLink}
+                disabled={isPreview || shareBusy}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-[background-color,color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+              >
+                <Share2 size={13} />
+                {shareBusy ? '생성 중' : '공유 링크 생성'}
+              </button>
+            </div>
+          )}
+        </div>
+      </Modal>
+    )
+  }
+
+  const renderMediaAttachmentSection = () => {
+    if (!card || card.is_deleted) return null
+
+    const uploadDisabled = isPreview || mediaUploading
+
+    return (
+      <div className="mb-3 max-w-[680px] border-t border-[var(--color-border-soft)] pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-semibold text-[var(--color-text-body)]">
+            {MEDIA_SECTION_LABEL}
+          </span>
+          <label
+            className={clsx(
+              'inline-flex h-8 cursor-pointer items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-[background-color,color]',
+              'hover:bg-[var(--color-bg-subtle)] focus-within:[box-shadow:var(--focus-ring)]',
+              uploadDisabled && 'cursor-not-allowed text-[var(--color-text-muted)] opacity-70'
+            )}
+          >
+            {mediaUploading ? MEDIA_UPLOADING_LABEL : MEDIA_UPLOAD_LABEL}
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              disabled={uploadDisabled}
+              onChange={handleMediaUpload}
+              className="sr-only"
+              aria-label={MEDIA_UPLOAD_LABEL}
+            />
+          </label>
+        </div>
+
+        {mediaItems.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {mediaItems.map((media) => {
+              const isDeleting = mediaDeletingIds.includes(media.id)
+
+              return (
+                <div
+                  key={media.id}
+                  className="group relative h-20 w-20 overflow-hidden rounded-[7px] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)]"
+                >
+                  {media.signedUrl && media.media_type === 'image' ? (
+                    <img
+                      src={media.signedUrl}
+                      alt={media.file_name ?? MEDIA_SECTION_LABEL}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : media.signedUrl ? (
+                    <video
+                      src={media.signedUrl}
+                      muted
+                      playsInline
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase text-[var(--color-text-muted)]">
+                      {media.media_type}
+                    </div>
+                  )}
+                  {isDeleting && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-surface)_82%,transparent)] text-[10px] font-semibold text-[var(--color-text-muted)]">
+                      {MEDIA_DELETING_LABEL}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteMedia(media)}
+                    disabled={isPreview || isDeleting}
+                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-bg-surface)_88%,transparent)] text-[var(--color-text-body)] shadow-sm transition-colors hover:bg-[var(--color-bg-surface)] hover:text-[var(--color-danger)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                    aria-label={MEDIA_DELETE_LABEL}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">{MEDIA_EMPTY_LABEL}</p>
+        )}
+      </div>
     )
   }
 
@@ -1512,7 +1892,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             : null
 
   return renderContentLayout(
-    <div className="flex min-h-[720px] w-full flex-col bg-[var(--color-bg-surface)] xl:flex-row">
+    <>
+      <div className="flex min-h-[720px] w-full flex-col bg-[var(--color-bg-surface)] xl:flex-row">
         <div className="editor-wrap flex min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
           <div className="topbar flex items-center justify-between border-b border-[var(--color-border-soft)] px-5 py-3">
             <div className="breadcrumb flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
@@ -1558,10 +1939,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </button>
               <button
                 type="button"
-                onClick={activeShareLink ? handleCopyShareLink : handleCreateShareLink}
+                onClick={() => setShareModalOpen(true)}
                 disabled={isPreview || shareBusy}
-                className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
-                aria-label={activeShareLink ? '공유 링크 복사' : '공유 링크 생성'}
+                className={clsx(
+                  'flex h-7 w-7 items-center justify-center rounded-[5px] border transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]',
+                  activeShareLink
+                    ? 'border-[var(--color-accent)] bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
+                    : 'border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-body)]'
+                )}
+                aria-label="공유 링크 관리"
               >
                 <Share2 size={14} />
               </button>
@@ -1589,10 +1975,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </div>
 
-          <div className="content-header shrink-0 px-11 pt-5">
+          <div className="content-header shrink-0 px-11 pt-3">
             {card.channel && channelBadgeLabel && (
               <span
-                className="mb-3 inline-flex items-center gap-1.5 rounded-[3px] px-2 py-0.5 text-[11px] font-semibold"
+                className="hidden"
                 style={{
                   backgroundColor: `${CHANNEL_COLORS[card.channel.type] ?? '#ff385c'}12`,
                   color: CHANNEL_COLORS[card.channel.type] ?? '#ff385c',
@@ -1602,57 +1988,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </span>
             )}
 
-            <input
-              type="text"
-              value={titleDraft}
-              onChange={(event) => setTitleDraft(event.target.value)}
-              className="mb-3 w-full max-w-[720px] border-0 bg-transparent p-0 text-[24px] font-bold leading-[1.2] tracking-[-0.03em] text-[var(--color-text-primary)] outline-none"
-              placeholder="콘텐츠 제목"
-            />
-
-            <div className="mb-4 grid w-full max-w-[680px] grid-cols-[auto_1fr] gap-x-4 gap-y-2">
-              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">작성일</span>
-              <span className="flex h-9 items-center text-xs text-[var(--color-text-body)]">
-                {formatDate(card.created_at)}
-              </span>
-
-              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">마지막 수정</span>
-              <span className="flex h-9 items-center text-xs text-[var(--color-text-body)]">
-                {formatDate(card.updated_at, true)}
-              </span>
-
-              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">캠페인</span>
-              <div className="flex flex-col gap-1">
-                <select
-                  value={selectedProjectId}
-                  onChange={(event) => setSelectedProjectId(event.target.value)}
-                  disabled={isPreview || saveState === 'saving'}
-                  className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
-                >
-                  <option value="">{NO_CAMPAIGN_LABEL}</option>
-                  {campaignOptions.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <span className="pt-2 text-xs text-[var(--color-text-muted-soft)]">업로드 예정일</span>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  type="date"
-                  value={scheduledDateDraft}
-                  onChange={(event) => setScheduledDateDraft(event.target.value)}
-                  className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-                />
-                <input
-                  type="time"
-                  value={scheduledTimeDraft}
-                  onChange={(event) => setScheduledTimeDraft(event.target.value)}
-                  className="h-9 rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-body)] outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-                />
-              </div>
+            <div className="mb-2 w-full max-w-[720px]">
+              <input
+                type="text"
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                className="w-full border-0 bg-transparent p-0 text-[22px] font-bold leading-[1.2] tracking-[-0.03em] text-[var(--color-text-primary)] outline-none"
+                placeholder="콘텐츠 제목"
+              />
             </div>
 
             {isPreview && (
@@ -1662,7 +2005,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             )}
 
             {!isPreview && (
-              <div className="mb-4 max-w-[680px] border-t border-[var(--color-border-soft)] pt-3">
+              <div className="hidden">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-semibold text-[var(--color-text-body)]">
                     공유 링크
@@ -1727,6 +2070,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 )}
               </div>
             )}
+
+            {renderMediaAttachmentSection()}
           </div>
 
           <div className="toolbar-wrap shrink-0 border-y border-[var(--color-border-soft)] px-11">
@@ -1782,9 +2127,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </div>
 
-          <div className="editor-body-wrap px-11 py-5">
-            <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted-soft)]">
-              원고
+          <div className="editor-body-wrap px-11 py-3">
+            <div className="mb-2 flex w-full max-w-[620px] items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
+              <span className="min-w-0 truncate font-medium">콘텐츠 내용이 들어갑니다</span>
+              <span className="shrink-0 font-medium">
+                작성일 {createdDateLabel}{' '}
+                <span title={`마지막 수정 ${updatedDateLabel}`} className="cursor-help">
+                  ⓘ
+                </span>
+              </span>
             </div>
             <textarea
               ref={bodyTextareaRef}
@@ -1870,7 +2221,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </aside>
         )}
-    </div>,
+      </div>
+      {renderShareModal()}
+    </>,
     'min-h-[720px]'
   )
 }
