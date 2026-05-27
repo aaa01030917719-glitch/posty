@@ -1,13 +1,9 @@
+'use client'
+
+import { useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
-import { Calendar } from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
-import {
-  SCRIPT_PART_BADGE_CLASSES,
-  SCRIPT_PART_LABELS,
-  STATUS_COLORS,
-  STATUS_LABELS,
-} from '@/lib/constants'
+import { ChevronDown } from 'lucide-react'
+import { clsx } from 'clsx'
 import type { ContentCard } from '@/lib/types'
 
 interface CampaignRowListProps {
@@ -15,105 +11,138 @@ interface CampaignRowListProps {
   onCardClick?: (card: ContentCard) => void
 }
 
-function hasText(value: string | null | undefined) {
-  return Boolean(value?.trim())
+type CampaignGroup = {
+  id: string
+  title: string
+  cards: ContentCard[]
+  scheduledAt: string | null
 }
 
-function getCardScriptParts(card: ContentCard) {
-  const scripts = card.scripts ?? []
+const UNCATEGORIZED_GROUP_ID = '__uncategorized__'
+const UNCATEGORIZED_GROUP_LABEL = '캠페인 없음'
+const UPLOAD_DATE_PREFIX = '업로드 날짜'
+const NO_UPLOAD_DATE_LABEL = `${UPLOAD_DATE_PREFIX} 미정`
 
-  return [
-    {
-      label: SCRIPT_PART_LABELS.body,
-      active: scripts.some((script) => hasText(script.body)),
-      className: SCRIPT_PART_BADGE_CLASSES.body,
-    },
-    {
-      label: SCRIPT_PART_LABELS.caption,
-      active: scripts.some((script) => hasText(script.caption)),
-      className: SCRIPT_PART_BADGE_CLASSES.caption,
-    },
-    {
-      label: SCRIPT_PART_LABELS.hashtags,
-      active: scripts.some((script) => hasText(script.hashtags)),
-      className: SCRIPT_PART_BADGE_CLASSES.hashtags,
-    },
-    {
-      label: SCRIPT_PART_LABELS.thumbnail,
-      active: scripts.some((script) => hasText(script.thumbnail_text)),
-      className: SCRIPT_PART_BADGE_CLASSES.thumbnail,
-    },
-  ].filter((item) => item.active)
+function getScheduleValue(card: ContentCard) {
+  return card.scheduled_at || card.published_at || null
 }
 
-function ContentRow({
-  card,
-  onCardClick,
-}: {
-  card: ContentCard
-  onCardClick?: (card: ContentCard) => void
-}) {
-  const scheduled = card.scheduled_at || card.published_at
-  const projectTitle = card.project?.title?.trim()
-  const scriptParts = getCardScriptParts(card)
+function getTimeSlotLabel(value: Date) {
+  const hours = value.getHours()
 
-  return (
-    <button
-      type="button"
-      onClick={() => onCardClick?.(card)}
-      className="group grid w-full gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3.5 text-left transition-[background-color,border-color,box-shadow] hover:border-[var(--color-border-default)] hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-    >
-      <span className="min-w-0">
-        {projectTitle && (
-          <span className="mb-1 block truncate text-xs text-[var(--color-text-muted)]">
-            {projectTitle}
-          </span>
-        )}
-        <span className="block truncate text-sm font-semibold text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-text-primary)]">
-          {card.title}
-        </span>
-        {scriptParts.length > 0 && (
-          <span className="mt-2 flex flex-wrap gap-1.5">
-            {scriptParts.map((part) => (
-              <span
-                key={`${card.id}-${part.label}`}
-                className={`rounded-[4px] px-1.5 py-0.5 text-[10.5px] font-semibold ${part.className}`}
-              >
-                {part.label}
-              </span>
-            ))}
-          </span>
-        )}
-      </span>
+  if (hours < 12) return '오전'
+  if (hours < 18) return '오후'
+  return '저녁'
+}
 
-      <span className="flex flex-wrap items-center gap-2 text-xs md:justify-end">
-        {card.channel && (
-          <span className="text-[var(--color-text-secondary)]">{card.channel.name}</span>
-        )}
-        <Badge label={STATUS_LABELS[card.status]} color={STATUS_COLORS[card.status]} />
-        {scheduled && (
-          <span className="flex items-center gap-1 text-[var(--color-text-muted)]">
-            <Calendar size={11} />
-            <span className="font-mono">
-              {format(new Date(scheduled), 'M/d(E)', { locale: ko })}
-            </span>
-          </span>
-        )}
-      </span>
-    </button>
-  )
+function formatUploadDate(value: string | null | undefined) {
+  if (!value) return NO_UPLOAD_DATE_LABEL
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return NO_UPLOAD_DATE_LABEL
+
+  return `${UPLOAD_DATE_PREFIX} ${format(date, 'yy. MM. dd')} ${getTimeSlotLabel(date)}`
+}
+
+function getGroupScheduledAt(cards: ContentCard[]) {
+  return cards.map(getScheduleValue).find(Boolean) ?? null
+}
+
+function createCampaignGroups(cards: ContentCard[]) {
+  const groups = new Map<string, CampaignGroup>()
+
+  cards.forEach((card) => {
+    const groupId = card.project_id || UNCATEGORIZED_GROUP_ID
+    const groupTitle = card.project?.title?.trim() || UNCATEGORIZED_GROUP_LABEL
+    const group = groups.get(groupId)
+
+    if (group) {
+      group.cards.push(card)
+      group.scheduledAt = group.scheduledAt || getScheduleValue(card)
+      return
+    }
+
+    groups.set(groupId, {
+      id: groupId,
+      title: groupTitle,
+      cards: [card],
+      scheduledAt: getScheduleValue(card),
+    })
+  })
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    scheduledAt: group.scheduledAt || getGroupScheduledAt(group.cards),
+  }))
 }
 
 export function CampaignRowList({ cards, onCardClick }: CampaignRowListProps) {
-  if (cards.length === 0) {
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<string[]>([])
+  const campaignGroups = useMemo(() => createCampaignGroups(cards), [cards])
+
+  if (campaignGroups.length === 0) {
     return null
   }
 
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroupIds((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
+    )
+  }
+
   return (
-    <div className="flex flex-col gap-2">
-      {cards.map((card) => (
-        <ContentRow key={card.id} card={card} onCardClick={onCardClick} />
-      ))}
+    <div className="border-y border-[var(--color-border-soft)]">
+      {campaignGroups.map((group) => {
+        const isCollapsed = collapsedGroupIds.includes(group.id)
+
+        return (
+          <section key={group.id} className="border-b border-[var(--color-border-soft)] last:border-b-0">
+            <button
+              type="button"
+              aria-expanded={!isCollapsed}
+              onClick={() => toggleGroup(group.id)}
+              className="flex w-full items-center justify-between gap-4 px-1 py-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="min-w-0 truncate text-sm font-semibold text-[var(--color-text-primary)]">
+                  {group.title}
+                </span>
+                <ChevronDown
+                  size={14}
+                  className={clsx(
+                    'shrink-0 text-[var(--color-text-muted)] transition-transform',
+                    isCollapsed && '-rotate-90'
+                  )}
+                />
+              </span>
+              <span className="shrink-0 text-[12px] font-medium text-[var(--color-text-muted)]">
+                {formatUploadDate(group.scheduledAt)}
+              </span>
+            </button>
+
+            {!isCollapsed && (
+              <div>
+                {group.cards.map((card) => (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => onCardClick?.(card)}
+                    className="flex w-full items-center justify-between gap-4 border-t border-[var(--color-border-soft)] px-7 py-2.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                  >
+                    <span className="min-w-0 truncate text-[13px] font-medium text-[var(--color-text-body)]">
+                      {card.title}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-[var(--color-text-muted)]">
+                      {formatUploadDate(getScheduleValue(card))}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )
+      })}
     </div>
   )
 }

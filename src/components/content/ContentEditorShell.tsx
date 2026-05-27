@@ -111,6 +111,12 @@ const UNCATEGORIZED_CONTENT_LABEL = '일반 콘텐츠'
 const EMPTY_CAMPAIGN_CONTENTS_LABEL = '콘텐츠 없음'
 const BODY_TEXTAREA_MIN_HEIGHT = 360
 const BODY_TEXTAREA_MAX_HEIGHT = 560
+const DEFAULT_UPLOAD_TIME_VALUE = '09:00'
+const UPLOAD_TIME_OPTIONS = [
+  { label: '오전', value: DEFAULT_UPLOAD_TIME_VALUE },
+  { label: '오후', value: '13:00' },
+  { label: '저녁', value: '19:00' },
+] as const
 const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
   { value: 'memo', label: '메모' },
   { value: 'checklist', label: '체크리스트' },
@@ -203,6 +209,25 @@ function formatDate(value: string | null, withTime = false) {
   }
 }
 
+function getUploadTimeValueFromHour(hours: number) {
+  if (hours < 12) return '09:00'
+  if (hours < 18) return '13:00'
+  return '19:00'
+}
+
+function normalizeUploadTimeValue(value: string) {
+  if (UPLOAD_TIME_OPTIONS.some((option) => option.value === value)) {
+    return value
+  }
+
+  const [hoursValue] = value.split(':')
+  const hours = Number(hoursValue)
+
+  if (!Number.isFinite(hours)) return DEFAULT_UPLOAD_TIME_VALUE
+
+  return getUploadTimeValueFromHour(hours)
+}
+
 function splitScheduledFields(value: string | null) {
   if (!value) return { date: '', time: '' }
 
@@ -216,18 +241,17 @@ function splitScheduledFields(value: string | null) {
   const month = `${date.getMonth() + 1}`.padStart(2, '0')
   const day = `${date.getDate()}`.padStart(2, '0')
   const hours = `${date.getHours()}`.padStart(2, '0')
-  const minutes = `${date.getMinutes()}`.padStart(2, '0')
 
   return {
     date: `${year}-${month}-${day}`,
-    time: `${hours}:${minutes}`,
+    time: getUploadTimeValueFromHour(Number(hours)),
   }
 }
 
 function toIsoFromScheduledFields(dateValue: string, timeValue: string) {
   if (!dateValue) return null
 
-  const normalizedTime = timeValue || '00:00'
+  const normalizedTime = normalizeUploadTimeValue(timeValue)
   const date = new Date(`${dateValue}T${normalizedTime}`)
 
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
@@ -592,6 +616,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     : null
   const createdDateLabel = card ? formatDate(card.created_at) : ''
   const updatedDateLabel = card ? formatDate(card.updated_at, true) : ''
+  const selectedUploadTimeValue = normalizeUploadTimeValue(scheduledTimeDraft)
 
   useEffect(() => {
     if (saveState !== 'saved') return
@@ -2116,14 +2141,33 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                   aria-label="업로드 날짜"
                   className="h-8 rounded-[5px] border-0 bg-transparent px-0 text-[12px] font-medium text-[var(--color-text-body)] outline-none transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] focus-visible:[box-shadow:var(--focus-ring)]"
                 />
-                <input
-                  type="time"
-                  value={scheduledTimeDraft}
-                  onChange={(event) => setScheduledTimeDraft(event.target.value)}
-                  disabled={isPreview}
-                  aria-label="업로드 시간"
-                  className="h-8 rounded-[5px] border-0 bg-transparent px-0 text-[12px] font-medium text-[var(--color-text-body)] outline-none transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] focus-visible:[box-shadow:var(--focus-ring)]"
-                />
+                <div
+                  className="flex items-center gap-1"
+                  role="group"
+                  aria-label="업로드 시간대"
+                >
+                  {UPLOAD_TIME_OPTIONS.map((option) => {
+                    const isSelected = selectedUploadTimeValue === option.value
+
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setScheduledTimeDraft(option.value)}
+                        disabled={isPreview}
+                        className={clsx(
+                          'h-7 rounded-[5px] px-2 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]',
+                          isSelected
+                            ? 'bg-[var(--color-bg-subtle)] text-[var(--color-text-body)]'
+                            : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)]'
+                        )}
+                        aria-pressed={isSelected}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 
