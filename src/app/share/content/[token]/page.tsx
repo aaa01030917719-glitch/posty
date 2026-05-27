@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { SharedMediaCarousel, type SharedMediaCarouselItem } from '@/components/content/SharedMediaCarousel'
 import { FormattedText } from '@/lib/text-format'
@@ -55,6 +56,10 @@ type ChecklistLike = Partial<ChecklistItem> & {
 
 const MEDIA_BUCKET_NAME = 'content-card-media'
 const MEDIA_SIGNED_URL_EXPIRES_IN = 60 * 60 * 12
+const SHARE_METADATA_FALLBACK_TITLE = '공유 자료'
+const SHARE_METADATA_UNAVAILABLE_TITLE = '공유 링크를 사용할 수 없습니다'
+const SHARE_METADATA_FALLBACK_DESCRIPTION = '공유된 콘텐츠 내용을 확인해보세요'
+const SHARE_METADATA_DESCRIPTION_LIMIT = 140
 const SHARE_SECTION_IDS = {
   body: 'share-section-body',
   script: 'share-section-script',
@@ -101,6 +106,25 @@ function isExpired(expiresAt: string | null) {
 
 function normalizeText(value: string | null | undefined) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeMetadataText(value: string | null | undefined) {
+  return normalizeText(value)
+    .replace(/\|/g, ' ')
+    .replace(/-{3,}/g, ' ')
+    .replace(/[#*_`>[\]()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function truncateMetadataDescription(value: string) {
+  const normalizedValue = normalizeMetadataText(value)
+
+  if (normalizedValue.length <= SHARE_METADATA_DESCRIPTION_LIMIT) {
+    return normalizedValue
+  }
+
+  return `${normalizedValue.slice(0, SHARE_METADATA_DESCRIPTION_LIMIT).trim()}...`
 }
 
 function normalizeScriptScenes(value: string | null | undefined) {
@@ -236,6 +260,124 @@ function normalizeShareSections(value: ShareSection[] | null) {
     .filter((section): section is ShareSection => Boolean(section))
 }
 
+function createSharePageMetadata(title: string, description: string): Metadata {
+  return {
+    title: {
+      absolute: title,
+    },
+    description,
+    openGraph: {
+      title,
+      description,
+      type: 'article',
+    },
+    twitter: {
+      card: 'summary',
+      title,
+      description,
+    },
+  }
+}
+
+function getDescriptionFromPublicContent(
+  card: SharedCard,
+  script: SharedScript | null
+) {
+  const shareSections = normalizeShareSections(card.share_sections)
+  const descriptionSource = [
+    card.memo,
+    ...shareSections.map((section) => section.body),
+    script?.caption,
+    getPlainScriptBody(script?.body),
+    script?.thumbnail_text,
+    script?.hashtags,
+  ].find((value) => normalizeMetadataText(value))
+
+  if (!descriptionSource) {
+    return SHARE_METADATA_FALLBACK_DESCRIPTION
+  }
+
+  return truncateMetadataDescription(descriptionSource)
+}
+
+async function fetchShareLinkWithCard(
+  supabase: NonNullable<ReturnType<typeof createServiceClient>>,
+  token: string
+) {
+  const { data, error } = await supabase
+    .from('content_share_links')
+    .select(
+      `
+        id,
+        card_id,
+        token,
+        is_enabled,
+        expires_at,
+        card:content_cards(
+          id,
+          title,
+          memo,
+          checklist,
+          is_deleted,
+          share_sections
+        )
+      `
+    )
+    .eq('token', token)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Failed to fetch content share link', error)
+  }
+
+  return (data as ShareLinkWithCard | null) ?? null
+}
+
+async function fetchLatestSharedScript(
+  supabase: NonNullable<ReturnType<typeof createServiceClient>>,
+  cardId: string
+) {
+  const { data, error } = await supabase
+    .from('scripts')
+    .select('body, caption, hashtags, thumbnail_text')
+    .eq('card_id', cardId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Failed to fetch shared content script', error)
+  }
+
+  return (data as SharedScript | null) ?? null
+}
+
+export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {
+  const unavailableMetadata = createSharePageMetadata(
+    SHARE_METADATA_UNAVAILABLE_TITLE,
+    SHARE_METADATA_FALLBACK_DESCRIPTION
+  )
+  const { token } = await params
+  const supabase = createServiceClient()
+
+  if (!supabase || !token) {
+    return unavailableMetadata
+  }
+
+  const link = await fetchShareLinkWithCard(supabase, token)
+  const card = link?.card ?? null
+
+  if (!link || !link.is_enabled || isExpired(link.expires_at) || !card || card.is_deleted) {
+    return unavailableMetadata
+  }
+
+  const script = await fetchLatestSharedScript(supabase, card.id)
+  const title = normalizeMetadataText(card.title) || SHARE_METADATA_FALLBACK_TITLE
+  const description = getDescriptionFromPublicContent(card, script)
+
+  return createSharePageMetadata(title, description)
+}
+
 function SharedContentSection({
   id,
   label,
@@ -284,33 +426,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
     return <UnavailableSharePage />
   }
 
-  const { data: shareLink, error: shareLinkError } = await supabase
-    .from('content_share_links')
-    .select(
-      `
-        id,
-        card_id,
-        token,
-        is_enabled,
-        expires_at,
-        card:content_cards(
-          id,
-          title,
-          memo,
-          checklist,
-          is_deleted,
-          share_sections
-        )
-      `
-    )
-    .eq('token', token)
-    .maybeSingle()
-
-  if (shareLinkError) {
-    console.error('Failed to fetch content share link', shareLinkError)
-  }
-
-  const link = shareLink as ShareLinkWithCard | null
+  const link = await fetchShareLinkWithCard(supabase, token)
   const card = link?.card ?? null
 
   if (!link || !link.is_enabled || isExpired(link.expires_at) || !card || card.is_deleted) {
@@ -322,7 +438,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
   const bodyContent = card.memo?.trim() ?? ''
   const [
     { data: mediaRows, error: mediaError },
-    { data: scriptData, error: scriptError },
+    script,
   ] = await Promise.all([
     supabase
       .from('content_card_media')
@@ -330,27 +446,16 @@ export default async function ShareContentPage({ params }: SharePageProps) {
       .eq('card_id', card.id)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),
-    supabase
-      .from('scripts')
-      .select('body, caption, hashtags, thumbnail_text')
-      .eq('card_id', card.id)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    fetchLatestSharedScript(supabase, card.id),
   ])
 
   if (mediaError) {
     console.error('Failed to fetch shared content media', mediaError)
   }
 
-  if (scriptError) {
-    console.error('Failed to fetch shared content script', scriptError)
-  }
-
   const mediaItems = mediaError
     ? []
     : await createSharedMediaItems(supabase, (mediaRows as SharedMedia[] | null) ?? [])
-  const script = (scriptData as SharedScript | null) ?? null
   const scriptScenes = normalizeScriptScenes(script?.body)
   const plainScriptBody = getPlainScriptBody(script?.body)
   const captionContent = normalizeText(script?.caption)
