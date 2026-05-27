@@ -1,9 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { ChevronDown } from 'lucide-react'
-import { clsx } from 'clsx'
 import type { ContentCard } from '@/lib/types'
 
 interface CampaignRowListProps {
@@ -11,17 +8,9 @@ interface CampaignRowListProps {
   onCardClick?: (card: ContentCard) => void
 }
 
-type CampaignGroup = {
-  id: string
-  title: string
-  cards: ContentCard[]
-  scheduledAt: string | null
-}
-
-const UNCATEGORIZED_GROUP_ID = '__uncategorized__'
-const UNCATEGORIZED_GROUP_LABEL = '캠페인 없음'
 const UPLOAD_DATE_PREFIX = '업로드 날짜'
 const NO_UPLOAD_DATE_LABEL = `${UPLOAD_DATE_PREFIX} 미정`
+const FALLBACK_CONTENT_TYPE_LABEL = '콘텐츠'
 
 function getScheduleValue(card: ContentCard) {
   return card.scheduled_at || card.published_at || null
@@ -45,104 +34,35 @@ function formatUploadDate(value: string | null | undefined) {
   return `${UPLOAD_DATE_PREFIX} ${format(date, 'yy. MM. dd')} ${getTimeSlotLabel(date)}`
 }
 
-function getGroupScheduledAt(cards: ContentCard[]) {
-  return cards.map(getScheduleValue).find(Boolean) ?? null
-}
-
-function createCampaignGroups(cards: ContentCard[]) {
-  const groups = new Map<string, CampaignGroup>()
-
-  cards.forEach((card) => {
-    const groupId = card.project_id || UNCATEGORIZED_GROUP_ID
-    const groupTitle = card.project?.title?.trim() || UNCATEGORIZED_GROUP_LABEL
-    const group = groups.get(groupId)
-
-    if (group) {
-      group.cards.push(card)
-      group.scheduledAt = group.scheduledAt || getScheduleValue(card)
-      return
-    }
-
-    groups.set(groupId, {
-      id: groupId,
-      title: groupTitle,
-      cards: [card],
-      scheduledAt: getScheduleValue(card),
-    })
-  })
-
-  return Array.from(groups.values()).map((group) => ({
-    ...group,
-    scheduledAt: group.scheduledAt || getGroupScheduledAt(group.cards),
-  }))
+function getContentTypeLabel(card: ContentCard) {
+  return card.channel?.name?.trim() || card.format?.trim() || FALLBACK_CONTENT_TYPE_LABEL
 }
 
 export function CampaignRowList({ cards, onCardClick }: CampaignRowListProps) {
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState<string[]>([])
-  const campaignGroups = useMemo(() => createCampaignGroups(cards), [cards])
-
-  if (campaignGroups.length === 0) {
+  if (cards.length === 0) {
     return null
   }
 
-  const toggleGroup = (groupId: string) => {
-    setCollapsedGroupIds((prev) =>
-      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId]
-    )
-  }
-
   return (
-    <div className="border-y border-[var(--color-border-soft)]">
-      {campaignGroups.map((group) => {
-        const isCollapsed = collapsedGroupIds.includes(group.id)
-
-        return (
-          <section key={group.id} className="border-b border-[var(--color-border-soft)] last:border-b-0">
-            <button
-              type="button"
-              aria-expanded={!isCollapsed}
-              onClick={() => toggleGroup(group.id)}
-              className="flex w-full items-center justify-between gap-4 px-1 py-3 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="min-w-0 truncate text-sm font-semibold text-[var(--color-text-primary)]">
-                  {group.title}
-                </span>
-                <ChevronDown
-                  size={14}
-                  className={clsx(
-                    'shrink-0 text-[var(--color-text-muted)] transition-transform',
-                    isCollapsed && '-rotate-90'
-                  )}
-                />
-              </span>
-              <span className="shrink-0 text-[12px] font-medium text-[var(--color-text-muted)]">
-                {formatUploadDate(group.scheduledAt)}
-              </span>
-            </button>
-
-            {!isCollapsed && (
-              <div>
-                {group.cards.map((card) => (
-                  <button
-                    key={card.id}
-                    type="button"
-                    onClick={() => onCardClick?.(card)}
-                    className="flex w-full items-center justify-between gap-4 border-t border-[var(--color-border-soft)] px-7 py-2.5 text-left transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
-                  >
-                    <span className="min-w-0 truncate text-[13px] font-medium text-[var(--color-text-body)]">
-                      {card.title}
-                    </span>
-                    <span className="shrink-0 text-[11px] text-[var(--color-text-muted)]">
-                      {formatUploadDate(getScheduleValue(card))}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-        )
-      })}
+    <div className="flex flex-col gap-5">
+      {cards.map((card) => (
+        <button
+          key={card.id}
+          type="button"
+          onClick={() => onCardClick?.(card)}
+          className="group block w-full px-0 py-1 text-left focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+        >
+          <span className="flex items-center justify-between gap-4 text-[12px] text-[var(--color-text-muted)]">
+            <span className="min-w-0 truncate font-semibold text-[var(--color-text-secondary)]">
+              {getContentTypeLabel(card)}
+            </span>
+            <span className="shrink-0 font-medium">{formatUploadDate(getScheduleValue(card))}</span>
+          </span>
+          <span className="mt-1 block truncate text-sm font-medium text-[var(--color-text-primary)] transition-colors group-hover:text-[var(--color-accent)]">
+            {card.title}
+          </span>
+        </button>
+      ))}
     </div>
   )
 }
