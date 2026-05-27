@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { createClient } from '@/lib/supabase/client'
+
+const REMEMBERED_LOGIN_ID_KEY = 'posty:remembered-login-id'
 
 function getLoginErrorMessage(error: unknown) {
   const rawMessage =
@@ -44,8 +46,26 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberLoginId, setRememberLoginId] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const rememberedLoginId = window.localStorage.getItem(REMEMBERED_LOGIN_ID_KEY)
+
+    if (!rememberedLoginId) return
+
+    setEmail(rememberedLoginId)
+    setRememberLoginId(true)
+  }, [])
+
+  const handleRememberLoginIdChange = (checked: boolean) => {
+    setRememberLoginId(checked)
+
+    if (!checked) {
+      window.localStorage.removeItem(REMEMBERED_LOGIN_ID_KEY)
+    }
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -60,6 +80,12 @@ export default function LoginPage() {
         console.error('Login failed', error)
         setError(getLoginErrorMessage(error))
         return
+      }
+
+      if (rememberLoginId && email.trim()) {
+        window.localStorage.setItem(REMEMBERED_LOGIN_ID_KEY, email.trim())
+      } else {
+        window.localStorage.removeItem(REMEMBERED_LOGIN_ID_KEY)
       }
 
       router.push('/schedule')
@@ -112,6 +138,16 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+
+            <label className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={rememberLoginId}
+                onChange={(event) => handleRememberLoginIdChange(event.target.checked)}
+                className="h-4 w-4 rounded border-[var(--color-border-default)] text-[var(--color-accent)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+              />
+              <span>아이디 저장</span>
+            </label>
 
             {error && (
               <p

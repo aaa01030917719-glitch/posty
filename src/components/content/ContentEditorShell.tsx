@@ -9,6 +9,7 @@ import {
   useState,
   type ChangeEvent,
   type ClipboardEvent,
+  type FormEvent,
   type ReactNode,
 } from 'react'
 import {
@@ -26,10 +27,9 @@ import { clsx } from 'clsx'
 import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
-import { getMarkdownTableFromClipboard, insertTextAtSelection } from '@/lib/table-paste'
+import { getMarkdownTableFromClipboard } from '@/lib/table-paste'
 import {
   createMediaMarkdownToken,
-  getMarkdownActionResult,
   MarkdownToolbar,
   type MarkdownToolbarAction,
 } from '@/components/content/MarkdownToolbar'
@@ -118,8 +118,15 @@ const ALL_CONTENT_LABEL = '전체'
 const UNCATEGORIZED_GROUP_ID = '__uncategorized__'
 const UNCATEGORIZED_CONTENT_LABEL = '일반 콘텐츠'
 const EMPTY_CAMPAIGN_CONTENTS_LABEL = '콘텐츠 없음'
-const BODY_TEXTAREA_MIN_HEIGHT = 360
-const BODY_TEXTAREA_MAX_HEIGHT = 560
+const RICH_TEXT_PLACEHOLDER = '\uD14D\uC2A4\uD2B8'
+const RICH_HEADING_PLACEHOLDER = '\uC81C\uBAA9'
+const RICH_SMALL_PLACEHOLDER = '\uC791\uC740\uAE00\uC528'
+const RICH_LINK_TEXT_PLACEHOLDER = '\uB9C1\uD06C \uD14D\uC2A4\uD2B8'
+const RICH_LINK_URL_PLACEHOLDER = 'https://example.com'
+const RICH_MEDIA_UNAVAILABLE_LABEL =
+  '\uCCA8\uBD80 \uBBF8\uB514\uC5B4\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'
+const RICH_MEDIA_IMAGE_LABEL = '\uCCA8\uBD80 \uC774\uBBF8\uC9C0'
+const RICH_MEDIA_VIDEO_LABEL = '\uCCA8\uBD80 \uC601\uC0C1'
 const DEFAULT_UPLOAD_TIME_VALUE = '09:00'
 const UPLOAD_TIME_OPTIONS = [
   { label: '오전', value: DEFAULT_UPLOAD_TIME_VALUE },
@@ -546,9 +553,432 @@ async function createSignedMediaItems(
   )
 }
 
+const EDITOR_MEDIA_TOKEN_PATTERN = /^!\[([^\]]*)\]\(posty-media:([A-Za-z0-9_-]+)\)$/
+const EDITOR_INLINE_MEDIA_PATTERN = /!\[([^\]]*)\]\(posty-media:([A-Za-z0-9_-]+)\)/
+const EDITOR_LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/
+const EDITOR_BOLD_PATTERN = /\*\*([^*\n]+?)\*\*/
+const EDITOR_STRIKE_PATTERN = /~~([^~\n]+?)~~/
+const EDITOR_SMALL_PATTERN = /<small>([^<\n]+?)<\/small>/
+const EDITOR_ITALIC_PATTERN = /\*([^*\n]+?)\*/
+const EDITOR_HEADING_PATTERN = /^\s{0,3}#{1,3}\s+(.+)$/
+const EDITOR_UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
+const EDITOR_ORDERED_LIST_PATTERN = /^\s*\d+\.\s+(.+)$/
+const EDITOR_HR_PATTERN = /^\s*-{3,}\s*$/
+
+type EditorInlineMatch =
+  | {
+      type: 'media'
+      index: number
+      end: number
+      alt: string
+      id: string
+      priority: number
+    }
+  | {
+      type: 'link'
+      index: number
+      end: number
+      label: string
+      href: string
+      priority: number
+    }
+  | {
+      type: 'bold' | 'italic' | 'strike' | 'small'
+      index: number
+      end: number
+      value: string
+      priority: number
+    }
+
+function createMediaItemMap(mediaItems: MediaItem[]) {
+  return new Map(mediaItems.map((item) => [item.id, item]))
+}
+
+function createEditorMediaNode(
+  ownerDocument: Document,
+  media: Pick<MediaItem, 'id' | 'media_type' | 'signedUrl' | 'file_name'> | null,
+  fallback: { id: string; alt?: string; mediaType?: ContentMediaType }
+) {
+  const figure = ownerDocument.createElement('figure')
+  const mediaType = media?.media_type ?? fallback.mediaType ?? 'image'
+  const label = mediaType === 'video' ? RICH_MEDIA_VIDEO_LABEL : RICH_MEDIA_IMAGE_LABEL
+
+  figure.dataset.postyMediaId = media?.id ?? fallback.id
+  figure.dataset.postyMediaType = mediaType
+  figure.dataset.postyMediaAlt = fallback.alt || media?.file_name || label
+  figure.contentEditable = 'false'
+  figure.className =
+    'my-3 overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)]'
+
+  if (media?.signedUrl && mediaType === 'image') {
+    const image = ownerDocument.createElement('img')
+    image.src = media.signedUrl
+    image.alt = fallback.alt || media.file_name || label
+    image.className = 'max-h-[320px] w-full object-contain'
+    figure.appendChild(image)
+    return figure
+  }
+
+  if (media?.signedUrl && mediaType === 'video') {
+    const video = ownerDocument.createElement('video')
+    video.src = media.signedUrl
+    video.controls = true
+    video.preload = 'metadata'
+    video.className = 'max-h-[320px] w-full object-contain'
+    figure.appendChild(video)
+    return figure
+  }
+
+  const fallbackNode = ownerDocument.createElement('div')
+  fallbackNode.className =
+    'px-4 py-6 text-center text-xs text-[var(--color-text-muted)]'
+  fallbackNode.textContent = RICH_MEDIA_UNAVAILABLE_LABEL
+  figure.appendChild(fallbackNode)
+
+  return figure
+}
+
+function matchEditorPattern(
+  source: string,
+  pattern: RegExp,
+  priority: number,
+  type: EditorInlineMatch['type']
+): EditorInlineMatch | null {
+  const match = source.match(pattern)
+
+  if (!match || typeof match.index !== 'number') return null
+
+  if (type === 'media') {
+    return {
+      type,
+      index: match.index,
+      end: match.index + match[0].length,
+      alt: match[1] ?? '',
+      id: match[2],
+      priority,
+    }
+  }
+
+  if (type === 'link') {
+    return {
+      type,
+      index: match.index,
+      end: match.index + match[0].length,
+      label: match[1] ?? '',
+      href: match[2] ?? '',
+      priority,
+    }
+  }
+
+  return {
+    type,
+    index: match.index,
+    end: match.index + match[0].length,
+    value: match[1] ?? '',
+    priority,
+  }
+}
+
+function getNextEditorInlineMatch(source: string) {
+  const matches = [
+    matchEditorPattern(source, EDITOR_INLINE_MEDIA_PATTERN, 0, 'media'),
+    matchEditorPattern(source, EDITOR_LINK_PATTERN, 1, 'link'),
+    matchEditorPattern(source, EDITOR_BOLD_PATTERN, 2, 'bold'),
+    matchEditorPattern(source, EDITOR_STRIKE_PATTERN, 3, 'strike'),
+    matchEditorPattern(source, EDITOR_SMALL_PATTERN, 4, 'small'),
+    matchEditorPattern(source, EDITOR_ITALIC_PATTERN, 5, 'italic'),
+  ].filter((match): match is EditorInlineMatch => Boolean(match))
+
+  return matches.sort((a, b) => a.index - b.index || a.priority - b.priority)[0] ?? null
+}
+
+function appendInlineEditorNodes(
+  ownerDocument: Document,
+  parent: HTMLElement | DocumentFragment,
+  source: string,
+  mediaById: Map<string, MediaItem>
+) {
+  let remaining = source
+
+  while (remaining) {
+    const match = getNextEditorInlineMatch(remaining)
+
+    if (!match) {
+      parent.appendChild(ownerDocument.createTextNode(remaining))
+      break
+    }
+
+    if (match.index > 0) {
+      parent.appendChild(ownerDocument.createTextNode(remaining.slice(0, match.index)))
+    }
+
+    if (match.type === 'media') {
+      parent.appendChild(
+        createEditorMediaNode(ownerDocument, mediaById.get(match.id) ?? null, {
+          id: match.id,
+          alt: match.alt,
+        })
+      )
+    } else if (match.type === 'link') {
+      const link = ownerDocument.createElement('a')
+      link.href = match.href
+      link.dataset.postyLink = 'true'
+      link.className = 'text-[var(--color-accent)] underline underline-offset-2'
+      appendInlineEditorNodes(ownerDocument, link, match.label, mediaById)
+      parent.appendChild(link)
+    } else {
+      const element = ownerDocument.createElement(
+        match.type === 'bold'
+          ? 'strong'
+          : match.type === 'italic'
+            ? 'em'
+            : match.type === 'strike'
+              ? 'del'
+              : 'span'
+      )
+
+      if (match.type === 'small') {
+        element.dataset.postySize = 'small'
+        element.className = 'text-[0.86em] leading-relaxed text-[var(--color-text-secondary)]'
+      }
+
+      appendInlineEditorNodes(ownerDocument, element, match.value, mediaById)
+      parent.appendChild(element)
+    }
+
+    remaining = remaining.slice(match.end)
+  }
+}
+
+function appendParagraphNode(
+  ownerDocument: Document,
+  root: HTMLElement,
+  text: string,
+  mediaById: Map<string, MediaItem>
+) {
+  const paragraph = ownerDocument.createElement('p')
+  paragraph.className = 'my-0 min-h-[1.85em]'
+
+  if (text) {
+    appendInlineEditorNodes(ownerDocument, paragraph, text, mediaById)
+  } else {
+    paragraph.appendChild(ownerDocument.createElement('br'))
+  }
+
+  root.appendChild(paragraph)
+}
+
+function renderMarkdownIntoEditor(root: HTMLDivElement, markdown: string, mediaItems: MediaItem[]) {
+  const ownerDocument = root.ownerDocument
+  const mediaById = createMediaItemMap(mediaItems)
+  const lines = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+
+  root.replaceChildren()
+
+  if (!markdown.trim()) return
+
+  for (let index = 0; index < lines.length; ) {
+    const line = lines[index]
+    const mediaMatch = line.trim().match(EDITOR_MEDIA_TOKEN_PATTERN)
+    const headingMatch = line.match(EDITOR_HEADING_PATTERN)
+
+    if (!line.trim()) {
+      appendParagraphNode(ownerDocument, root, '', mediaById)
+      index += 1
+      continue
+    }
+
+    if (mediaMatch) {
+      root.appendChild(
+        createEditorMediaNode(ownerDocument, mediaById.get(mediaMatch[2]) ?? null, {
+          id: mediaMatch[2],
+          alt: mediaMatch[1],
+        })
+      )
+      index += 1
+      continue
+    }
+
+    if (EDITOR_HR_PATTERN.test(line)) {
+      root.appendChild(ownerDocument.createElement('hr'))
+      index += 1
+      continue
+    }
+
+    if (headingMatch) {
+      const heading = ownerDocument.createElement('h2')
+      heading.className = 'my-0 text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]'
+      appendInlineEditorNodes(ownerDocument, heading, headingMatch[1], mediaById)
+      root.appendChild(heading)
+      index += 1
+      continue
+    }
+
+    const unorderedItem = line.match(EDITOR_UNORDERED_LIST_PATTERN)?.[1]
+    if (unorderedItem) {
+      const list = ownerDocument.createElement('ul')
+      list.className = 'my-0 list-disc space-y-1 pl-5'
+
+      while (index < lines.length) {
+        const item = lines[index].match(EDITOR_UNORDERED_LIST_PATTERN)?.[1]
+        if (!item) break
+
+        const listItem = ownerDocument.createElement('li')
+        appendInlineEditorNodes(ownerDocument, listItem, item, mediaById)
+        list.appendChild(listItem)
+        index += 1
+      }
+
+      root.appendChild(list)
+      continue
+    }
+
+    const orderedItem = line.match(EDITOR_ORDERED_LIST_PATTERN)?.[1]
+    if (orderedItem) {
+      const list = ownerDocument.createElement('ol')
+      list.className = 'my-0 list-decimal space-y-1 pl-5'
+
+      while (index < lines.length) {
+        const item = lines[index].match(EDITOR_ORDERED_LIST_PATTERN)?.[1]
+        if (!item) break
+
+        const listItem = ownerDocument.createElement('li')
+        appendInlineEditorNodes(ownerDocument, listItem, item, mediaById)
+        list.appendChild(listItem)
+        index += 1
+      }
+
+      root.appendChild(list)
+      continue
+    }
+
+    appendParagraphNode(ownerDocument, root, line, mediaById)
+    index += 1
+  }
+}
+
+function serializeInlineEditorNode(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent?.replace(/\u00a0/g, ' ') ?? ''
+  }
+
+  if (!(node instanceof HTMLElement)) return ''
+
+  const mediaId = node.dataset.postyMediaId
+
+  if (mediaId) {
+    const mediaType = node.dataset.postyMediaType === 'video' ? 'video' : 'image'
+    return createMediaMarkdownToken({ id: mediaId, media_type: mediaType })
+  }
+
+  if (node.tagName === 'BR') return '\n'
+
+  const content = Array.from(node.childNodes).map(serializeInlineEditorNode).join('')
+
+  if (node.tagName === 'STRONG' || node.tagName === 'B') return `**${content}**`
+  if (node.tagName === 'EM' || node.tagName === 'I') return `*${content}*`
+  if (node.tagName === 'DEL' || node.tagName === 'S' || node.tagName === 'STRIKE') {
+    return `~~${content}~~`
+  }
+  if (node.dataset.postySize === 'small' || node.tagName === 'SMALL') {
+    return `<small>${content}</small>`
+  }
+  if (node.tagName === 'A') {
+    const href = node.getAttribute('href') || RICH_LINK_URL_PLACEHOLDER
+    return `[${content || RICH_LINK_TEXT_PLACEHOLDER}](${href})`
+  }
+
+  return content
+}
+
+function serializeEditorBlock(node: ChildNode, index: number): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+  if (!(node instanceof HTMLElement)) return ''
+
+  const mediaId = node.dataset.postyMediaId
+
+  if (mediaId) {
+    const mediaType = node.dataset.postyMediaType === 'video' ? 'video' : 'image'
+    return createMediaMarkdownToken({ id: mediaId, media_type: mediaType })
+  }
+
+  if (node.tagName === 'HR') return '---'
+
+  if (node.tagName === 'UL' || node.tagName === 'OL') {
+    const ordered = node.tagName === 'OL'
+
+    return Array.from(node.children)
+      .filter((child) => child.tagName === 'LI')
+      .map((child, itemIndex) => {
+        const prefix = ordered ? `${itemIndex + 1}.` : '-'
+        return `${prefix} ${serializeInlineEditorNode(child).trim()}`
+      })
+      .join('\n')
+  }
+
+  if (node.tagName === 'H1' || node.tagName === 'H2' || node.tagName === 'H3') {
+    return `## ${serializeInlineEditorNode(node).trim()}`
+  }
+
+  const value = serializeInlineEditorNode(node)
+
+  return index === 0 ? value.replace(/^\n+/, '') : value
+}
+
+function serializeEditorToMarkdown(root: HTMLDivElement) {
+  return Array.from(root.childNodes)
+    .map(serializeEditorBlock)
+    .join('\n')
+    .replace(/\n{4,}/g, '\n\n\n')
+}
+
+function isSelectionInsideElement(element: HTMLElement) {
+  const selection = window.getSelection()
+
+  if (!selection || selection.rangeCount === 0) return false
+
+  const range = selection.getRangeAt(0)
+
+  return element.contains(range.commonAncestorContainer)
+}
+
+function moveSelectionAfterNode(node: Node) {
+  const selection = window.getSelection()
+  const ownerDocument = node.ownerDocument ?? document
+  const range = ownerDocument.createRange()
+
+  range.setStartAfter(node)
+  range.collapse(true)
+  selection?.removeAllRanges()
+  selection?.addRange(range)
+}
+
+function insertNodeAtSelection(editor: HTMLDivElement, node: Node) {
+  editor.focus()
+
+  const selection = window.getSelection()
+  const range =
+    selection && selection.rangeCount > 0 && isSelectionInsideElement(editor)
+      ? selection.getRangeAt(0)
+      : editor.ownerDocument.createRange()
+
+  if (!selection || !isSelectionInsideElement(editor)) {
+    range.selectNodeContents(editor)
+    range.collapse(false)
+  }
+
+  range.deleteContents()
+  range.insertNode(node)
+  moveSelectionAfterNode(node)
+}
+
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const bodyEditorRef = useRef<HTMLDivElement | null>(null)
+  const bodyEditorSelectionRef = useRef<Range | null>(null)
+  const lastEditorMarkdownRef = useRef('')
+  const lastEditorMediaKeyRef = useRef('')
   const [card, setCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(true)
@@ -609,7 +1039,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     () => sidebarCards.filter((sidebarCard) => !sidebarCard.project_id),
     [sidebarCards]
   )
-  const activeSidebarProjectId = card?.project_id ?? null
+  const activeSidebarProjectId = selectedProjectId || null
   const selectedCampaignProject = useMemo(() => {
     if (!selectedProjectId) return null
 
@@ -626,6 +1056,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const createdDateLabel = card ? formatDate(card.created_at) : ''
   const updatedDateLabel = card ? formatDate(card.updated_at, true) : ''
   const selectedUploadTimeValue = normalizeUploadTimeValue(scheduledTimeDraft)
+  const mediaRenderKey = useMemo(
+    () => mediaItems.map((item) => `${item.id}:${item.signedUrl ?? ''}`).join('|'),
+    [mediaItems]
+  )
 
   useEffect(() => {
     if (saveState !== 'saved') return
@@ -647,20 +1081,21 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }, [shareFeedback])
 
   useEffect(() => {
-    const textarea = bodyTextareaRef.current
+    const editor = bodyEditorRef.current
 
-    if (!textarea) return
+    if (!editor) return
+    if (
+      lastEditorMarkdownRef.current === bodyDraft &&
+      lastEditorMediaKeyRef.current === mediaRenderKey
+    ) {
+      return
+    }
+    if (document.activeElement === editor) return
 
-    textarea.style.height = 'auto'
-    const nextHeight = Math.min(
-      Math.max(textarea.scrollHeight, BODY_TEXTAREA_MIN_HEIGHT),
-      BODY_TEXTAREA_MAX_HEIGHT
-    )
-
-    textarea.style.height = `${nextHeight}px`
-    textarea.style.overflowY =
-      textarea.scrollHeight > BODY_TEXTAREA_MAX_HEIGHT ? 'auto' : 'hidden'
-  }, [bodyDraft])
+    renderMarkdownIntoEditor(editor, bodyDraft, mediaItems)
+    lastEditorMarkdownRef.current = bodyDraft
+    lastEditorMediaKeyRef.current = mediaRenderKey
+  }, [bodyDraft, mediaItems, mediaRenderKey])
 
   useEffect(() => {
     let cancelled = false
@@ -1194,15 +1629,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
-  const handleMediaUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget
-    const files = Array.from(input.files ?? [])
-
-    if (!files.length || isPreview || !card || card.is_deleted || mediaUploading) {
-      input.value = ''
-      return
-    }
-
+  const uploadMediaFiles = async (files: File[]) => {
     const uploadableFiles = files
       .map((file) => ({
         file,
@@ -1214,8 +1641,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       )
 
     if (uploadableFiles.length === 0) {
-      input.value = ''
-      return
+      return []
+    }
+
+    if (isPreview || !card || card.is_deleted || mediaUploading) {
+      return []
     }
 
     setMediaUploading(true)
@@ -1274,13 +1704,27 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       }
 
       setMediaItems((prev) => sortMediaItems([...prev, ...uploadedItems]))
+      return uploadedItems
     } catch (error) {
       console.error('Failed to upload content media', error)
       window.alert(MEDIA_UPLOAD_ERROR)
+      return []
     } finally {
       setMediaUploading(false)
-      input.value = ''
     }
+  }
+
+  const handleMediaUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const files = Array.from(input.files ?? [])
+
+    if (!files.length) {
+      input.value = ''
+      return
+    }
+
+    await uploadMediaFiles(files)
+    input.value = ''
   }
 
   const handleDeleteMedia = async (media: MediaItem) => {
@@ -1319,79 +1763,228 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
-  const updateBodyDraftWithSelection = (
-    nextValue: string,
-    selectionStart: number,
-    selectionEnd: number
-  ) => {
+  const syncBodyDraftFromEditor = () => {
+    const editor = bodyEditorRef.current
+
+    if (!editor) return
+
+    const nextValue = serializeEditorToMarkdown(editor)
+    lastEditorMarkdownRef.current = nextValue
     setBodyDraft(nextValue)
+  }
 
-    window.requestAnimationFrame(() => {
-      const textarea = bodyTextareaRef.current
+  const storeBodyEditorSelection = () => {
+    const editor = bodyEditorRef.current
+    const selection = window.getSelection()
 
-      if (!textarea) return
+    if (!editor || !selection || selection.rangeCount === 0) return
 
-      textarea.selectionStart = selectionStart
-      textarea.selectionEnd = selectionEnd
-      textarea.focus()
+    const range = selection.getRangeAt(0)
+
+    if (!editor.contains(range.commonAncestorContainer)) return
+
+    bodyEditorSelectionRef.current = range.cloneRange()
+  }
+
+  const restoreBodyEditorSelection = () => {
+    const editor = bodyEditorRef.current
+    const selection = window.getSelection()
+    const range = bodyEditorSelectionRef.current
+
+    if (!editor || !selection) return
+
+    editor.focus()
+
+    if (range && editor.contains(range.commonAncestorContainer)) {
+      selection.removeAllRanges()
+      selection.addRange(range)
+      return
+    }
+
+    const fallbackRange = editor.ownerDocument.createRange()
+    fallbackRange.selectNodeContents(editor)
+    fallbackRange.collapse(false)
+    selection.removeAllRanges()
+    selection.addRange(fallbackRange)
+  }
+
+  const ensureBodyEditorSelectionText = (placeholder: string) => {
+    const editor = bodyEditorRef.current
+    const selection = window.getSelection()
+
+    if (!editor || !selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+
+    if (!range.collapsed) return
+
+    const textNode = editor.ownerDocument.createTextNode(placeholder)
+    range.insertNode(textNode)
+    range.setStart(textNode, 0)
+    range.setEnd(textNode, placeholder.length)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+
+  const wrapBodyEditorSelection = (
+    tagName: 'span',
+    options: { dataset?: Record<string, string>; className?: string; placeholder: string }
+  ) => {
+    restoreBodyEditorSelection()
+    ensureBodyEditorSelectionText(options.placeholder)
+
+    const editor = bodyEditorRef.current
+    const selection = window.getSelection()
+
+    if (!editor || !selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+    const wrapper = editor.ownerDocument.createElement(tagName)
+
+    Object.entries(options.dataset ?? {}).forEach(([key, value]) => {
+      wrapper.dataset[key] = value
     })
+
+    if (options.className) {
+      wrapper.className = options.className
+    }
+
+    wrapper.appendChild(range.extractContents())
+    range.insertNode(wrapper)
+
+    const nextRange = editor.ownerDocument.createRange()
+    nextRange.selectNodeContents(wrapper)
+    selection.removeAllRanges()
+    selection.addRange(nextRange)
+    bodyEditorSelectionRef.current = nextRange.cloneRange()
+    syncBodyDraftFromEditor()
+  }
+
+  const insertPlainTextIntoBodyEditor = (text: string) => {
+    restoreBodyEditorSelection()
+    document.execCommand('insertText', false, text)
+    syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
+  }
+
+  const insertMediaItemIntoBodyEditor = (media: MediaItem) => {
+    const editor = bodyEditorRef.current
+
+    if (!editor) return
+
+    restoreBodyEditorSelection()
+    insertNodeAtSelection(
+      editor,
+      createEditorMediaNode(editor.ownerDocument, media, {
+        id: media.id,
+        mediaType: media.media_type,
+        alt: media.file_name ?? undefined,
+      })
+    )
+    syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
   }
 
   const handleBodyToolbarAction = (action: MarkdownToolbarAction) => {
-    const textarea = bodyTextareaRef.current
-    const source = textarea?.value ?? bodyDraft
-    const selectionStart = textarea?.selectionStart ?? source.length
-    const selectionEnd = textarea?.selectionEnd ?? selectionStart
-    const nextDraft = getMarkdownActionResult(source, selectionStart, selectionEnd, action)
+    const editor = bodyEditorRef.current
 
-    updateBodyDraftWithSelection(
-      nextDraft.value,
-      nextDraft.selectionStart,
-      nextDraft.selectionEnd
-    )
+    if (!editor || isPreview) return
+
+    if (action === 'media') {
+      const firstMedia = mediaItems[0]
+
+      if (firstMedia) {
+        insertMediaItemIntoBodyEditor(firstMedia)
+      } else {
+        window.alert('본문에 넣을 첨부 미디어가 없습니다.')
+      }
+
+      return
+    }
+
+    restoreBodyEditorSelection()
+
+    if (action === 'bold') {
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      document.execCommand('bold')
+    } else if (action === 'italic') {
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      document.execCommand('italic')
+    } else if (action === 'strike') {
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      document.execCommand('strikeThrough')
+    } else if (action === 'bulletList') {
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      document.execCommand('insertUnorderedList')
+    } else if (action === 'orderedList') {
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      document.execCommand('insertOrderedList')
+    } else if (action === 'link') {
+      ensureBodyEditorSelectionText(RICH_LINK_TEXT_PLACEHOLDER)
+      document.execCommand('createLink', false, RICH_LINK_URL_PLACEHOLDER)
+    } else if (action === 'hr') {
+      const hr = editor.ownerDocument.createElement('hr')
+      insertNodeAtSelection(editor, hr)
+    } else if (action === 'heading') {
+      ensureBodyEditorSelectionText(RICH_HEADING_PLACEHOLDER)
+      document.execCommand('formatBlock', false, 'h2')
+    } else if (action === 'paragraph') {
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      document.execCommand('formatBlock', false, 'p')
+    } else if (action === 'small') {
+      wrapBodyEditorSelection('span', {
+        placeholder: RICH_SMALL_PLACEHOLDER,
+        dataset: { postySize: 'small' },
+        className: 'text-[0.86em] leading-relaxed text-[var(--color-text-secondary)]',
+      })
+      return
+    }
+
+    syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
   }
 
   const handleInsertMediaIntoBody = (media: MediaItem) => {
-    const textarea = bodyTextareaRef.current
-    const source = textarea?.value ?? bodyDraft
-    const selectionStart = textarea?.selectionStart ?? source.length
-    const selectionEnd = textarea?.selectionEnd ?? selectionStart
-    const nextDraft = insertTextAtSelection(
-      source,
-      createMediaMarkdownToken(media),
-      selectionStart,
-      selectionEnd
-    )
-
-    updateBodyDraftWithSelection(
-      nextDraft.value,
-      nextDraft.cursorPosition,
-      nextDraft.cursorPosition
-    )
+    insertMediaItemIntoBodyEditor(media)
   }
 
-  const handleBodyPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const markdownTable = getMarkdownTableFromClipboard(event.clipboardData)
+  const handleBodyEditorInput = (_event: FormEvent<HTMLDivElement>) => {
+    syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
+  }
 
-    if (!markdownTable) return
-
-    event.preventDefault()
-
-    const textarea = event.currentTarget
-    const nextDraft = insertTextAtSelection(
-      textarea.value,
-      markdownTable,
-      textarea.selectionStart,
-      textarea.selectionEnd
+  const handleBodyPaste = async (event: ClipboardEvent<HTMLDivElement>) => {
+    const files = Array.from(event.clipboardData.files ?? []).filter((file) =>
+      Boolean(getMediaType(file.type))
     )
 
-    setBodyDraft(nextDraft.value)
+    if (files.length > 0) {
+      event.preventDefault()
 
-    window.requestAnimationFrame(() => {
-      textarea.selectionStart = nextDraft.cursorPosition
-      textarea.selectionEnd = nextDraft.cursorPosition
-      textarea.focus()
-    })
+      if (!card || isPreview || card.is_deleted) {
+        window.alert('저장된 콘텐츠에서만 이미지 붙여넣기를 사용할 수 있습니다.')
+        return
+      }
+
+      const uploadedItems = await uploadMediaFiles(files)
+      uploadedItems.forEach(insertMediaItemIntoBodyEditor)
+      return
+    }
+
+    const markdownTable = getMarkdownTableFromClipboard(event.clipboardData)
+
+    if (markdownTable) {
+      event.preventDefault()
+      insertPlainTextIntoBodyEditor(markdownTable)
+      return
+    }
+
+    const plainText = event.clipboardData.getData('text/plain')
+
+    if (!plainText) return
+
+    event.preventDefault()
+    insertPlainTextIntoBodyEditor(plainText)
   }
 
   const togglePanelSection = (section: EditorSection) => {
@@ -1415,7 +2008,13 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const renderMarkdownToolbar = () => {
-    return <MarkdownToolbar onAction={handleBodyToolbarAction} disabled={isPreview} />
+    return (
+      <MarkdownToolbar
+        onAction={handleBodyToolbarAction}
+        disabled={isPreview}
+        showMediaAction
+      />
+    )
   }
 
   const renderShareModal = () => {
@@ -1818,7 +2417,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     const isUncategorizedActive = Boolean(card) && activeSidebarProjectId === null && !isPreview
 
     return (
-      <aside className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3 lg:min-h-0 lg:overflow-y-auto">
+      <aside className="rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3">
         <div className="mb-2 flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-[var(--color-text-primary)]">
@@ -1842,7 +2441,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             <div>
               <button
                 type="button"
-                onClick={() => toggleCampaignSection(UNCATEGORIZED_GROUP_ID)}
+                onClick={() => {
+                  handleCampaignSelect('')
+                  toggleCampaignSection(UNCATEGORIZED_GROUP_ID)
+                }}
                 aria-expanded={isUncategorizedExpanded}
                 className={clsx(
                   'flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
@@ -1883,7 +2485,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               <div key={project.id}>
                 <button
                   type="button"
-                  onClick={() => toggleCampaignSection(project.id)}
+                  onClick={() => {
+                    handleCampaignSelect(project.id)
+                    toggleCampaignSection(project.id)
+                  }}
                   aria-expanded={isExpanded}
                   className={clsx(
                     'flex w-full items-center justify-between gap-2 rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
@@ -1927,7 +2532,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const renderContentLayout = (children: ReactNode, contentClassName?: string) => (
-    <div className="grid h-full min-h-0 w-full gap-4 overflow-y-auto bg-[var(--color-bg-surface-soft)] p-5 md:p-6 lg:grid-cols-[240px_minmax(0,1180px)] lg:items-start lg:justify-center">
+    <div className="grid min-h-[calc(100vh-96px)] w-full gap-4 bg-[#F3F4F6] p-5 md:p-6 lg:grid-cols-[240px_minmax(0,1280px)] lg:items-stretch lg:justify-center">
       {renderCampaignSidebar()}
       <section
         className={clsx(
@@ -2050,8 +2655,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
   return renderContentLayout(
     <>
-      <div className="flex min-h-[720px] w-full flex-col bg-[var(--color-bg-surface)] xl:flex-row">
-        <div className="editor-wrap flex min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
+      <div className="flex h-full min-h-[640px] w-full flex-col bg-[var(--color-bg-surface)] xl:flex-row">
+        <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
           <div className="topbar flex items-center justify-between border-b border-[var(--color-border-soft)] px-5 py-3">
             <div className="breadcrumb flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
               <Link href="/content" className="transition-colors hover:text-[var(--color-text-body)]">
@@ -2145,7 +2750,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </span>
             )}
 
-            <div className="mb-1 w-full max-w-[720px] text-sm">
+            <div className="hidden">
               <button
                 type="button"
                 aria-expanded={campaignPickerOpen}
@@ -2205,7 +2810,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               )}
             </div>
 
-            <div className="mb-1 flex w-full max-w-[720px] flex-wrap items-center justify-between gap-2 text-[12px] text-[var(--color-text-muted)]">
+            <div className="mb-1 flex w-full flex-wrap items-center justify-between gap-2 text-[12px] text-[var(--color-text-muted)]">
               <span className="font-semibold">업로드 날짜</span>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <input
@@ -2246,7 +2851,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </div>
             </div>
 
-            <div className="mb-2 w-full max-w-[720px]">
+            <div className="mb-2 w-full">
               <input
                 type="text"
                 value={titleDraft}
@@ -2386,8 +2991,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </div>
 
-          <div className="editor-body-wrap px-11 py-3">
-            <div className="mb-2 flex w-full max-w-[620px] items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
+          <div className="editor-body-wrap flex min-h-0 flex-1 flex-col px-11 py-3">
+            <div className="mb-2 flex w-full items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
               <span className="min-w-0 truncate font-medium">콘텐츠 내용이 들어갑니다</span>
               <span className="shrink-0 font-medium">
                 작성일 {createdDateLabel}{' '}
@@ -2396,20 +3001,26 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 </span>
               </span>
             </div>
-            <textarea
-              ref={bodyTextareaRef}
-              value={bodyDraft}
-              onChange={(event) => setBodyDraft(event.target.value)}
+            <div
+              ref={bodyEditorRef}
+              contentEditable={!isPreview}
+              suppressContentEditableWarning
+              role="textbox"
+              aria-label="원고"
+              aria-multiline="true"
+              data-placeholder={EDITOR_PLACEHOLDER}
+              onInput={handleBodyEditorInput}
               onPaste={handleBodyPaste}
-              rows={16}
-              className="min-h-[360px] max-h-[560px] w-full max-w-[620px] resize-none overflow-hidden border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
-              placeholder={EDITOR_PLACEHOLDER}
+              onKeyUp={storeBodyEditorSelection}
+              onMouseUp={storeBodyEditorSelection}
+              onFocus={storeBodyEditorSelection}
+              className="min-h-[420px] w-full flex-1 overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none empty:before:pointer-events-none empty:before:text-[var(--color-text-muted-soft)] empty:before:content-[attr(data-placeholder)] [&_h1]:my-0 [&_h2]:my-0 [&_h2]:text-[30px] [&_h2]:font-semibold [&_h2]:leading-[1.35] [&_h3]:my-0 [&_ol]:my-0 [&_p]:my-0 [&_ul]:my-0"
             />
           </div>
         </div>
 
         {panelOpen && (
-          <aside className="right-panel flex max-h-[420px] w-full shrink-0 flex-col overflow-hidden border-t border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:max-h-none xl:w-[340px] xl:border-l xl:border-t-0">
+          <aside className="right-panel flex h-full w-full shrink-0 flex-col overflow-hidden border-t border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:w-[400px] xl:border-l xl:border-t-0">
             <div className="rp-head flex items-center gap-[5px] border-b border-[var(--color-border-soft)] px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate px-1 text-[13px] font-semibold text-[var(--color-text-primary)]">
@@ -2484,6 +3095,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       </div>
       {renderShareModal()}
     </>,
-    'min-h-[720px]'
+    'flex h-full min-h-[640px]'
   )
 }

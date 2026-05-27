@@ -486,14 +486,14 @@ export default function ShareMaterialsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid min-h-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
-            <div className="border-b border-[var(--color-border-soft)] px-4 py-3">
-              <p className="text-xs font-semibold text-[var(--color-text-muted)]">
+        <div className="grid min-h-0 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="min-h-0 rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3 lg:overflow-y-auto">
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">
                 공유 자료 {materials.length}개
               </p>
             </div>
-            <div className="max-h-[calc(100vh-220px)] overflow-y-auto p-2">
+            <div className="flex flex-col gap-1">
               {materials.map((material) => {
                 const active = material.id === selectedMaterial?.id
                 const sectionCount = normalizeShareSections(material.card?.share_sections ?? []).length
@@ -504,13 +504,13 @@ export default function ShareMaterialsPage() {
                     type="button"
                     onClick={() => setSelectedLinkId(material.id)}
                     className={clsx(
-                      'mb-1 flex w-full flex-col rounded-[var(--radius-md)] px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                      'flex w-full flex-col rounded-[var(--radius-md)] px-2.5 py-2 text-left text-xs transition-colors focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
                       active
-                        ? 'bg-[var(--color-bg-accent-soft)]'
-                        : 'hover:bg-[var(--color-bg-subtle)]'
+                        ? 'bg-[var(--color-bg-surface-soft)] text-[var(--color-text-primary)]'
+                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-primary)]'
                     )}
                   >
-                    <span className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
+                    <span className="truncate font-medium">
                       {material.card?.title ?? NEW_MATERIAL_TITLE}
                     </span>
                     <span className="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]">

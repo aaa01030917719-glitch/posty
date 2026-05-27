@@ -11,9 +11,17 @@ import { Input } from '@/components/ui/Input'
 import { Toast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants'
-import type { ContentCard, ContentProjectSummary, ContentStatus, Database } from '@/lib/types'
+import type {
+  ContentCard,
+  ContentCardMedia,
+  ContentProjectSummary,
+  ContentStatus,
+  Database,
+} from '@/lib/types'
 
 type CampaignInsert = Database['public']['Tables']['content_projects']['Insert']
+type ContentCardMediaPreview = ContentCardMedia & { signedUrl?: string | null }
+type ContentCardWithMediaPreview = ContentCard & { media?: ContentCardMediaPreview[] }
 
 const STATUS_FILTERS: Array<ContentStatus | 'all'> = [
   'all',
@@ -56,16 +64,78 @@ const CAMPAIGN_DESCRIPTION_LABEL = '\uC124\uBA85'
 const OPTIONAL_PLACEHOLDER = '\uC120\uD0DD \uC0AC\uD56D'
 const CANCEL_LABEL = '\uCDE8\uC18C'
 const ALL_LABEL = '\uC804\uCCB4'
-const CONTENT_CAMPAIGN_LABEL = '\uCEA0\uD398\uC778 \uC120\uD0DD'
-const NO_CAMPAIGN_OPTION_LABEL = '\uCEA0\uD398\uC778 \uC5C6\uC74C'
+const MEDIA_BUCKET_NAME = 'content-card-media'
 
 function normalizeCampaignTitle(title: string) {
   return title.trim().toLocaleLowerCase()
 }
 
+async function attachMediaPreviewUrls(
+  supabase: ReturnType<typeof createClient>,
+  contentCards: ContentCard[]
+): Promise<ContentCardWithMediaPreview[]> {
+  const cardIds = contentCards.map((card) => card.id)
+
+  if (cardIds.length === 0) {
+    return contentCards
+  }
+
+  const { data, error } = await supabase
+    .from('content_card_media')
+    .select('id, user_id, card_id, storage_path, file_name, mime_type, media_type, sort_order, created_at')
+    .in('card_id', cardIds)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.error('Failed to fetch content media previews', error)
+    return contentCards
+  }
+
+  const firstMediaByCard = ((data as ContentCardMedia[] | null) ?? []).reduce<
+    Record<string, ContentCardMedia>
+  >((acc, media) => {
+    if (!acc[media.card_id]) {
+      acc[media.card_id] = media
+    }
+
+    return acc
+  }, {})
+
+  const mediaWithUrls = await Promise.all(
+    Object.values(firstMediaByCard).map(async (media) => {
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from(MEDIA_BUCKET_NAME)
+        .createSignedUrl(media.storage_path, 60 * 60)
+
+      if (signedError) {
+        console.error('Failed to create content media preview URL', signedError)
+      }
+
+      return {
+        ...media,
+        signedUrl: signedData?.signedUrl ?? null,
+      }
+    })
+  )
+
+  const mediaPreviewByCard = mediaWithUrls.reduce<Record<string, ContentCardMediaPreview[]>>(
+    (acc, media) => {
+      acc[media.card_id] = [media]
+      return acc
+    },
+    {}
+  )
+
+  return contentCards.map((card) => ({
+    ...card,
+    media: mediaPreviewByCard[card.id] ?? [],
+  }))
+}
+
 export default function ContentPage() {
   const router = useRouter()
-  const [cards, setCards] = useState<ContentCard[]>([])
+  const [cards, setCards] = useState<ContentCardWithMediaPreview[]>([])
   const [projects, setProjects] = useState<ContentProjectSummary[]>([])
   const [statusFilter, setStatusFilter] = useState<ContentStatus | 'all'>('all')
   const [search, setSearch] = useState('')
@@ -78,7 +148,6 @@ export default function ContentPage() {
   const [campaignRequestError, setCampaignRequestError] = useState<string | null>(null)
   const [campaignToastOpen, setCampaignToastOpen] = useState(false)
   const [campaignToastNonce, setCampaignToastNonce] = useState(0)
-  const [selectedProjectId, setSelectedProjectId] = useState('')
   const [activeProjectFilter, setActiveProjectFilter] = useState<string>('all')
 
   const normalizedCampaignTitle = normalizeCampaignTitle(campaignTitle)
@@ -124,7 +193,9 @@ export default function ContentPage() {
         console.error('Failed to fetch content projects', projectError)
       }
 
-      setCards((cardData as ContentCard[]) ?? [])
+      const nextCards = await attachMediaPreviewUrls(supabase, (cardData as ContentCard[]) ?? [])
+
+      setCards(nextCards)
       setProjects((projectData as ContentProjectSummary[]) ?? [])
       setLoading(false)
     }
@@ -187,7 +258,8 @@ export default function ContentPage() {
     setCreating(true)
 
     try {
-      const nextId = await createContentCard({ projectId: selectedProjectId || null })
+      const nextProjectId = activeProjectFilter === 'all' ? null : activeProjectFilter
+      const nextId = await createContentCard({ projectId: nextProjectId })
       router.push(`/content/${nextId}`)
     } catch (error) {
       console.error('Failed to create content card', error)
@@ -245,7 +317,6 @@ export default function ContentPage() {
 
       setProjects((prev) => [nextProject, ...prev])
       setActiveProjectFilter(nextProject.id)
-      setSelectedProjectId(nextProject.id)
       setCampaignTitle('')
       setCampaignDescription('')
       setCampaignFormOpen(false)
@@ -260,7 +331,7 @@ export default function ContentPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-5 bg-[var(--color-bg-surface-soft)] p-5 md:p-6">
+    <div className="flex min-h-full flex-col gap-5 bg-white p-5 md:p-6">
       {campaignToastOpen && (
         <Toast
           message={CAMPAIGN_SUCCESS_TOAST}
@@ -285,24 +356,6 @@ export default function ContentPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 lg:ml-auto">
-            {projects.length > 0 && (
-              <label className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
-                <span className="sr-only">{CONTENT_CAMPAIGN_LABEL}</span>
-                <select
-                  value={selectedProjectId}
-                  onChange={(event) => setSelectedProjectId(event.target.value)}
-                  disabled={creating}
-                  className="h-8 max-w-[180px] rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2 text-xs font-medium text-[var(--color-text-secondary)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="">{NO_CAMPAIGN_OPTION_LABEL}</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
             <Button
               size="sm"
               variant="secondary"

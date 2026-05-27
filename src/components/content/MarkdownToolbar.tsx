@@ -2,6 +2,7 @@
 
 import {
   Bold,
+  ImagePlus,
   Italic,
   Link2,
   List,
@@ -12,6 +13,9 @@ import {
 } from 'lucide-react'
 
 export type MarkdownToolbarAction =
+  | 'heading'
+  | 'paragraph'
+  | 'small'
   | 'bold'
   | 'italic'
   | 'strike'
@@ -19,12 +23,14 @@ export type MarkdownToolbarAction =
   | 'orderedList'
   | 'link'
   | 'hr'
+  | 'media'
 
 type MarkdownToolbarProps = {
   onAction: (action: MarkdownToolbarAction) => void
   disabled?: boolean
   className?: string
   toolbarClassName?: string
+  showMediaAction?: boolean
 }
 
 type MarkdownSelectionResult = {
@@ -40,6 +46,8 @@ type MarkdownSnippet = {
 }
 
 const MARKDOWN_TEXT_PLACEHOLDER = '\uD14D\uC2A4\uD2B8'
+const MARKDOWN_HEADING_PLACEHOLDER = '\uC81C\uBAA9'
+const MARKDOWN_SMALL_PLACEHOLDER = '\uC791\uC740\uAE00\uC528'
 const MARKDOWN_LINK_TEXT_PLACEHOLDER = '\uB9C1\uD06C \uD14D\uC2A4\uD2B8'
 const MARKDOWN_LINK_URL_PLACEHOLDER = 'https://example.com'
 const MARKDOWN_MEDIA_IMAGE_LABEL = '\uCCA8\uBD80 \uC774\uBBF8\uC9C0'
@@ -47,8 +55,13 @@ const MARKDOWN_MEDIA_VIDEO_LABEL = '\uCCA8\uBD80 \uC601\uC0C1'
 const MARKDOWN_TOOLBAR_ITEMS: Array<{
   value: MarkdownToolbarAction
   label: string
-  icon: LucideIcon
+  icon?: LucideIcon
+  text?: string
+  mediaOnly?: boolean
 }> = [
+  { value: 'heading', label: '\uC81C\uBAA9', text: '\uC81C\uBAA9' },
+  { value: 'paragraph', label: '\uBCF8\uBB38', text: '\uBCF8\uBB38' },
+  { value: 'small', label: '\uC791\uC740\uAE00\uC528', text: '\uC791\uAC8C' },
   { value: 'bold', label: '\uBCFC\uB4DC', icon: Bold },
   { value: 'italic', label: '\uC774\uD0E4\uB9AD', icon: Italic },
   { value: 'strike', label: '\uCDE8\uC18C\uC120', icon: Strikethrough },
@@ -56,6 +69,7 @@ const MARKDOWN_TOOLBAR_ITEMS: Array<{
   { value: 'orderedList', label: '\uBC88\uD638 \uBAA9\uB85D', icon: ListOrdered },
   { value: 'link', label: '\uB9C1\uD06C', icon: Link2 },
   { value: 'hr', label: '\uAD6C\uBD84\uC120', icon: Minus },
+  { value: 'media', label: '\uC774\uBBF8\uC9C0 \uC0BD\uC785', icon: ImagePlus, mediaOnly: true },
 ]
 
 function createWrappedMarkdownSnippet(selectedText: string, wrapper: string): MarkdownSnippet {
@@ -105,6 +119,33 @@ function createLinkMarkdownSnippet(selectedText: string): MarkdownSnippet {
 
 function createMarkdownSnippet(action: MarkdownToolbarAction, selectedText: string): MarkdownSnippet {
   switch (action) {
+    case 'heading': {
+      const value = selectedText || MARKDOWN_HEADING_PLACEHOLDER
+
+      return {
+        text: `## ${value}`,
+        selectionStartOffset: selectedText ? 3 + value.length : 3,
+        selectionEndOffset: selectedText ? 3 + value.length : 3 + value.length,
+      }
+    }
+    case 'paragraph': {
+      const value = selectedText || MARKDOWN_TEXT_PLACEHOLDER
+
+      return {
+        text: value,
+        selectionStartOffset: selectedText ? value.length : 0,
+        selectionEndOffset: selectedText ? value.length : value.length,
+      }
+    }
+    case 'small': {
+      const value = selectedText || MARKDOWN_SMALL_PLACEHOLDER
+
+      return {
+        text: `<small>${value}</small>`,
+        selectionStartOffset: selectedText ? 15 + value.length : 7,
+        selectionEndOffset: selectedText ? 15 + value.length : 7 + value.length,
+      }
+    }
     case 'bold':
       return createWrappedMarkdownSnippet(selectedText, '**')
     case 'italic':
@@ -118,6 +159,7 @@ function createMarkdownSnippet(action: MarkdownToolbarAction, selectedText: stri
     case 'link':
       return createLinkMarkdownSnippet(selectedText)
     case 'hr':
+    case 'media':
     default:
       return {
         text: '---',
@@ -161,7 +203,7 @@ export function getMarkdownActionResult(
   const selectedText = value.slice(start, end)
   const snippet = createMarkdownSnippet(action, selectedText)
 
-  if (action === 'hr') {
+  if (action === 'hr' || action === 'heading') {
     return insertBlockAtSelection(value, snippet.text, start, end)
   }
 
@@ -185,11 +227,12 @@ export function MarkdownToolbar({
   disabled = false,
   className,
   toolbarClassName,
+  showMediaAction = false,
 }: MarkdownToolbarProps) {
   return (
     <div className={className ?? 'toolbar-wrap shrink-0 border-b border-[var(--color-border-soft)] px-11'}>
       <div className={toolbarClassName ?? 'toolbar flex h-9 items-center gap-1 overflow-x-auto'}>
-        {MARKDOWN_TOOLBAR_ITEMS.map((item) => {
+        {MARKDOWN_TOOLBAR_ITEMS.filter((item) => !item.mediaOnly || showMediaAction).map((item) => {
           const Icon = item.icon
 
           return (
@@ -200,9 +243,12 @@ export function MarkdownToolbar({
               disabled={disabled}
               title={item.label}
               aria-label={item.label}
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted-soft)]"
+              className={[
+                'flex h-6 shrink-0 items-center justify-center rounded-[4px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted-soft)]',
+                item.text ? 'px-1.5 text-[11px] font-semibold' : 'w-6',
+              ].join(' ')}
             >
-              <Icon size={14} />
+              {Icon ? <Icon size={14} /> : item.text}
             </button>
           )
         })}

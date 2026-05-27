@@ -13,6 +13,10 @@ type TextBlock =
       value: string
     }
   | {
+      type: 'heading'
+      value: string
+    }
+  | {
       type: 'table'
       header: string[]
       rows: string[][]
@@ -55,7 +59,7 @@ type InlineMatch =
       priority: number
     }
   | {
-      type: 'bold' | 'italic' | 'strike'
+      type: 'bold' | 'italic' | 'strike' | 'small'
       index: number
       end: number
       value: string
@@ -68,6 +72,8 @@ const LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/
 const BOLD_PATTERN = /\*\*([^*\n]+?)\*\*/
 const STRIKE_PATTERN = /~~([^~\n]+?)~~/
 const ITALIC_PATTERN = /\*([^*\n]+?)\*/
+const SMALL_PATTERN = /<small>([^<\n]+?)<\/small>/
+const HEADING_PATTERN = /^\s{0,3}#{1,3}\s+(.+)$/
 const UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
 const ORDERED_LIST_PATTERN = /^\s*\d+\.\s+(.+)$/
 const HORIZONTAL_RULE_PATTERN = /^\s*-{3,}\s*$/
@@ -156,6 +162,10 @@ function getMediaToken(line: string) {
   }
 }
 
+function getHeadingText(line: string) {
+  return line.match(HEADING_PATTERN)?.[1]?.trim() ?? null
+}
+
 function parseFormattedText(text: string): TextBlock[] {
   const lines = normalizeLines(text)
   const blocks: TextBlock[] = []
@@ -175,6 +185,7 @@ function parseFormattedText(text: string): TextBlock[] {
     const line = lines[index]
     const nextLine = lines[index + 1]
     const mediaToken = getMediaToken(line)
+    const headingText = getHeadingText(line)
     const unorderedItem = getUnorderedListItem(line)
     const orderedItem = getOrderedListItem(line)
 
@@ -211,6 +222,13 @@ function parseFormattedText(text: string): TextBlock[] {
     if (mediaToken) {
       flushText()
       blocks.push({ type: 'media', ...mediaToken })
+      index += 1
+      continue
+    }
+
+    if (headingText) {
+      flushText()
+      blocks.push({ type: 'heading', value: headingText })
       index += 1
       continue
     }
@@ -314,7 +332,8 @@ function getNextInlineMatch(source: string) {
     matchPattern(source, LINK_PATTERN, 1, 'link'),
     matchPattern(source, BOLD_PATTERN, 2, 'bold'),
     matchPattern(source, STRIKE_PATTERN, 3, 'strike'),
-    matchPattern(source, ITALIC_PATTERN, 4, 'italic'),
+    matchPattern(source, SMALL_PATTERN, 4, 'small'),
+    matchPattern(source, ITALIC_PATTERN, 5, 'italic'),
   ].filter((match): match is InlineMatch => Boolean(match))
 
   return matches.sort((a, b) => a.index - b.index || a.priority - b.priority)[0] ?? null
@@ -346,6 +365,12 @@ function renderInlineContent(source: string, keyPrefix: string): ReactNode[] {
       nodes.push(<em key={key}>{renderInlineContent(match.value, `${key}-italic`)}</em>)
     } else if (match.type === 'strike') {
       nodes.push(<del key={key}>{renderInlineContent(match.value, `${key}-strike`)}</del>)
+    } else if (match.type === 'small') {
+      nodes.push(
+        <span key={key} className="text-[0.86em] leading-relaxed text-[var(--color-text-secondary)]">
+          {renderInlineContent(match.value, `${key}-small`)}
+        </span>
+      )
     } else if (match.type === 'link') {
       nodes.push(
         <a
@@ -428,7 +453,9 @@ export function getPlainTextPreview(text: string | null | undefined) {
     .replace(new RegExp(LINK_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(BOLD_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(STRIKE_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(SMALL_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(ITALIC_PATTERN.source, 'g'), '$1')
+    .replace(/^\s{0,3}#{1,3}\s+/gm, '')
     .replace(/^\s*[-*]\s+/gm, '')
     .replace(/^\s*\d+\.\s+/gm, '')
     .replace(/^\s*-{3,}\s*$/gm, '')
@@ -453,6 +480,17 @@ export function FormattedText({ text, className, mediaItems }: FormattedTextProp
             <div key={`text-${index}`} className="whitespace-pre-wrap">
               {renderInlineContent(block.value, `text-${index}`)}
             </div>
+          )
+        }
+
+        if (block.type === 'heading') {
+          return (
+            <h2
+              key={`heading-${index}`}
+              className="text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]"
+            >
+              {renderInlineContent(block.value, `heading-${index}`)}
+            </h2>
           )
         }
 
