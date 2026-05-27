@@ -109,13 +109,15 @@ const ALL_CONTENT_LABEL = '전체'
 const UNCATEGORIZED_GROUP_ID = '__uncategorized__'
 const UNCATEGORIZED_CONTENT_LABEL = '일반 콘텐츠'
 const EMPTY_CAMPAIGN_CONTENTS_LABEL = '콘텐츠 없음'
+const BODY_TEXTAREA_MIN_HEIGHT = 360
+const BODY_TEXTAREA_MAX_HEIGHT = 560
 const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
-  { value: 'scenes', label: '대본' },
+  { value: 'memo', label: '메모' },
+  { value: 'checklist', label: '체크리스트' },
   { value: 'caption', label: '캡션' },
   { value: 'hashtags', label: '해시태그' },
-  { value: 'thumbnail', label: '썸네일 문구' },
-  { value: 'checklist', label: '체크리스트' },
-  { value: 'memo', label: '메모' },
+  { value: 'scenes', label: '대본' },
+  { value: 'thumbnail', label: '썸네일문구' },
 ]
 
 const SAMPLE_CARD: ContentCard = {
@@ -549,6 +551,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [sidebarCards, setSidebarCards] = useState<SidebarContentCard[]>([])
   const [expandedCampaignIds, setExpandedCampaignIds] = useState<string[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [campaignPickerOpen, setCampaignPickerOpen] = useState(false)
   const [scriptRecord, setScriptRecord] = useState<Script | null>(null)
   const [shareLink, setShareLink] = useState<ContentShareLink | null>(null)
   const [shareBusy, setShareBusy] = useState(false)
@@ -574,6 +577,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     [sidebarCards]
   )
   const activeSidebarProjectId = card?.project_id ?? null
+  const selectedCampaignProject = useMemo(() => {
+    if (!selectedProjectId) return null
+
+    const projectFromList = projects.find((project) => project.id === selectedProjectId)
+    if (projectFromList) return projectFromList
+
+    return card?.project?.id === selectedProjectId ? card.project : null
+  }, [card?.project, projects, selectedProjectId])
+  const selectedCampaignLabel = selectedCampaignProject?.title?.trim() || '캠페인 선택'
   const activeShareLink = shareLink?.is_enabled ? shareLink : null
   const shareUrl = shareLink
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/content/${shareLink.token}`
@@ -606,7 +618,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     if (!textarea) return
 
     textarea.style.height = 'auto'
-    textarea.style.height = `${textarea.scrollHeight}px`
+    const nextHeight = Math.min(
+      Math.max(textarea.scrollHeight, BODY_TEXTAREA_MIN_HEIGHT),
+      BODY_TEXTAREA_MAX_HEIGHT
+    )
+
+    textarea.style.height = `${nextHeight}px`
+    textarea.style.overflowY =
+      textarea.scrollHeight > BODY_TEXTAREA_MAX_HEIGHT ? 'auto' : 'hidden'
   }, [bodyDraft])
 
   useEffect(() => {
@@ -1305,6 +1324,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     )
   }
 
+  const handleCampaignSelect = (projectId: string) => {
+    setSelectedProjectId(projectId)
+    setCampaignPickerOpen(false)
+  }
+
   const renderShareModal = () => {
     if (!card || card.is_deleted) return null
 
@@ -1391,7 +1415,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     const uploadDisabled = isPreview || mediaUploading
 
     return (
-      <div className="mb-3 max-w-[680px] border-t border-[var(--color-border-soft)] pt-3">
+      <div className="mb-3 max-w-[680px] pt-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-semibold text-[var(--color-text-body)]">
             {MEDIA_SECTION_LABEL}
@@ -2021,6 +2045,88 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </span>
             )}
 
+            <div className="mb-1 w-full max-w-[720px] text-sm">
+              <button
+                type="button"
+                aria-expanded={campaignPickerOpen}
+                aria-controls="content-campaign-picker"
+                onClick={() => setCampaignPickerOpen((prev) => !prev)}
+                disabled={isPreview}
+                className={clsx(
+                  'flex h-8 w-full items-center justify-between gap-3 rounded-[5px] px-0 text-left text-[12px] font-semibold text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                  isPreview && 'cursor-not-allowed opacity-60 hover:text-[var(--color-text-muted)]'
+                )}
+              >
+                <span className="min-w-0 truncate">{selectedCampaignLabel}</span>
+                <ChevronDown
+                  size={14}
+                  className={clsx(
+                    'shrink-0 transition-transform',
+                    campaignPickerOpen && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              {campaignPickerOpen && !isPreview && (
+                <div id="content-campaign-picker" className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => handleCampaignSelect('')}
+                    className={clsx(
+                      'flex w-full items-center rounded-[5px] px-2 py-2 text-left text-[12px] font-medium transition-colors hover:bg-[var(--color-bg-subtle)]',
+                      selectedProjectId
+                        ? 'text-[var(--color-text-muted)]'
+                        : 'bg-[var(--color-bg-subtle)] text-[var(--color-text-body)]'
+                    )}
+                  >
+                    캠페인 선택
+                  </button>
+                  {projects.map((project) => (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => handleCampaignSelect(project.id)}
+                      className={clsx(
+                        'flex w-full items-center rounded-[5px] px-2 py-2 text-left text-[12px] font-medium transition-colors hover:bg-[var(--color-bg-subtle)]',
+                        selectedProjectId === project.id
+                          ? 'bg-[var(--color-bg-subtle)] text-[var(--color-text-body)]'
+                          : 'text-[var(--color-text-muted)]'
+                      )}
+                    >
+                      <span className="min-w-0 truncate">{project.title}</span>
+                    </button>
+                  ))}
+                  {projects.length === 0 && (
+                    <p className="px-2 py-2 text-[12px] text-[var(--color-text-muted)]">
+                      캠페인이 없습니다
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-1 flex w-full max-w-[720px] flex-wrap items-center justify-between gap-2 text-[12px] text-[var(--color-text-muted)]">
+              <span className="font-semibold">업로드 날짜</span>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  value={scheduledDateDraft}
+                  onChange={(event) => setScheduledDateDraft(event.target.value)}
+                  disabled={isPreview}
+                  aria-label="업로드 날짜"
+                  className="h-8 rounded-[5px] border-0 bg-transparent px-0 text-[12px] font-medium text-[var(--color-text-body)] outline-none transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] focus-visible:[box-shadow:var(--focus-ring)]"
+                />
+                <input
+                  type="time"
+                  value={scheduledTimeDraft}
+                  onChange={(event) => setScheduledTimeDraft(event.target.value)}
+                  disabled={isPreview}
+                  aria-label="업로드 시간"
+                  className="h-8 rounded-[5px] border-0 bg-transparent px-0 text-[12px] font-medium text-[var(--color-text-body)] outline-none transition-colors hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] focus-visible:[box-shadow:var(--focus-ring)]"
+                />
+              </div>
+            </div>
+
             <div className="mb-2 w-full max-w-[720px]">
               <input
                 type="text"
@@ -2107,7 +2213,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             {renderMediaAttachmentSection()}
           </div>
 
-          <div className="toolbar-wrap shrink-0 border-y border-[var(--color-border-soft)] px-11">
+          <div className="toolbar-wrap shrink-0 border-b border-[var(--color-border-soft)] px-11">
             <div className="toolbar flex h-9 items-center gap-1 overflow-x-auto">
               <div className="flex items-center gap-2 pr-1">
                 <span className="min-w-[28px] text-center text-xs font-medium text-[var(--color-text-body)]">
@@ -2176,7 +2282,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               onChange={(event) => setBodyDraft(event.target.value)}
               onPaste={handleBodyPaste}
               rows={16}
-              className="min-h-[360px] w-full max-w-[620px] resize-none overflow-hidden border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
+              className="min-h-[360px] max-h-[560px] w-full max-w-[620px] resize-none overflow-hidden border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none placeholder:text-[var(--color-text-muted-soft)]"
               placeholder={EDITOR_PLACEHOLDER}
             />
           </div>
