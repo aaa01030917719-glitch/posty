@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Columns2,
   GripVertical,
+  ImagePlus,
   Plus,
   Save,
   Share2,
@@ -26,6 +27,12 @@ import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
 import { getMarkdownTableFromClipboard, insertTextAtSelection } from '@/lib/table-paste'
+import {
+  createMediaMarkdownToken,
+  getMarkdownActionResult,
+  MarkdownToolbar,
+  type MarkdownToolbarAction,
+} from '@/components/content/MarkdownToolbar'
 import { Modal } from '@/components/ui/Modal'
 import type {
   ChecklistItem,
@@ -94,6 +101,8 @@ const MEDIA_UPLOADING_LABEL = '\uC5C5\uB85C\uB4DC \uC911...'
 const MEDIA_EMPTY_LABEL = '\uCCA8\uBD80\uB41C \uBBF8\uB514\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
 const MEDIA_DELETE_LABEL = '\uC0AD\uC81C'
 const MEDIA_DELETING_LABEL = '\uC0AD\uC81C \uC911'
+const MEDIA_INSERT_LABEL = '\uBCF8\uBB38\uC5D0 \uC0BD\uC785'
+const MEDIA_INSERT_SHORT_LABEL = '\uC0BD\uC785'
 const MEDIA_UNTITLED_FILE_LABEL = '\uD30C\uC77C\uBA85 \uC5C6\uC74C'
 const MEDIA_UPLOAD_ERROR =
   '\uBBF8\uB514\uC5B4\uB97C \uC5C5\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
@@ -1310,6 +1319,57 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
+  const updateBodyDraftWithSelection = (
+    nextValue: string,
+    selectionStart: number,
+    selectionEnd: number
+  ) => {
+    setBodyDraft(nextValue)
+
+    window.requestAnimationFrame(() => {
+      const textarea = bodyTextareaRef.current
+
+      if (!textarea) return
+
+      textarea.selectionStart = selectionStart
+      textarea.selectionEnd = selectionEnd
+      textarea.focus()
+    })
+  }
+
+  const handleBodyToolbarAction = (action: MarkdownToolbarAction) => {
+    const textarea = bodyTextareaRef.current
+    const source = textarea?.value ?? bodyDraft
+    const selectionStart = textarea?.selectionStart ?? source.length
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart
+    const nextDraft = getMarkdownActionResult(source, selectionStart, selectionEnd, action)
+
+    updateBodyDraftWithSelection(
+      nextDraft.value,
+      nextDraft.selectionStart,
+      nextDraft.selectionEnd
+    )
+  }
+
+  const handleInsertMediaIntoBody = (media: MediaItem) => {
+    const textarea = bodyTextareaRef.current
+    const source = textarea?.value ?? bodyDraft
+    const selectionStart = textarea?.selectionStart ?? source.length
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart
+    const nextDraft = insertTextAtSelection(
+      source,
+      createMediaMarkdownToken(media),
+      selectionStart,
+      selectionEnd
+    )
+
+    updateBodyDraftWithSelection(
+      nextDraft.value,
+      nextDraft.cursorPosition,
+      nextDraft.cursorPosition
+    )
+  }
+
   const handleBodyPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const markdownTable = getMarkdownTableFromClipboard(event.clipboardData)
 
@@ -1352,6 +1412,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const handleCampaignSelect = (projectId: string) => {
     setSelectedProjectId(projectId)
     setCampaignPickerOpen(false)
+  }
+
+  const renderMarkdownToolbar = () => {
+    return <MarkdownToolbar onAction={handleBodyToolbarAction} disabled={isPreview} />
   }
 
   const renderShareModal = () => {
@@ -1506,6 +1570,17 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                     aria-label={MEDIA_DELETE_LABEL}
                   >
                     <X size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertMediaIntoBody(media)}
+                    disabled={isPreview || isDeleting}
+                    title={MEDIA_INSERT_LABEL}
+                    aria-label={MEDIA_INSERT_LABEL}
+                    className="absolute bottom-1 left-1 inline-flex h-5 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--color-bg-surface)_88%,transparent)] px-1.5 text-[10px] font-semibold text-[var(--color-text-body)] shadow-sm transition-colors hover:bg-[var(--color-bg-surface)] hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                  >
+                    <ImagePlus size={10} />
+                    {MEDIA_INSERT_SHORT_LABEL}
                   </button>
                 </div>
               )
@@ -2257,7 +2332,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             {renderMediaAttachmentSection()}
           </div>
 
-          <div className="toolbar-wrap shrink-0 border-b border-[var(--color-border-soft)] px-11">
+          {renderMarkdownToolbar()}
+          <div className="hidden">
             <div className="toolbar flex h-9 items-center gap-1 overflow-x-auto">
               <div className="flex items-center gap-2 pr-1">
                 <span className="min-w-[28px] text-center text-xs font-medium text-[var(--color-text-body)]">

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { STATUS_COLORS, STATUS_LABELS, CHANNEL_COLORS } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
+import { getPlainTextPreview } from '@/lib/text-format'
 import type { ContentCard, ContentStatus } from '@/lib/types'
 
 interface CardModalProps {
@@ -36,6 +37,7 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
   if (!card) return null
 
   const scheduled = card.scheduled_at || card.published_at
+  const memoPreview = getPlainTextPreview(card.memo)
 
   const handleStatusChange = async (status: ContentStatus) => {
     if (saving || status === card.status) return
@@ -176,14 +178,14 @@ export function CardModal({ card, isOpen, onClose, onUpdate }: CardModalProps) {
           )}
         </div>
 
-        {card.memo && (
+        {memoPreview && (
           <section>
             <p className="mb-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
               {MEMO_SECTION_TITLE}
             </p>
             <div className="rounded-[var(--radius-lg)] bg-[var(--color-bg-canvas)] p-4">
               <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">
-                {card.memo}
+                {memoPreview}
               </p>
             </div>
           </section>

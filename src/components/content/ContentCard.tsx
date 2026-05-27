@@ -6,6 +6,7 @@ import { Calendar, MoreHorizontal } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Badge } from '@/components/ui/Badge'
 import { STATUS_COLORS, STATUS_LABELS, CHANNEL_COLORS } from '@/lib/constants'
+import { getPlainTextPreview } from '@/lib/text-format'
 import type { ContentCard as ContentCardType } from '@/lib/types'
 
 interface ContentCardProps {
@@ -15,6 +16,7 @@ interface ContentCardProps {
 
 export function ContentCard({ card, onClick }: ContentCardProps) {
   const scheduled = card.scheduled_at || card.published_at
+  const memoPreview = getPlainTextPreview(card.memo)
 
   return (
     <div
@@ -51,9 +53,9 @@ export function ContentCard({ card, onClick }: ContentCardProps) {
         {card.title}
       </p>
 
-      {card.memo && (
+      {memoPreview && (
         <p className="line-clamp-3 text-xs leading-relaxed text-[var(--color-text-muted)]">
-          {card.memo}
+          {memoPreview}
         </p>
       )}
 

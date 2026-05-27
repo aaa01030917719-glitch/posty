@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
+import { getPlainTextPreview } from '@/lib/text-format'
 import type { ContentCard } from '@/lib/types'
 
 interface ScheduleCardPreviewProps {
@@ -47,7 +48,7 @@ export function getScheduleCardToneStyle(card: ContentCard): ScheduleCardToneSty
 }
 
 export function ScheduleCardPreview({ card, children, className }: ScheduleCardPreviewProps) {
-  const body = card.memo?.trim() ?? ''
+  const body = getPlainTextPreview(card.memo)
   const title = card.title?.trim() || '\uC81C\uBAA9 \uC5C6\uC74C'
 
   return (

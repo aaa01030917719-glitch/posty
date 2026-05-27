@@ -1,10 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ClipboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Copy, ExternalLink, Plus, Save, Share2, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { createContentCard } from '@/components/content/createContentCard'
+import {
+  getMarkdownActionResult,
+  MarkdownToolbar,
+  type MarkdownToolbarAction,
+} from '@/components/content/MarkdownToolbar'
 import { Button } from '@/components/ui/Button'
 import { Toast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
@@ -104,6 +109,7 @@ function getShareUrl(token: string) {
 
 export default function ShareMaterialsPage() {
   const router = useRouter()
+  const sectionTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
   const [materials, setMaterials] = useState<ShareMaterialLink[]>([])
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null)
   const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({})
@@ -299,6 +305,43 @@ export default function ShareMaterialsPage() {
     })
   }
 
+  const updateSectionBodyWithSelection = (
+    sectionId: string,
+    value: string,
+    selectionStart: number,
+    selectionEnd: number
+  ) => {
+    updateSection(sectionId, 'body', value)
+
+    window.requestAnimationFrame(() => {
+      const textarea = sectionTextareaRefs.current[sectionId]
+
+      if (!textarea) return
+
+      textarea.selectionStart = selectionStart
+      textarea.selectionEnd = selectionEnd
+      textarea.focus()
+    })
+  }
+
+  const handleSectionToolbarAction = (
+    section: ShareSectionDraft,
+    action: MarkdownToolbarAction
+  ) => {
+    const textarea = sectionTextareaRefs.current[section.id]
+    const source = textarea?.value ?? section.body
+    const selectionStart = textarea?.selectionStart ?? source.length
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart
+    const nextDraft = getMarkdownActionResult(source, selectionStart, selectionEnd, action)
+
+    updateSectionBodyWithSelection(
+      section.id,
+      nextDraft.value,
+      nextDraft.selectionStart,
+      nextDraft.selectionEnd
+    )
+  }
+
   const addSection = () => {
     if (!selectedCard) return
 
@@ -310,6 +353,8 @@ export default function ShareMaterialsPage() {
 
   const removeSection = (sectionId: string) => {
     if (!selectedCard) return
+
+    delete sectionTextareaRefs.current[sectionId]
 
     setSectionDrafts((prev) => ({
       ...prev,
@@ -594,11 +639,19 @@ export default function ShareMaterialsPage() {
                               className="mt-1 h-9 w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-sm text-[var(--color-text-primary)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)]"
                             />
                           </label>
-                          <label className="mt-3 block">
+                          <div className="mt-3">
                             <span className="text-xs font-medium text-[var(--color-text-secondary)]">
                               내용
                             </span>
+                            <MarkdownToolbar
+                              onAction={(action) => handleSectionToolbarAction(section, action)}
+                              className="mt-1 rounded-t-[var(--radius-md)] border border-[var(--color-border-default)] border-b-0 bg-[var(--color-bg-surface)] px-2"
+                              toolbarClassName="flex h-8 items-center gap-1 overflow-x-auto"
+                            />
                             <textarea
+                              ref={(node) => {
+                                sectionTextareaRefs.current[section.id] = node
+                              }}
                               value={section.body}
                               onChange={(event) =>
                                 updateSection(section.id, 'body', event.target.value)
@@ -606,9 +659,9 @@ export default function ShareMaterialsPage() {
                               onPaste={(event) => handleSectionBodyPaste(event, section.id)}
                               rows={5}
                               placeholder="고객에게 보낼 안내 내용을 입력하세요."
-                              className="mt-1 min-h-[120px] w-full resize-y rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-2 text-sm leading-6 text-[var(--color-text-body)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)]"
+                              className="min-h-[120px] w-full resize-y rounded-b-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-2 text-sm leading-6 text-[var(--color-text-body)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)]"
                             />
-                          </label>
+                          </div>
                         </article>
                       ))}
                     </div>

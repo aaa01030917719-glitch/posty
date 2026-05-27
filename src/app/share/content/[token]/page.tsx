@@ -524,6 +524,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
               <SharedContentSection id={SHARE_SECTION_IDS.body} label="원고">
                 <FormattedText
                   text={bodyContent}
+                  mediaItems={mediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -541,6 +542,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                         {scene.body ? (
                           <FormattedText
                             text={scene.body}
+                            mediaItems={mediaItems}
                             className="mt-1 text-sm leading-7 text-[var(--color-text-body)]"
                           />
                         ) : null}
@@ -550,6 +552,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                 ) : (
                   <FormattedText
                     text={plainScriptBody}
+                    mediaItems={mediaItems}
                     className="text-sm leading-7 text-[var(--color-text-body)]"
                   />
                 )}
@@ -560,6 +563,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
               <SharedContentSection id={SHARE_SECTION_IDS.caption} label="캡션">
                 <FormattedText
                   text={captionContent}
+                  mediaItems={mediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -569,6 +573,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
               <SharedContentSection id={SHARE_SECTION_IDS.hashtags} label="해시태그">
                 <FormattedText
                   text={hashtagsContent}
+                  mediaItems={mediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -578,6 +583,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
               <SharedContentSection id={SHARE_SECTION_IDS.thumbnail} label="썸네일 문구">
                 <FormattedText
                   text={thumbnailContent}
+                  mediaItems={mediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -613,6 +619,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                 {section.body ? (
                   <FormattedText
                     text={section.body}
+                    mediaItems={mediaItems}
                     className={
                       section.title.trim()
                         ? 'mt-3 text-sm leading-7 text-[var(--color-text-body)]'
