@@ -59,7 +59,19 @@ type InlineMatch =
       priority: number
     }
   | {
-      type: 'bold' | 'italic' | 'strike' | 'large' | 'title' | 'small' | 'muted'
+      type:
+        | 'bold'
+        | 'italic'
+        | 'strike'
+        | 'large'
+        | 'title'
+        | 'small'
+        | 'muted'
+        | 'colorInk'
+        | 'colorBody'
+        | 'colorMuted'
+        | 'colorAccent'
+        | 'colorCalm'
       index: number
       end: number
       value: string
@@ -76,6 +88,11 @@ const LARGE_PATTERN = /<posty-large>([^<\n]+?)<\/posty-large>/
 const TITLE_PATTERN = /<posty-title>([^<\n]+?)<\/posty-title>/
 const SMALL_PATTERN = /<small>([^<\n]+?)<\/small>/
 const MUTED_PATTERN = /<posty-muted>([^<\n]+?)<\/posty-muted>/
+const COLOR_INK_PATTERN = /<posty-color-ink>([^<\n]+?)<\/posty-color-ink>/
+const COLOR_BODY_PATTERN = /<posty-color-body>([^<\n]+?)<\/posty-color-body>/
+const COLOR_MUTED_PATTERN = /<posty-color-muted>([^<\n]+?)<\/posty-color-muted>/
+const COLOR_ACCENT_PATTERN = /<posty-color-accent>([^<\n]+?)<\/posty-color-accent>/
+const COLOR_CALM_PATTERN = /<posty-color-calm>([^<\n]+?)<\/posty-color-calm>/
 const HEADING_PATTERN = /^\s{0,3}#{1,3}\s+(.+)$/
 const UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
 const ORDERED_LIST_PATTERN = /^\s*\d+\.\s+(.+)$/
@@ -84,6 +101,29 @@ const MEDIA_PREVIEW_LABEL = '\uCCA8\uBD80 \uBBF8\uB514\uC5B4'
 const MEDIA_IMAGE_LABEL = '\uCCA8\uBD80 \uC774\uBBF8\uC9C0'
 const MEDIA_VIDEO_LABEL = '\uCCA8\uBD80 \uC601\uC0C1'
 const MEDIA_UNAVAILABLE_LABEL = '\uCCA8\uBD80 \uBBF8\uB514\uC5B4\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'
+const COLOR_CLASS_BY_TYPE = {
+  colorInk: 'text-[var(--color-text-primary)]',
+  colorBody: 'text-[var(--color-text-body)]',
+  colorMuted: 'text-[var(--color-text-subtle)]',
+  colorAccent: 'text-[var(--color-accent)]',
+  colorCalm: 'text-[#2f6f66]',
+} as const
+type ColorInlineType = keyof typeof COLOR_CLASS_BY_TYPE
+
+function getColorInlineClass(type: ColorInlineType) {
+  switch (type) {
+    case 'colorInk':
+      return COLOR_CLASS_BY_TYPE.colorInk
+    case 'colorBody':
+      return COLOR_CLASS_BY_TYPE.colorBody
+    case 'colorMuted':
+      return COLOR_CLASS_BY_TYPE.colorMuted
+    case 'colorAccent':
+      return COLOR_CLASS_BY_TYPE.colorAccent
+    case 'colorCalm':
+      return COLOR_CLASS_BY_TYPE.colorCalm
+  }
+}
 
 function splitMarkdownRow(line: string) {
   let source = line.trim()
@@ -339,7 +379,12 @@ function getNextInlineMatch(source: string) {
     matchPattern(source, TITLE_PATTERN, 5, 'title'),
     matchPattern(source, SMALL_PATTERN, 6, 'small'),
     matchPattern(source, MUTED_PATTERN, 7, 'muted'),
-    matchPattern(source, ITALIC_PATTERN, 8, 'italic'),
+    matchPattern(source, COLOR_INK_PATTERN, 8, 'colorInk'),
+    matchPattern(source, COLOR_BODY_PATTERN, 9, 'colorBody'),
+    matchPattern(source, COLOR_MUTED_PATTERN, 10, 'colorMuted'),
+    matchPattern(source, COLOR_ACCENT_PATTERN, 11, 'colorAccent'),
+    matchPattern(source, COLOR_CALM_PATTERN, 12, 'colorCalm'),
+    matchPattern(source, ITALIC_PATTERN, 13, 'italic'),
   ].filter((match): match is InlineMatch => Boolean(match))
 
   return matches.sort((a, b) => a.index - b.index || a.priority - b.priority)[0] ?? null
@@ -399,6 +444,18 @@ function renderInlineContent(source: string, keyPrefix: string): ReactNode[] {
       nodes.push(
         <span key={key} className="text-[14px] leading-[1.7] text-[var(--color-text-muted)]">
           {renderInlineContent(match.value, `${key}-muted`)}
+        </span>
+      )
+    } else if (
+      match.type === 'colorInk' ||
+      match.type === 'colorBody' ||
+      match.type === 'colorMuted' ||
+      match.type === 'colorAccent' ||
+      match.type === 'colorCalm'
+    ) {
+      nodes.push(
+        <span key={key} className={getColorInlineClass(match.type)}>
+          {renderInlineContent(match.value, `${key}-${match.type}`)}
         </span>
       )
     } else if (match.type === 'link') {
@@ -487,6 +544,11 @@ export function getPlainTextPreview(text: string | null | undefined) {
     .replace(new RegExp(TITLE_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(SMALL_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(MUTED_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(COLOR_INK_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(COLOR_BODY_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(COLOR_MUTED_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(COLOR_ACCENT_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(COLOR_CALM_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(ITALIC_PATTERN.source, 'g'), '$1')
     .replace(/^\s{0,3}#{1,3}\s+/gm, '')
     .replace(/^\s*[-*]\s+/gm, '')

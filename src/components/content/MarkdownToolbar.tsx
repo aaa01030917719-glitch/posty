@@ -18,6 +18,11 @@ export type MarkdownToolbarAction =
   | 'paragraph'
   | 'small'
   | 'muted'
+  | 'colorInk'
+  | 'colorBody'
+  | 'colorMuted'
+  | 'colorAccent'
+  | 'colorCalm'
   | 'bold'
   | 'italic'
   | 'strike'
@@ -61,6 +66,7 @@ const MARKDOWN_TOOLBAR_ITEMS: Array<{
   label: string
   icon?: LucideIcon
   text?: string
+  swatchClass?: string
   mediaOnly?: boolean
 }> = [
   { value: 'largeHeading', label: '\uD070\uC81C\uBAA9', text: '\uD070\uC81C\uBAA9' },
@@ -68,6 +74,11 @@ const MARKDOWN_TOOLBAR_ITEMS: Array<{
   { value: 'paragraph', label: '\uBCF8\uBB38', text: '\uBCF8\uBB38' },
   { value: 'small', label: '\uC791\uC740\uAE00\uC528', text: '\uC791\uC740\uAE00\uC528' },
   { value: 'muted', label: '\uBCF4\uC870\uAE00\uC528', text: '\uBCF4\uC870\uAE00\uC528' },
+  { value: 'colorInk', label: '\uAE30\uBCF8 \uAC80\uC815', swatchClass: 'bg-[var(--color-text-primary)]' },
+  { value: 'colorBody', label: '\uC9C4\uD68C\uC0C9', swatchClass: 'bg-[var(--color-text-body)]' },
+  { value: 'colorMuted', label: '\uD68C\uC0C9', swatchClass: 'bg-[var(--color-text-subtle)]' },
+  { value: 'colorAccent', label: '\uD3EC\uC2A4\uD2F0 \uD3EC\uC778\uD2B8', swatchClass: 'bg-[var(--color-accent)]' },
+  { value: 'colorCalm', label: '\uCC28\uBD84\uD55C \uAC15\uC870', swatchClass: 'bg-[#2f6f66]' },
   { value: 'bold', label: '\uBCFC\uB4DC', icon: Bold },
   { value: 'italic', label: '\uC774\uD0E4\uB9AD', icon: Italic },
   { value: 'strike', label: '\uCDE8\uC18C\uC120', icon: Strikethrough },
@@ -168,6 +179,26 @@ function createMarkdownSnippet(action: MarkdownToolbarAction, selectedText: stri
         text: `<posty-muted>${value}</posty-muted>`,
         selectionStartOffset: selectedText ? 27 + value.length : 13,
         selectionEndOffset: selectedText ? 27 + value.length : 13 + value.length,
+      }
+    }
+    case 'colorInk':
+    case 'colorBody':
+    case 'colorMuted':
+    case 'colorAccent':
+    case 'colorCalm': {
+      const value = selectedText || MARKDOWN_TEXT_PLACEHOLDER
+      const colorKey = action.replace('color', '').toLowerCase()
+      const openingTag = `<posty-color-${colorKey}>`
+      const closingTag = `</posty-color-${colorKey}>`
+
+      return {
+        text: `${openingTag}${value}${closingTag}`,
+        selectionStartOffset: selectedText
+          ? openingTag.length + value.length + closingTag.length
+          : openingTag.length,
+        selectionEndOffset: selectedText
+          ? openingTag.length + value.length + closingTag.length
+          : openingTag.length + value.length,
       }
     }
     case 'bold':
@@ -272,7 +303,18 @@ export function MarkdownToolbar({
                 item.text ? 'px-1.5 text-[11px] font-semibold' : 'w-6',
               ].join(' ')}
             >
-              {Icon ? <Icon size={14} /> : item.text}
+              {Icon ? (
+                <Icon size={14} />
+              ) : item.swatchClass ? (
+                <span
+                  className={[
+                    'h-3.5 w-3.5 rounded-full border border-[var(--color-border-default)]',
+                    item.swatchClass,
+                  ].join(' ')}
+                />
+              ) : (
+                item.text
+              )}
             </button>
           )
         })}

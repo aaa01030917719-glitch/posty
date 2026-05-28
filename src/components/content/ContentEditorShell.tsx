@@ -128,6 +128,34 @@ const RICH_LARGE_CLASS = 'text-[30px] font-semibold leading-[1.35] text-[var(--c
 const RICH_TITLE_CLASS = 'text-[24px] font-semibold leading-[1.4] text-[var(--color-text-primary)]'
 const RICH_SMALL_CLASS = 'text-[14px] leading-[1.7] text-[var(--color-text-secondary)]'
 const RICH_MUTED_CLASS = 'text-[14px] leading-[1.7] text-[var(--color-text-muted)]'
+const RICH_COLOR_OPTIONS = {
+  ink: {
+    value: '#222222',
+    className: 'text-[var(--color-text-primary)]',
+    tag: 'posty-color-ink',
+  },
+  body: {
+    value: '#3f3f3f',
+    className: 'text-[var(--color-text-body)]',
+    tag: 'posty-color-body',
+  },
+  muted: {
+    value: '#6a6a6a',
+    className: 'text-[var(--color-text-subtle)]',
+    tag: 'posty-color-muted',
+  },
+  accent: {
+    value: '#ff385c',
+    className: 'text-[var(--color-accent)]',
+    tag: 'posty-color-accent',
+  },
+  calm: {
+    value: '#2f6f66',
+    className: 'text-[#2f6f66]',
+    tag: 'posty-color-calm',
+  },
+} as const
+type RichColorKey = keyof typeof RICH_COLOR_OPTIONS
 const RICH_MEDIA_UNAVAILABLE_LABEL =
   '\uCCA8\uBD80 \uBBF8\uB514\uC5B4\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'
 const RICH_MEDIA_IMAGE_LABEL = '\uCCA8\uBD80 \uC774\uBBF8\uC9C0'
@@ -567,6 +595,11 @@ const EDITOR_LARGE_PATTERN = /<posty-large>([^<\n]+?)<\/posty-large>/
 const EDITOR_TITLE_PATTERN = /<posty-title>([^<\n]+?)<\/posty-title>/
 const EDITOR_SMALL_PATTERN = /<small>([^<\n]+?)<\/small>/
 const EDITOR_MUTED_PATTERN = /<posty-muted>([^<\n]+?)<\/posty-muted>/
+const EDITOR_COLOR_INK_PATTERN = /<posty-color-ink>([^<\n]+?)<\/posty-color-ink>/
+const EDITOR_COLOR_BODY_PATTERN = /<posty-color-body>([^<\n]+?)<\/posty-color-body>/
+const EDITOR_COLOR_MUTED_PATTERN = /<posty-color-muted>([^<\n]+?)<\/posty-color-muted>/
+const EDITOR_COLOR_ACCENT_PATTERN = /<posty-color-accent>([^<\n]+?)<\/posty-color-accent>/
+const EDITOR_COLOR_CALM_PATTERN = /<posty-color-calm>([^<\n]+?)<\/posty-color-calm>/
 const EDITOR_ITALIC_PATTERN = /\*([^*\n]+?)\*/
 const EDITOR_HEADING_PATTERN = /^\s{0,3}#{1,3}\s+(.+)$/
 const EDITOR_UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
@@ -591,7 +624,19 @@ type EditorInlineMatch =
       priority: number
     }
   | {
-      type: 'bold' | 'italic' | 'strike' | 'large' | 'title' | 'small' | 'muted'
+      type:
+        | 'bold'
+        | 'italic'
+        | 'strike'
+        | 'large'
+        | 'title'
+        | 'small'
+        | 'muted'
+        | 'colorInk'
+        | 'colorBody'
+        | 'colorMuted'
+        | 'colorAccent'
+        | 'colorCalm'
       index: number
       end: number
       value: string
@@ -697,10 +742,25 @@ function getNextEditorInlineMatch(source: string) {
     matchEditorPattern(source, EDITOR_TITLE_PATTERN, 5, 'title'),
     matchEditorPattern(source, EDITOR_SMALL_PATTERN, 6, 'small'),
     matchEditorPattern(source, EDITOR_MUTED_PATTERN, 7, 'muted'),
-    matchEditorPattern(source, EDITOR_ITALIC_PATTERN, 8, 'italic'),
+    matchEditorPattern(source, EDITOR_COLOR_INK_PATTERN, 8, 'colorInk'),
+    matchEditorPattern(source, EDITOR_COLOR_BODY_PATTERN, 9, 'colorBody'),
+    matchEditorPattern(source, EDITOR_COLOR_MUTED_PATTERN, 10, 'colorMuted'),
+    matchEditorPattern(source, EDITOR_COLOR_ACCENT_PATTERN, 11, 'colorAccent'),
+    matchEditorPattern(source, EDITOR_COLOR_CALM_PATTERN, 12, 'colorCalm'),
+    matchEditorPattern(source, EDITOR_ITALIC_PATTERN, 13, 'italic'),
   ].filter((match): match is EditorInlineMatch => Boolean(match))
 
   return matches.sort((a, b) => a.index - b.index || a.priority - b.priority)[0] ?? null
+}
+
+function getColorKeyFromEditorMatchType(type: EditorInlineMatch['type']): RichColorKey | null {
+  if (type === 'colorInk') return 'ink'
+  if (type === 'colorBody') return 'body'
+  if (type === 'colorMuted') return 'muted'
+  if (type === 'colorAccent') return 'accent'
+  if (type === 'colorCalm') return 'calm'
+
+  return null
 }
 
 function appendInlineEditorNodes(
@@ -758,6 +818,13 @@ function appendInlineEditorNodes(
               : match.type === 'muted'
                 ? RICH_MUTED_CLASS
                 : RICH_SMALL_CLASS
+      }
+
+      const colorKey = getColorKeyFromEditorMatchType(match.type)
+
+      if (colorKey) {
+        element.dataset.postyColor = colorKey
+        element.className = RICH_COLOR_OPTIONS[colorKey].className
       }
 
       appendInlineEditorNodes(ownerDocument, element, match.value, mediaById)
@@ -875,6 +942,61 @@ function renderMarkdownIntoEditor(root: HTMLDivElement, markdown: string, mediaI
   }
 }
 
+function normalizeEditorColorValue(value: string | null | undefined): RichColorKey | null {
+  if (!value) return null
+
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, '')
+
+  if (!normalized) return null
+
+  const colorEntries = Object.entries(RICH_COLOR_OPTIONS) as Array<
+    [RichColorKey, (typeof RICH_COLOR_OPTIONS)[RichColorKey]]
+  >
+
+  for (const [key, option] of colorEntries) {
+    if (normalized === option.value || normalized === option.value.toLowerCase()) {
+      return key
+    }
+  }
+
+  const rgbMap: Record<string, RichColorKey> = {
+    'rgb(34,34,34)': 'ink',
+    'rgb(63,63,63)': 'body',
+    'rgb(106,106,106)': 'muted',
+    'rgb(255,56,92)': 'accent',
+    'rgb(47,111,102)': 'calm',
+  }
+
+  return rgbMap[normalized] ?? null
+}
+
+function getEditorElementColorKey(node: HTMLElement): RichColorKey | null {
+  const datasetColor = node.dataset.postyColor
+
+  if (
+    datasetColor === 'ink' ||
+    datasetColor === 'body' ||
+    datasetColor === 'muted' ||
+    datasetColor === 'accent' ||
+    datasetColor === 'calm'
+  ) {
+    return datasetColor
+  }
+
+  return (
+    normalizeEditorColorValue(node.getAttribute('color')) ??
+    normalizeEditorColorValue(node.style.color)
+  )
+}
+
+function wrapSerializedColor(content: string, colorKey: RichColorKey | null) {
+  if (!colorKey) return content
+
+  const tagName = RICH_COLOR_OPTIONS[colorKey].tag
+
+  return `<${tagName}>${content}</${tagName}>`
+}
+
 function serializeInlineEditorNode(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) {
     return node.textContent?.replace(/\u00a0/g, ' ') ?? ''
@@ -893,23 +1015,35 @@ function serializeInlineEditorNode(node: Node): string {
 
   const content = Array.from(node.childNodes).map(serializeInlineEditorNode).join('')
 
-  if (node.tagName === 'STRONG' || node.tagName === 'B') return `**${content}**`
-  if (node.tagName === 'EM' || node.tagName === 'I') return `*${content}*`
-  if (node.tagName === 'DEL' || node.tagName === 'S' || node.tagName === 'STRIKE') {
-    return `~~${content}~~`
+  const colorKey = getEditorElementColorKey(node)
+
+  if (node.tagName === 'STRONG' || node.tagName === 'B') {
+    return wrapSerializedColor(`**${content}**`, colorKey)
   }
-  if (node.dataset.postySize === 'large') return `<posty-large>${content}</posty-large>`
-  if (node.dataset.postySize === 'title') return `<posty-title>${content}</posty-title>`
-  if (node.dataset.postySize === 'muted') return `<posty-muted>${content}</posty-muted>`
+  if (node.tagName === 'EM' || node.tagName === 'I') {
+    return wrapSerializedColor(`*${content}*`, colorKey)
+  }
+  if (node.tagName === 'DEL' || node.tagName === 'S' || node.tagName === 'STRIKE') {
+    return wrapSerializedColor(`~~${content}~~`, colorKey)
+  }
+  if (node.dataset.postySize === 'large') {
+    return wrapSerializedColor(`<posty-large>${content}</posty-large>`, colorKey)
+  }
+  if (node.dataset.postySize === 'title') {
+    return wrapSerializedColor(`<posty-title>${content}</posty-title>`, colorKey)
+  }
+  if (node.dataset.postySize === 'muted') {
+    return wrapSerializedColor(`<posty-muted>${content}</posty-muted>`, colorKey)
+  }
   if (node.dataset.postySize === 'small' || node.tagName === 'SMALL') {
-    return `<small>${content}</small>`
+    return wrapSerializedColor(`<small>${content}</small>`, colorKey)
   }
   if (node.tagName === 'A') {
     const href = node.getAttribute('href') || RICH_LINK_URL_PLACEHOLDER
-    return `[${content || RICH_LINK_TEXT_PLACEHOLDER}](${href})`
+    return wrapSerializedColor(`[${content || RICH_LINK_TEXT_PLACEHOLDER}](${href})`, colorKey)
   }
 
-  return content
+  return wrapSerializedColor(content, colorKey)
 }
 
 function serializeEditorBlock(node: ChildNode, index: number): string {
@@ -993,6 +1127,22 @@ function insertNodeAtSelection(editor: HTMLDivElement, node: Node) {
   moveSelectionAfterNode(node)
 }
 
+function insertHtmlAtSelection(editor: HTMLDivElement, html: string) {
+  editor.focus()
+
+  const selection = window.getSelection()
+
+  if (!selection || selection.rangeCount === 0 || !isSelectionInsideElement(editor)) {
+    const fallbackRange = editor.ownerDocument.createRange()
+    fallbackRange.selectNodeContents(editor)
+    fallbackRange.collapse(false)
+    selection?.removeAllRanges()
+    selection?.addRange(fallbackRange)
+  }
+
+  document.execCommand('insertHTML', false, html)
+}
+
 function getEditableBlockForRange(editor: HTMLElement, range: Range) {
   let node: Node | null = range.commonAncestorContainer
 
@@ -1053,6 +1203,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const bodyEditorRef = useRef<HTMLDivElement | null>(null)
+  const bodyImageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const bodyEditorSelectionRef = useRef<Range | null>(null)
   const lastEditorMarkdownRef = useRef('')
   const lastEditorMediaKeyRef = useRef('')
@@ -1804,6 +1955,28 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     input.value = ''
   }
 
+  const handleBodyImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const imageFiles = Array.from(input.files ?? []).filter((file) =>
+      file.type.startsWith('image/')
+    )
+
+    if (!imageFiles.length) {
+      input.value = ''
+      return
+    }
+
+    if (!card || isPreview || card.is_deleted) {
+      window.alert('\uC800\uC7A5\uB41C \uCF58\uD150\uCE20\uC5D0\uC11C\uB9CC \uC774\uBBF8\uC9C0\uB97C \uBCF8\uBB38\uC5D0 \uC0BD\uC785\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.')
+      input.value = ''
+      return
+    }
+
+    const uploadedItems = await uploadMediaFiles(imageFiles)
+    uploadedItems.forEach(insertMediaItemIntoBodyEditor)
+    input.value = ''
+  }
+
   const handleDeleteMedia = async (media: MediaItem) => {
     if (isPreview || mediaDeletingIds.includes(media.id)) return
 
@@ -1972,14 +2145,26 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     if (!editor) return
 
     restoreBodyEditorSelection()
-    insertNodeAtSelection(
-      editor,
-      createEditorMediaNode(editor.ownerDocument, media, {
-        id: media.id,
-        mediaType: media.media_type,
-        alt: media.file_name ?? undefined,
-      })
-    )
+    const mediaNode = createEditorMediaNode(editor.ownerDocument, media, {
+      id: media.id,
+      mediaType: media.media_type,
+      alt: media.file_name ?? undefined,
+    })
+
+    insertHtmlAtSelection(editor, mediaNode.outerHTML)
+    syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
+  }
+
+  const applyBodyEditorColor = (colorKey: RichColorKey) => {
+    const editor = bodyEditorRef.current
+
+    if (!editor) return
+
+    restoreBodyEditorSelection()
+    ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
+    document.execCommand('styleWithCSS', false, 'true')
+    document.execCommand('foreColor', false, RICH_COLOR_OPTIONS[colorKey].value)
     syncBodyDraftFromEditor()
     storeBodyEditorSelection()
   }
@@ -1990,14 +2175,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     if (!editor || isPreview) return
 
     if (action === 'media') {
-      const firstMedia = mediaItems[0]
+      storeBodyEditorSelection()
 
-      if (firstMedia) {
-        insertMediaItemIntoBodyEditor(firstMedia)
-      } else {
-        window.alert('본문에 넣을 첨부 미디어가 없습니다.')
+      if (!card || card.is_deleted) {
+        window.alert('\uC800\uC7A5\uB41C \uCF58\uD150\uCE20\uC5D0\uC11C\uB9CC \uC774\uBBF8\uC9C0\uB97C \uBCF8\uBB38\uC5D0 \uC0BD\uC785\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.')
+        return
       }
 
+      bodyImageUploadInputRef.current?.click()
       return
     }
 
@@ -2060,6 +2245,21 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         dataset: { postySize: 'muted' },
         className: RICH_MUTED_CLASS,
       })
+      return
+    } else if (action === 'colorInk') {
+      applyBodyEditorColor('ink')
+      return
+    } else if (action === 'colorBody') {
+      applyBodyEditorColor('body')
+      return
+    } else if (action === 'colorMuted') {
+      applyBodyEditorColor('muted')
+      return
+    } else if (action === 'colorAccent') {
+      applyBodyEditorColor('accent')
+      return
+    } else if (action === 'colorCalm') {
+      applyBodyEditorColor('calm')
       return
     }
 
@@ -3063,6 +3263,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           </div>
 
           {renderMarkdownToolbar()}
+          <input
+            ref={bodyImageUploadInputRef}
+            type="file"
+            accept="image/*"
+            disabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
+            onChange={handleBodyImageUpload}
+            className="sr-only"
+            aria-label="본문 이미지 첨부"
+          />
           <div className="hidden">
             <div className="toolbar flex h-9 items-center gap-1 overflow-x-auto">
               <div className="flex items-center gap-2 pr-1">
