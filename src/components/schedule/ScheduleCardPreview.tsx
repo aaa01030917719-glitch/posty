@@ -54,7 +54,7 @@ export function ScheduleCardPreview({ card, children, className }: ScheduleCardP
   return (
     <div className={className ?? 'relative'}>
       {children}
-      <div className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden w-[240px] rounded-[8px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-3 py-2.5 text-left shadow-[0_14px_32px_rgba(15,23,42,0.12)] group-hover:block group-focus-within:block">
+      <div className="pointer-events-none absolute left-0 top-full z-30 mt-1 hidden w-[240px] rounded-[8px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-3 py-2.5 text-left shadow-[0_14px_32px_rgba(15,23,42,0.12)] md:group-hover:block md:group-focus-within:block">
         <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">{title}</p>
         <p className="mt-1 overflow-hidden break-words text-xs leading-5 text-[var(--color-text-muted)] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">
           {body || EMPTY_PREVIEW_MESSAGE}

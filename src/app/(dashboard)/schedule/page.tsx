@@ -381,15 +381,15 @@ export default function SchedulePage() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 bg-[var(--color-bg-surface-soft)]">
+    <div className="flex min-h-full flex-1 flex-col bg-[var(--color-bg-surface-soft)] xl:flex-row">
       {loading ? (
         <div className="flex min-h-[700px] w-full items-center justify-center">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
       ) : (
         <>
-          <aside className="w-[248px] shrink-0 border-r border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
-            <div className="h-full overflow-y-auto px-4 pb-5 pt-[18px]">
+          <aside className="w-full shrink-0 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:w-[248px] xl:border-b-0 xl:border-r">
+            <div className="max-h-[360px] overflow-y-auto px-4 pb-5 pt-[18px] xl:h-full xl:max-h-none">
               <p className="mb-1 text-[11px] font-medium text-[var(--color-text-muted-soft)]">
                 {format(todayDate, 'yyyy\uB144 M\uC6D4 d\uC77C EEEE', { locale: ko })}
               </p>
@@ -492,7 +492,7 @@ export default function SchedulePage() {
 
           <main className="min-w-0 flex-1 overflow-hidden bg-[var(--color-bg-surface-soft)]">
             <div className="flex h-full min-h-0 flex-col">
-              <div className="flex flex-col gap-2 px-[18px] pb-0 pt-4">
+              <div className="flex flex-col gap-2 px-4 pb-0 pt-4 sm:px-[18px]">
                 <h1 className="text-[14px] font-bold tracking-[-0.02em] text-[var(--color-text-primary)] md:text-[15px]">
                   {greetingTitle}
                 </h1>
@@ -564,7 +564,7 @@ export default function SchedulePage() {
                   </div>
                 </div>
               </div>
-              <div className="min-h-0 flex-1 px-4 pb-[14px] pt-[10px]">
+              <div className="min-h-0 flex-1 px-3 pb-[14px] pt-[10px] sm:px-4">
                 {view === 'month' && (
                   <CalendarMonth
                     cards={cards}
@@ -573,7 +573,7 @@ export default function SchedulePage() {
                   />
                 )}
                 {view === 'week' && (
-                  <div className="h-full min-h-0 overflow-x-auto">
+                  <div className="h-full min-h-0 max-w-full overflow-x-auto pb-2">
                     <CalendarWeek
                       cards={cards}
                       currentDate={currentDate}
