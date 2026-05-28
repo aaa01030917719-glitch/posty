@@ -124,10 +124,10 @@ const RICH_SMALL_PLACEHOLDER = '\uC791\uC740\uAE00\uC528'
 const RICH_MUTED_PLACEHOLDER = '\uBCF4\uC870\uAE00\uC528'
 const RICH_LINK_TEXT_PLACEHOLDER = '\uB9C1\uD06C \uD14D\uC2A4\uD2B8'
 const RICH_LINK_URL_PLACEHOLDER = 'https://example.com'
-const RICH_LARGE_CLASS = 'text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]'
-const RICH_TITLE_CLASS = 'text-[24px] font-semibold leading-[1.4] text-[var(--color-text-primary)]'
-const RICH_SMALL_CLASS = 'text-[14px] leading-[1.7] text-[var(--color-text-secondary)]'
-const RICH_MUTED_CLASS = 'text-[14px] leading-[1.7] text-[var(--color-text-muted)]'
+const RICH_LARGE_CLASS = 'text-[30px] font-semibold leading-[1.25] text-[var(--color-text-primary)]'
+const RICH_TITLE_CLASS = 'text-[24px] font-semibold leading-[1.3] text-[var(--color-text-primary)]'
+const RICH_SMALL_CLASS = 'text-[14px] leading-[1.6] text-[var(--color-text-secondary)]'
+const RICH_MUTED_CLASS = 'text-[14px] leading-[1.6] text-[var(--color-text-muted)]'
 const RICH_COLOR_OPTIONS = {
   ink: {
     value: '#222222',
@@ -156,6 +156,7 @@ const RICH_COLOR_OPTIONS = {
   },
 } as const
 type RichColorKey = keyof typeof RICH_COLOR_OPTIONS
+type RichSizeKey = 'large' | 'title' | 'small' | 'muted'
 const RICH_MEDIA_UNAVAILABLE_LABEL =
   '\uCCA8\uBD80 \uBBF8\uB514\uC5B4\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'
 const RICH_MEDIA_IMAGE_LABEL = '\uCCA8\uBD80 \uC774\uBBF8\uC9C0'
@@ -794,6 +795,8 @@ function appendInlineEditorNodes(
       const link = ownerDocument.createElement('a')
       link.href = match.href
       link.dataset.postyLink = 'true'
+      link.target = '_blank'
+      link.rel = 'noreferrer noopener'
       link.className = 'text-[var(--color-accent)] underline underline-offset-2'
       appendInlineEditorNodes(ownerDocument, link, match.label, mediaById)
       parent.appendChild(link)
@@ -892,7 +895,7 @@ function renderMarkdownIntoEditor(root: HTMLDivElement, markdown: string, mediaI
 
     if (headingMatch) {
       const heading = ownerDocument.createElement('h2')
-      heading.className = 'my-0 text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]'
+      heading.className = 'my-0 text-[30px] font-semibold leading-[1.25] text-[var(--color-text-primary)]'
       appendInlineEditorNodes(ownerDocument, heading, headingMatch[1], mediaById)
       root.appendChild(heading)
       index += 1
@@ -902,7 +905,7 @@ function renderMarkdownIntoEditor(root: HTMLDivElement, markdown: string, mediaI
     const unorderedItem = line.match(EDITOR_UNORDERED_LIST_PATTERN)?.[1]
     if (unorderedItem) {
       const list = ownerDocument.createElement('ul')
-      list.className = 'my-0 list-disc space-y-1 pl-5'
+      list.className = 'my-0 list-disc space-y-0 pl-5'
 
       while (index < lines.length) {
         const item = lines[index].match(EDITOR_UNORDERED_LIST_PATTERN)?.[1]
@@ -921,7 +924,7 @@ function renderMarkdownIntoEditor(root: HTMLDivElement, markdown: string, mediaI
     const orderedItem = line.match(EDITOR_ORDERED_LIST_PATTERN)?.[1]
     if (orderedItem) {
       const list = ownerDocument.createElement('ol')
-      list.className = 'my-0 list-decimal space-y-1 pl-5'
+      list.className = 'my-0 list-decimal space-y-0 pl-5'
 
       while (index < lines.length) {
         const item = lines[index].match(EDITOR_ORDERED_LIST_PATTERN)?.[1]
@@ -1026,6 +1029,25 @@ function serializeInlineEditorNode(node: Node): string {
   if (node.tagName === 'DEL' || node.tagName === 'S' || node.tagName === 'STRIKE') {
     return wrapSerializedColor(`~~${content}~~`, colorKey)
   }
+  if (node.tagName === 'FONT') {
+    const fontSize = node.getAttribute('size')
+
+    if (fontSize === '7') {
+      return wrapSerializedColor(`<posty-large>${content}</posty-large>`, colorKey)
+    }
+
+    if (fontSize === '6') {
+      return wrapSerializedColor(`<posty-title>${content}</posty-title>`, colorKey)
+    }
+
+    if (fontSize === '2') {
+      if (colorKey === 'muted') {
+        return `<posty-muted>${content}</posty-muted>`
+      }
+
+      return wrapSerializedColor(`<small>${content}</small>`, colorKey)
+    }
+  }
   if (node.dataset.postySize === 'large') {
     return wrapSerializedColor(`<posty-large>${content}</posty-large>`, colorKey)
   }
@@ -1097,36 +1119,6 @@ function isSelectionInsideElement(element: HTMLElement) {
   return element.contains(range.commonAncestorContainer)
 }
 
-function moveSelectionAfterNode(node: Node) {
-  const selection = window.getSelection()
-  const ownerDocument = node.ownerDocument ?? document
-  const range = ownerDocument.createRange()
-
-  range.setStartAfter(node)
-  range.collapse(true)
-  selection?.removeAllRanges()
-  selection?.addRange(range)
-}
-
-function insertNodeAtSelection(editor: HTMLDivElement, node: Node) {
-  editor.focus()
-
-  const selection = window.getSelection()
-  const range =
-    selection && selection.rangeCount > 0 && isSelectionInsideElement(editor)
-      ? selection.getRangeAt(0)
-      : editor.ownerDocument.createRange()
-
-  if (!selection || !isSelectionInsideElement(editor)) {
-    range.selectNodeContents(editor)
-    range.collapse(false)
-  }
-
-  range.deleteContents()
-  range.insertNode(node)
-  moveSelectionAfterNode(node)
-}
-
 function insertHtmlAtSelection(editor: HTMLDivElement, html: string) {
   editor.focus()
 
@@ -1167,22 +1159,14 @@ function getEditableBlockForRange(editor: HTMLElement, range: Range) {
   return null
 }
 
-function wrapElementContents(element: HTMLElement, wrapper: HTMLElement) {
-  while (element.firstChild) {
-    wrapper.appendChild(element.firstChild)
-  }
-
-  element.appendChild(wrapper)
-}
-
 function unwrapPostySizeElements(root: HTMLElement, options: { includeRoot?: boolean } = {}) {
   const targets: HTMLElement[] = []
 
-  if (options.includeRoot && root.matches('[data-posty-size], small')) {
+  if (options.includeRoot && root.matches('[data-posty-size], small, font[size]')) {
     targets.push(root)
   }
 
-  root.querySelectorAll('[data-posty-size], small').forEach((node) => {
+  root.querySelectorAll('[data-posty-size], small, font[size]').forEach((node) => {
     if (node instanceof HTMLElement) targets.push(node)
   })
 
@@ -1199,12 +1183,88 @@ function unwrapPostySizeElements(root: HTMLElement, options: { includeRoot?: boo
   })
 }
 
+function normalizeEditorLinks(editor: HTMLElement) {
+  editor.querySelectorAll('a').forEach((link) => {
+    if (!(link instanceof HTMLAnchorElement)) return
+
+    link.dataset.postyLink = 'true'
+    link.target = '_blank'
+    link.rel = 'noreferrer noopener'
+    link.className = 'text-[var(--color-accent)] underline underline-offset-2'
+  })
+}
+
+function normalizeEditorLists(editor: HTMLElement) {
+  editor.querySelectorAll('ul').forEach((list) => {
+    if (!(list instanceof HTMLElement)) return
+    list.className = 'my-0 list-disc space-y-0 pl-5'
+  })
+
+  editor.querySelectorAll('ol').forEach((list) => {
+    if (!(list instanceof HTMLElement)) return
+    list.className = 'my-0 list-decimal space-y-0 pl-5'
+  })
+
+  editor.querySelectorAll('li').forEach((item) => {
+    if (!(item instanceof HTMLElement)) return
+    item.className = 'min-h-[1.75em] pl-1 leading-[1.75]'
+  })
+}
+
+function selectCurrentEditableBlockContents(editor: HTMLDivElement) {
+  const selection = window.getSelection()
+
+  if (!selection || selection.rangeCount === 0) return false
+
+  const block = getEditableBlockForRange(editor, selection.getRangeAt(0))
+
+  if (!block) return false
+
+  const range = editor.ownerDocument.createRange()
+  range.selectNodeContents(block)
+  selection.removeAllRanges()
+  selection.addRange(range)
+
+  return true
+}
+
+function selectInsertedTextBeforeCaret(placeholder: string) {
+  const selection = window.getSelection()
+
+  if (!selection || selection.rangeCount === 0) return
+
+  const range = selection.getRangeAt(0)
+  const node = range.startContainer
+  const offset = range.startOffset
+
+  if (node.nodeType !== Node.TEXT_NODE || offset < placeholder.length) return
+
+  const value = node.textContent ?? ''
+
+  if (value.slice(offset - placeholder.length, offset) !== placeholder) return
+
+  range.setStart(node, offset - placeholder.length)
+  range.setEnd(node, offset)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
+
+function normalizeEditorLinkUrl(value: string) {
+  const trimmed = value.trim()
+
+  if (!trimmed) return ''
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed
+
+  return `https://${trimmed}`
+}
+
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const bodyEditorRef = useRef<HTMLDivElement | null>(null)
   const bodyImageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const bodyEditorSelectionRef = useRef<Range | null>(null)
+  const bodyLinkUrlInputRef = useRef<HTMLInputElement | null>(null)
   const lastEditorMarkdownRef = useRef('')
   const lastEditorMediaKeyRef = useRef('')
   const [card, setCard] = useState<ContentCard | null>(null)
@@ -1251,6 +1311,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [mediaUploading, setMediaUploading] = useState(false)
   const [mediaDeletingIds, setMediaDeletingIds] = useState<string[]>([])
+  const [bodyLinkPopoverOpen, setBodyLinkPopoverOpen] = useState(false)
+  const [bodyLinkUrlDraft, setBodyLinkUrlDraft] = useState('')
+  const [bodyLinkError, setBodyLinkError] = useState<string | null>(null)
 
   const isPreview = PREVIEW_IDS.has(cardId)
 
@@ -2072,64 +2135,42 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     if (!range.collapsed) return
     if (options.onlyWhenEditorEmpty && serializeEditorToMarkdown(editor).trim()) return
 
-    const textNode = editor.ownerDocument.createTextNode(placeholder)
-    range.insertNode(textNode)
-    range.setStart(textNode, 0)
-    range.setEnd(textNode, placeholder.length)
-    selection.removeAllRanges()
-    selection.addRange(range)
+    document.execCommand('insertText', false, placeholder)
+    selectInsertedTextBeforeCaret(placeholder)
   }
 
-  const wrapBodyEditorSelection = (
-    tagName: 'span',
-    options: { dataset?: Record<string, string>; className?: string; placeholder: string }
-  ) => {
-    restoreBodyEditorSelection()
-    ensureBodyEditorSelectionText(options.placeholder, { onlyWhenEditorEmpty: true })
-
+  const applyBodyEditorSize = (sizeKey: RichSizeKey, placeholder: string) => {
     const editor = bodyEditorRef.current
+
+    if (!editor) return
+
+    restoreBodyEditorSelection()
+    ensureBodyEditorSelectionText(placeholder, { onlyWhenEditorEmpty: true })
+
     const selection = window.getSelection()
 
     if (!editor || !selection || selection.rangeCount === 0) return
 
     const range = selection.getRangeAt(0)
-    const wrapper = editor.ownerDocument.createElement(tagName)
 
-    Object.entries(options.dataset ?? {}).forEach(([key, value]) => {
-      wrapper.dataset[key] = value
-    })
-
-    if (options.className) {
-      wrapper.className = options.className
+    if (range.collapsed && serializeEditorToMarkdown(editor).trim()) {
+      selectCurrentEditableBlockContents(editor)
     }
 
-    if (range.collapsed) {
-      const block = getEditableBlockForRange(editor, range)
+    document.execCommand('styleWithCSS', false, 'false')
+    document.execCommand(
+      'fontSize',
+      false,
+      sizeKey === 'large' ? '7' : sizeKey === 'title' ? '6' : '2'
+    )
 
-      if (block) {
-        unwrapPostySizeElements(block)
-        wrapElementContents(block, wrapper)
-
-        const nextRange = editor.ownerDocument.createRange()
-        nextRange.selectNodeContents(wrapper)
-        selection.removeAllRanges()
-        selection.addRange(nextRange)
-        bodyEditorSelectionRef.current = nextRange.cloneRange()
-        syncBodyDraftFromEditor()
-      }
-
-      return
+    if (sizeKey === 'muted') {
+      document.execCommand('styleWithCSS', false, 'true')
+      document.execCommand('foreColor', false, RICH_COLOR_OPTIONS.muted.value)
     }
 
-    wrapper.appendChild(range.extractContents())
-    range.insertNode(wrapper)
-
-    const nextRange = editor.ownerDocument.createRange()
-    nextRange.selectNodeContents(wrapper)
-    selection.removeAllRanges()
-    selection.addRange(nextRange)
-    bodyEditorSelectionRef.current = nextRange.cloneRange()
     syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
   }
 
   const insertPlainTextIntoBodyEditor = (text: string) => {
@@ -2169,6 +2210,95 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     storeBodyEditorSelection()
   }
 
+  const applyBodyEditorParagraph = () => {
+    const editor = bodyEditorRef.current
+
+    if (!editor) return
+
+    restoreBodyEditorSelection()
+    ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
+
+    const selection = window.getSelection()
+
+    if (!selection || selection.rangeCount === 0) return
+
+    const block = getEditableBlockForRange(editor, selection.getRangeAt(0))
+
+    if (block) {
+      unwrapPostySizeElements(block, { includeRoot: true })
+    }
+
+    syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
+  }
+
+  const openBodyLinkPopover = () => {
+    const editor = bodyEditorRef.current
+
+    if (!editor) return
+
+    restoreBodyEditorSelection()
+
+    const selection = window.getSelection()
+    const range =
+      selection && selection.rangeCount > 0 && isSelectionInsideElement(editor)
+        ? selection.getRangeAt(0)
+        : null
+
+    if (!range || range.collapsed || !selection?.toString().trim()) {
+      bodyEditorSelectionRef.current = null
+      setBodyLinkError(
+        '\uB9C1\uD06C\uB97C \uC801\uC6A9\uD560 \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574\uC8FC\uC138\uC694.'
+      )
+      setBodyLinkUrlDraft('')
+      setBodyLinkPopoverOpen(true)
+      return
+    }
+
+    bodyEditorSelectionRef.current = range.cloneRange()
+    setBodyLinkError(null)
+    setBodyLinkUrlDraft('')
+    setBodyLinkPopoverOpen(true)
+    window.setTimeout(() => bodyLinkUrlInputRef.current?.focus(), 0)
+  }
+
+  const handleApplyBodyLink = () => {
+    const editor = bodyEditorRef.current
+    const href = normalizeEditorLinkUrl(bodyLinkUrlDraft)
+
+    if (!editor) return
+
+    if (!href) {
+      setBodyLinkError('URL\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.')
+      return
+    }
+
+    const range = bodyEditorSelectionRef.current
+
+    if (!range || range.collapsed || !editor.contains(range.commonAncestorContainer)) {
+      setBodyLinkError(
+        '\uB9C1\uD06C\uB97C \uC801\uC6A9\uD560 \uD14D\uC2A4\uD2B8\uB97C \uBA3C\uC800 \uC120\uD0DD\uD574\uC8FC\uC138\uC694.'
+      )
+      return
+    }
+
+    restoreBodyEditorSelection()
+    document.execCommand('createLink', false, href)
+    normalizeEditorLinks(editor)
+    syncBodyDraftFromEditor()
+    storeBodyEditorSelection()
+    setBodyLinkPopoverOpen(false)
+    setBodyLinkUrlDraft('')
+    setBodyLinkError(null)
+  }
+
+  const handleCancelBodyLink = () => {
+    setBodyLinkPopoverOpen(false)
+    setBodyLinkUrlDraft('')
+    setBodyLinkError(null)
+    restoreBodyEditorSelection()
+  }
+
   const handleBodyToolbarAction = (action: MarkdownToolbarAction) => {
     const editor = bodyEditorRef.current
 
@@ -2200,51 +2330,30 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     } else if (action === 'bulletList') {
       ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('insertUnorderedList')
+      normalizeEditorLists(editor)
     } else if (action === 'orderedList') {
       ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('insertOrderedList')
+      normalizeEditorLists(editor)
     } else if (action === 'link') {
-      ensureBodyEditorSelectionText(RICH_LINK_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
-      document.execCommand('createLink', false, RICH_LINK_URL_PLACEHOLDER)
+      openBodyLinkPopover()
+      return
     } else if (action === 'hr') {
-      const hr = editor.ownerDocument.createElement('hr')
-      insertNodeAtSelection(editor, hr)
+      insertHtmlAtSelection(editor, '<hr>')
     } else if (action === 'largeHeading') {
-      wrapBodyEditorSelection('span', {
-        placeholder: RICH_HEADING_PLACEHOLDER,
-        dataset: { postySize: 'large' },
-        className: RICH_LARGE_CLASS,
-      })
+      applyBodyEditorSize('large', RICH_HEADING_PLACEHOLDER)
       return
     } else if (action === 'heading') {
-      wrapBodyEditorSelection('span', {
-        placeholder: RICH_HEADING_PLACEHOLDER,
-        dataset: { postySize: 'title' },
-        className: RICH_TITLE_CLASS,
-      })
+      applyBodyEditorSize('title', RICH_HEADING_PLACEHOLDER)
       return
     } else if (action === 'paragraph') {
-      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
-      document.execCommand('formatBlock', false, 'p')
-
-      const selection = window.getSelection()
-      if (selection && selection.rangeCount > 0) {
-        const block = getEditableBlockForRange(editor, selection.getRangeAt(0))
-        if (block) unwrapPostySizeElements(block, { includeRoot: true })
-      }
+      applyBodyEditorParagraph()
+      return
     } else if (action === 'small') {
-      wrapBodyEditorSelection('span', {
-        placeholder: RICH_SMALL_PLACEHOLDER,
-        dataset: { postySize: 'small' },
-        className: RICH_SMALL_CLASS,
-      })
+      applyBodyEditorSize('small', RICH_SMALL_PLACEHOLDER)
       return
     } else if (action === 'muted') {
-      wrapBodyEditorSelection('span', {
-        placeholder: RICH_MUTED_PLACEHOLDER,
-        dataset: { postySize: 'muted' },
-        className: RICH_MUTED_CLASS,
-      })
+      applyBodyEditorSize('muted', RICH_MUTED_PLACEHOLDER)
       return
     } else if (action === 'colorInk') {
       applyBodyEditorColor('ink')
@@ -2337,6 +2446,59 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         disabled={isPreview}
         showMediaAction
       />
+    )
+  }
+
+  const renderBodyLinkPopover = () => {
+    if (!bodyLinkPopoverOpen) return null
+
+    return (
+      <div className="border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 sm:px-6 lg:px-11">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="min-w-[180px] flex-1 text-xs font-semibold text-[var(--color-text-body)]">
+            <span className="mb-1 block">{'\uB9C1\uD06C URL'}</span>
+            <input
+              ref={bodyLinkUrlInputRef}
+              type="url"
+              value={bodyLinkUrlDraft}
+              onChange={(event) => {
+                setBodyLinkUrlDraft(event.target.value)
+                setBodyLinkError(null)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  handleApplyBodyLink()
+                }
+
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  handleCancelBodyLink()
+                }
+              }}
+              placeholder="https://example.com"
+              className="h-9 w-full rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-xs font-medium text-[var(--color-text-body)] outline-none transition-[border-color,box-shadow] focus:border-[var(--color-accent)] focus:[box-shadow:var(--focus-ring)]"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleApplyBodyLink}
+            className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[var(--color-accent)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--color-accent-hover)]"
+          >
+            {'\uC800\uC7A5'}
+          </button>
+          <button
+            type="button"
+            onClick={handleCancelBodyLink}
+            className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)]"
+          >
+            {'\uCDE8\uC18C'}
+          </button>
+        </div>
+        {bodyLinkError && (
+          <p className="mt-2 text-xs text-[var(--color-danger)]">{bodyLinkError}</p>
+        )}
+      </div>
     )
   }
 
@@ -3263,6 +3425,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           </div>
 
           {renderMarkdownToolbar()}
+          {renderBodyLinkPopover()}
           <input
             ref={bodyImageUploadInputRef}
             type="file"
@@ -3348,7 +3511,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               onKeyUp={storeBodyEditorSelection}
               onMouseUp={storeBodyEditorSelection}
               onFocus={storeBodyEditorSelection}
-              className="min-h-[420px] w-full flex-1 overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[16px] leading-[1.75] text-[var(--color-text-body)] outline-none empty:before:pointer-events-none empty:before:text-[var(--color-text-muted-soft)] empty:before:content-[attr(data-placeholder)] [&_div]:my-0 [&_div]:min-h-[1.75em] [&_div]:leading-[1.75] [&_h1]:my-0 [&_h2]:my-0 [&_h2]:min-h-[1.35em] [&_h2]:text-[30px] [&_h2]:font-semibold [&_h2]:leading-[1.35] [&_h3]:my-0 [&_li]:min-h-[1.75em] [&_ol]:my-0 [&_p]:my-0 [&_p]:min-h-[1.75em] [&_p]:leading-[1.75] [&_ul]:my-0"
+              className="min-h-[420px] w-full flex-1 overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[16px] leading-[1.75] text-[var(--color-text-body)] outline-none empty:before:pointer-events-none empty:before:text-[var(--color-text-muted-soft)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--color-accent)] [&_a]:underline [&_a]:underline-offset-2 [&_div]:my-0 [&_div]:min-h-[1.75em] [&_div]:leading-[1.75] [&_font[size='2']]:text-[14px] [&_font[size='2']]:leading-[1.6] [&_font[size='6']]:text-[24px] [&_font[size='6']]:font-semibold [&_font[size='6']]:leading-[1.3] [&_font[size='7']]:text-[30px] [&_font[size='7']]:font-semibold [&_font[size='7']]:leading-[1.25] [&_h1]:my-0 [&_h2]:my-0 [&_h2]:min-h-[1.25em] [&_h2]:text-[30px] [&_h2]:font-semibold [&_h2]:leading-[1.25] [&_h3]:my-0 [&_li]:min-h-[1.75em] [&_li]:pl-1 [&_li]:leading-[1.75] [&_ol]:my-0 [&_ol]:list-decimal [&_ol]:space-y-0 [&_ol]:pl-5 [&_p]:my-0 [&_p]:min-h-[1.75em] [&_p]:leading-[1.75] [&_span[data-posty-size=large]]:leading-[1.25] [&_span[data-posty-size=muted]]:leading-[1.6] [&_span[data-posty-size=small]]:leading-[1.6] [&_span[data-posty-size=title]]:leading-[1.3] [&_ul]:my-0 [&_ul]:list-disc [&_ul]:space-y-0 [&_ul]:pl-5"
             />
           </div>
         </div>

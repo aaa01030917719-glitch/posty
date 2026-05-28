@@ -294,6 +294,7 @@ export function MarkdownToolbar({
             <button
               key={item.value}
               type="button"
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => onAction(item.value)}
               disabled={disabled}
               title={item.label}

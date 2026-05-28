@@ -420,7 +420,7 @@ function renderInlineContent(source: string, keyPrefix: string): ReactNode[] {
       nodes.push(
         <span
           key={key}
-          className="text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]"
+          className="text-[30px] font-semibold leading-[1.25] text-[var(--color-text-primary)]"
         >
           {renderInlineContent(match.value, `${key}-large`)}
         </span>
@@ -429,20 +429,20 @@ function renderInlineContent(source: string, keyPrefix: string): ReactNode[] {
       nodes.push(
         <span
           key={key}
-          className="text-[24px] font-semibold leading-[1.4] text-[var(--color-text-primary)]"
+          className="text-[24px] font-semibold leading-[1.3] text-[var(--color-text-primary)]"
         >
           {renderInlineContent(match.value, `${key}-title`)}
         </span>
       )
     } else if (match.type === 'small') {
       nodes.push(
-        <span key={key} className="text-[14px] leading-[1.7] text-[var(--color-text-secondary)]">
+        <span key={key} className="text-[14px] leading-[1.6] text-[var(--color-text-secondary)]">
           {renderInlineContent(match.value, `${key}-small`)}
         </span>
       )
     } else if (match.type === 'muted') {
       nodes.push(
-        <span key={key} className="text-[14px] leading-[1.7] text-[var(--color-text-muted)]">
+        <span key={key} className="text-[14px] leading-[1.6] text-[var(--color-text-muted)]">
           {renderInlineContent(match.value, `${key}-muted`)}
         </span>
       )
@@ -585,7 +585,7 @@ export function FormattedText({ text, className, mediaItems }: FormattedTextProp
           return (
             <h2
               key={`heading-${index}`}
-              className="text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]"
+              className="text-[30px] font-semibold leading-[1.25] text-[var(--color-text-primary)]"
             >
               {renderInlineContent(block.value, `heading-${index}`)}
             </h2>
@@ -600,8 +600,8 @@ export function FormattedText({ text, className, mediaItems }: FormattedTextProp
               key={`list-${index}`}
               className={
                 block.ordered
-                  ? 'list-decimal space-y-1 pl-5'
-                  : 'list-disc space-y-1 pl-5'
+                  ? 'list-decimal space-y-0 pl-5'
+                  : 'list-disc space-y-0 pl-5'
               }
             >
               {block.items.map((item, itemIndex) => (
