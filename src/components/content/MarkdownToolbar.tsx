@@ -285,8 +285,8 @@ export function MarkdownToolbar({
   showMediaAction = false,
 }: MarkdownToolbarProps) {
   return (
-    <div className={className ?? 'toolbar-wrap shrink-0 border-b border-[var(--color-border-soft)] px-11'}>
-      <div className={toolbarClassName ?? 'toolbar flex h-9 items-center gap-1 overflow-x-auto'}>
+    <div className={className ?? 'toolbar-wrap shrink-0 border-b border-[var(--color-border-soft)] px-4 sm:px-6 lg:px-11'}>
+      <div className={toolbarClassName ?? 'toolbar flex min-h-10 items-center gap-1 overflow-x-auto py-1'}>
         {MARKDOWN_TOOLBAR_ITEMS.filter((item) => !item.mediaOnly || showMediaAction).map((item) => {
           const Icon = item.icon
 
@@ -299,8 +299,8 @@ export function MarkdownToolbar({
               title={item.label}
               aria-label={item.label}
               className={[
-                'flex h-6 shrink-0 items-center justify-center rounded-[4px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted-soft)]',
-                item.text ? 'px-1.5 text-[11px] font-semibold' : 'w-6',
+                'flex h-8 shrink-0 items-center justify-center rounded-[4px] text-[var(--color-text-secondary)] transition-colors hover:bg-[var(--color-bg-subtle)] hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted-soft)]',
+                item.text ? 'px-2 text-[11px] font-semibold' : 'w-8',
               ].join(' ')}
             >
               {Icon ? (

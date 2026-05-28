@@ -331,7 +331,7 @@ export default function ContentPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-5 bg-white p-5 md:p-6">
+    <div className="flex min-h-full flex-col gap-5 bg-white p-4 sm:p-5 md:p-6">
       {campaignToastOpen && (
         <Toast
           message={CAMPAIGN_SUCCESS_TOAST}
@@ -341,7 +341,7 @@ export default function ContentPage() {
 
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <div className="relative w-full max-w-sm">
+          <div className="relative w-full sm:max-w-sm">
             <Search
               size={14}
               className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-[var(--color-text-muted)]"
@@ -355,7 +355,7 @@ export default function ContentPage() {
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2 lg:ml-auto">
+          <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end lg:ml-auto">
             <Button
               size="sm"
               variant="secondary"
@@ -375,7 +375,7 @@ export default function ContentPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pb-1">
           {STATUS_FILTERS.map((value) => (
             <button
               key={value}
@@ -428,7 +428,7 @@ export default function ContentPage() {
                 disabled={campaignCreating}
               />
 
-              <div className="flex gap-2 lg:pt-6">
+              <div className="flex flex-wrap gap-2 lg:pt-6">
                 <Button
                   type="submit"
                   size="sm"
@@ -464,8 +464,8 @@ export default function ContentPage() {
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-accent)] border-t-transparent" />
         </div>
       ) : (
-        <div className="grid min-h-0 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3">
+        <div className="grid min-h-0 gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="max-h-64 overflow-y-auto rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3 xl:max-h-none">
             <div className="mb-2 flex items-center justify-between gap-2 px-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-[var(--color-text-primary)]">

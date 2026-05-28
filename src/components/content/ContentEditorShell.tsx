@@ -2855,7 +2855,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const renderContentLayout = (children: ReactNode, contentClassName?: string) => (
-    <div className="flex min-h-[calc(100vh-96px)] w-full justify-center bg-[#F3F4F6] p-5 md:p-6">
+    <div className="flex min-h-[calc(100vh-96px)] w-full justify-center bg-[#F3F4F6] p-3 sm:p-4 md:p-6">
       <section
         className={clsx(
           'w-full max-w-[1280px] min-w-0 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]',
@@ -2977,9 +2977,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
   return renderContentLayout(
     <>
-      <div className="flex h-full min-h-[640px] w-full flex-col bg-[var(--color-bg-surface)] xl:flex-row">
+      <div className="flex h-full min-h-[620px] w-full flex-col bg-[var(--color-bg-surface)] xl:min-h-[640px] xl:flex-row">
         <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
-          <div className="topbar flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] px-5 py-3">
+          <div className="topbar flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] px-4 py-3 sm:px-5">
             <div className="breadcrumb flex min-w-0 flex-1 basis-[220px] items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
               <Link href="/content" className="transition-colors hover:text-[var(--color-text-body)]">
                 콘텐츠
@@ -3059,7 +3059,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </div>
 
-          <div className="content-header shrink-0 px-11 pt-3">
+          <div className="content-header shrink-0 px-4 pt-3 sm:px-6 lg:px-11">
             {card.channel && channelBadgeLabel && (
               <span
                 className="hidden"
@@ -3325,7 +3325,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             </div>
           </div>
 
-          <div className="editor-body-wrap flex min-h-0 flex-1 flex-col px-11 py-3">
+          <div className="editor-body-wrap flex min-h-0 flex-1 flex-col px-4 py-3 sm:px-6 lg:px-11">
             <div className="mb-2 flex w-full items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
               <span className="min-w-0 truncate font-medium">콘텐츠 내용이 들어갑니다</span>
               <span className="shrink-0 font-medium">
@@ -3354,7 +3354,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         </div>
 
         {panelOpen && (
-          <aside className="right-panel flex h-full w-full shrink-0 flex-col overflow-hidden border-t border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:w-[400px] xl:border-l xl:border-t-0">
+          <aside className="right-panel flex w-full shrink-0 flex-col overflow-hidden border-t border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:h-full xl:w-[400px] xl:border-l xl:border-t-0">
             <div className="rp-head flex items-center gap-[5px] border-b border-[var(--color-border-soft)] px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate px-1 text-[13px] font-semibold text-[var(--color-text-primary)]">

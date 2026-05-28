@@ -57,7 +57,7 @@ export function CampaignRowList({ cards, onCardClick }: CampaignRowListProps) {
   }
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-5">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,220px),1fr))] gap-4 sm:gap-5">
       {cards.map((card) => {
         const media = getPrimaryMedia(card)
         const previewText = getCardPreviewText(card)
@@ -67,7 +67,7 @@ export function CampaignRowList({ cards, onCardClick }: CampaignRowListProps) {
             key={card.id}
             type="button"
             onClick={() => onCardClick?.(card)}
-            className="group overflow-hidden rounded-[12px] border border-[var(--color-border-soft)] bg-white text-left transition-colors hover:border-[var(--color-border-default)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+            className="group w-full min-w-0 overflow-hidden rounded-[12px] border border-[var(--color-border-soft)] bg-white text-left transition-colors hover:border-[var(--color-border-default)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
           >
             <div className="flex aspect-[1.38] items-center justify-center overflow-hidden bg-[#F3F4F6]">
               {media?.signedUrl ? (

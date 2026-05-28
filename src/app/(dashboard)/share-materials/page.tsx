@@ -458,7 +458,7 @@ export default function ShareMaterialsPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 bg-[var(--color-bg-canvas)] p-4 sm:p-5 md:p-6">
       {toastMessage && <Toast message={toastMessage} onAction={() => setToastMessage(null)} />}
 
       <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -468,7 +468,7 @@ export default function ShareMaterialsPage() {
           </h1>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">{PAGE_DESCRIPTION}</p>
         </div>
-        <Button onClick={handleCreateMaterial} disabled={creating} size="sm" className="shrink-0">
+        <Button onClick={handleCreateMaterial} disabled={creating} size="sm" className="w-full shrink-0 justify-center sm:w-auto">
           <Plus size={14} />
           {creating ? '생성 중' : '새 공유 자료 만들기'}
         </Button>
@@ -486,8 +486,8 @@ export default function ShareMaterialsPage() {
           </p>
         </div>
       ) : (
-        <div className="grid min-h-0 gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="min-h-0 rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3 lg:overflow-y-auto">
+        <div className="grid min-h-0 gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="min-h-0 max-h-64 overflow-y-auto rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-3 xl:max-h-none">
             <div className="mb-2 flex items-center justify-between gap-2 px-1">
               <p className="text-sm font-semibold text-[var(--color-text-primary)]">
                 공유 자료 {materials.length}개
@@ -523,7 +523,7 @@ export default function ShareMaterialsPage() {
             </div>
           </aside>
 
-          <section className="min-h-0 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+          <section className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
             {selectedMaterial && selectedCard ? (
               <div className="flex min-h-full flex-col">
                 <div className="border-b border-[var(--color-border-soft)] px-5 py-4">
@@ -551,7 +551,7 @@ export default function ShareMaterialsPage() {
                         공개 URL은 기존 /share/content/[token] 형식을 그대로 사용합니다.
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex w-full flex-wrap gap-2 md:w-auto md:justify-end">
                       {selectedMaterial.is_enabled && (
                         <Button type="button" size="sm" variant="secondary" onClick={handleCopyShareLink}>
                           <Copy size={14} />
@@ -591,8 +591,8 @@ export default function ShareMaterialsPage() {
                   )}
                 </div>
 
-                <div className="flex flex-1 flex-col gap-4 p-5">
-                  <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-[var(--color-text-primary)]">섹션</p>
                     <Button type="button" size="sm" variant="secondary" onClick={addSection}>
                       <Plus size={14} />
@@ -614,9 +614,9 @@ export default function ShareMaterialsPage() {
                       {selectedSections.map((section) => (
                         <article
                           key={section.id}
-                          className="rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] p-4"
+                          className="min-w-0 rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] p-3 sm:p-4"
                         >
-                          <div className="mb-3 flex items-center justify-end gap-3">
+                          <div className="mb-3 flex flex-wrap items-center justify-end gap-3">
                             <button
                               type="button"
                               onClick={() => removeSection(section.id)}
@@ -646,7 +646,7 @@ export default function ShareMaterialsPage() {
                             <MarkdownToolbar
                               onAction={(action) => handleSectionToolbarAction(section, action)}
                               className="mt-1 rounded-t-[var(--radius-md)] border border-[var(--color-border-default)] border-b-0 bg-[var(--color-bg-surface)] px-2"
-                              toolbarClassName="flex h-8 items-center gap-1 overflow-x-auto"
+                              toolbarClassName="flex min-h-10 items-center gap-1 overflow-x-auto py-1"
                             />
                             <textarea
                               ref={(node) => {
@@ -667,7 +667,7 @@ export default function ShareMaterialsPage() {
                     </div>
                   )}
 
-                  <div className="flex justify-end border-t border-[var(--color-border-soft)] pt-4">
+                  <div className="flex flex-wrap justify-end border-t border-[var(--color-border-soft)] pt-4">
                     <Button type="button" onClick={handleSaveSections} disabled={saving}>
                       <Save size={14} />
                       {saving ? '저장 중' : '저장'}
