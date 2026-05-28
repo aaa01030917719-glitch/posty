@@ -59,7 +59,7 @@ type InlineMatch =
       priority: number
     }
   | {
-      type: 'bold' | 'italic' | 'strike' | 'small'
+      type: 'bold' | 'italic' | 'strike' | 'large' | 'title' | 'small' | 'muted'
       index: number
       end: number
       value: string
@@ -72,7 +72,10 @@ const LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/
 const BOLD_PATTERN = /\*\*([^*\n]+?)\*\*/
 const STRIKE_PATTERN = /~~([^~\n]+?)~~/
 const ITALIC_PATTERN = /\*([^*\n]+?)\*/
+const LARGE_PATTERN = /<posty-large>([^<\n]+?)<\/posty-large>/
+const TITLE_PATTERN = /<posty-title>([^<\n]+?)<\/posty-title>/
 const SMALL_PATTERN = /<small>([^<\n]+?)<\/small>/
+const MUTED_PATTERN = /<posty-muted>([^<\n]+?)<\/posty-muted>/
 const HEADING_PATTERN = /^\s{0,3}#{1,3}\s+(.+)$/
 const UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
 const ORDERED_LIST_PATTERN = /^\s*\d+\.\s+(.+)$/
@@ -332,8 +335,11 @@ function getNextInlineMatch(source: string) {
     matchPattern(source, LINK_PATTERN, 1, 'link'),
     matchPattern(source, BOLD_PATTERN, 2, 'bold'),
     matchPattern(source, STRIKE_PATTERN, 3, 'strike'),
-    matchPattern(source, SMALL_PATTERN, 4, 'small'),
-    matchPattern(source, ITALIC_PATTERN, 5, 'italic'),
+    matchPattern(source, LARGE_PATTERN, 4, 'large'),
+    matchPattern(source, TITLE_PATTERN, 5, 'title'),
+    matchPattern(source, SMALL_PATTERN, 6, 'small'),
+    matchPattern(source, MUTED_PATTERN, 7, 'muted'),
+    matchPattern(source, ITALIC_PATTERN, 8, 'italic'),
   ].filter((match): match is InlineMatch => Boolean(match))
 
   return matches.sort((a, b) => a.index - b.index || a.priority - b.priority)[0] ?? null
@@ -365,10 +371,34 @@ function renderInlineContent(source: string, keyPrefix: string): ReactNode[] {
       nodes.push(<em key={key}>{renderInlineContent(match.value, `${key}-italic`)}</em>)
     } else if (match.type === 'strike') {
       nodes.push(<del key={key}>{renderInlineContent(match.value, `${key}-strike`)}</del>)
+    } else if (match.type === 'large') {
+      nodes.push(
+        <span
+          key={key}
+          className="text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]"
+        >
+          {renderInlineContent(match.value, `${key}-large`)}
+        </span>
+      )
+    } else if (match.type === 'title') {
+      nodes.push(
+        <span
+          key={key}
+          className="text-[24px] font-semibold leading-[1.4] text-[var(--color-text-primary)]"
+        >
+          {renderInlineContent(match.value, `${key}-title`)}
+        </span>
+      )
     } else if (match.type === 'small') {
       nodes.push(
-        <span key={key} className="text-[0.86em] leading-relaxed text-[var(--color-text-secondary)]">
+        <span key={key} className="text-[14px] leading-[1.7] text-[var(--color-text-secondary)]">
           {renderInlineContent(match.value, `${key}-small`)}
+        </span>
+      )
+    } else if (match.type === 'muted') {
+      nodes.push(
+        <span key={key} className="text-[14px] leading-[1.7] text-[var(--color-text-muted)]">
+          {renderInlineContent(match.value, `${key}-muted`)}
         </span>
       )
     } else if (match.type === 'link') {
@@ -453,7 +483,10 @@ export function getPlainTextPreview(text: string | null | undefined) {
     .replace(new RegExp(LINK_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(BOLD_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(STRIKE_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(LARGE_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(TITLE_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(SMALL_PATTERN.source, 'g'), '$1')
+    .replace(new RegExp(MUTED_PATTERN.source, 'g'), '$1')
     .replace(new RegExp(ITALIC_PATTERN.source, 'g'), '$1')
     .replace(/^\s{0,3}#{1,3}\s+/gm, '')
     .replace(/^\s*[-*]\s+/gm, '')
@@ -477,7 +510,10 @@ export function FormattedText({ text, className, mediaItems }: FormattedTextProp
       {blocks.map((block, index) => {
         if (block.type === 'text') {
           return (
-            <div key={`text-${index}`} className="whitespace-pre-wrap">
+            <div
+              key={`text-${index}`}
+              className="whitespace-pre-wrap text-[16px] leading-[1.75] text-[var(--color-text-body)]"
+            >
               {renderInlineContent(block.value, `text-${index}`)}
             </div>
           )

@@ -121,8 +121,13 @@ const EMPTY_CAMPAIGN_CONTENTS_LABEL = '콘텐츠 없음'
 const RICH_TEXT_PLACEHOLDER = '\uD14D\uC2A4\uD2B8'
 const RICH_HEADING_PLACEHOLDER = '\uC81C\uBAA9'
 const RICH_SMALL_PLACEHOLDER = '\uC791\uC740\uAE00\uC528'
+const RICH_MUTED_PLACEHOLDER = '\uBCF4\uC870\uAE00\uC528'
 const RICH_LINK_TEXT_PLACEHOLDER = '\uB9C1\uD06C \uD14D\uC2A4\uD2B8'
 const RICH_LINK_URL_PLACEHOLDER = 'https://example.com'
+const RICH_LARGE_CLASS = 'text-[30px] font-semibold leading-[1.35] text-[var(--color-text-primary)]'
+const RICH_TITLE_CLASS = 'text-[24px] font-semibold leading-[1.4] text-[var(--color-text-primary)]'
+const RICH_SMALL_CLASS = 'text-[14px] leading-[1.7] text-[var(--color-text-secondary)]'
+const RICH_MUTED_CLASS = 'text-[14px] leading-[1.7] text-[var(--color-text-muted)]'
 const RICH_MEDIA_UNAVAILABLE_LABEL =
   '\uCCA8\uBD80 \uBBF8\uB514\uC5B4\uB97C \uBD88\uB7EC\uC62C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4'
 const RICH_MEDIA_IMAGE_LABEL = '\uCCA8\uBD80 \uC774\uBBF8\uC9C0'
@@ -558,7 +563,10 @@ const EDITOR_INLINE_MEDIA_PATTERN = /!\[([^\]]*)\]\(posty-media:([A-Za-z0-9_-]+)
 const EDITOR_LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/
 const EDITOR_BOLD_PATTERN = /\*\*([^*\n]+?)\*\*/
 const EDITOR_STRIKE_PATTERN = /~~([^~\n]+?)~~/
+const EDITOR_LARGE_PATTERN = /<posty-large>([^<\n]+?)<\/posty-large>/
+const EDITOR_TITLE_PATTERN = /<posty-title>([^<\n]+?)<\/posty-title>/
 const EDITOR_SMALL_PATTERN = /<small>([^<\n]+?)<\/small>/
+const EDITOR_MUTED_PATTERN = /<posty-muted>([^<\n]+?)<\/posty-muted>/
 const EDITOR_ITALIC_PATTERN = /\*([^*\n]+?)\*/
 const EDITOR_HEADING_PATTERN = /^\s{0,3}#{1,3}\s+(.+)$/
 const EDITOR_UNORDERED_LIST_PATTERN = /^\s*[-*]\s+(.+)$/
@@ -583,7 +591,7 @@ type EditorInlineMatch =
       priority: number
     }
   | {
-      type: 'bold' | 'italic' | 'strike' | 'small'
+      type: 'bold' | 'italic' | 'strike' | 'large' | 'title' | 'small' | 'muted'
       index: number
       end: number
       value: string
@@ -685,8 +693,11 @@ function getNextEditorInlineMatch(source: string) {
     matchEditorPattern(source, EDITOR_LINK_PATTERN, 1, 'link'),
     matchEditorPattern(source, EDITOR_BOLD_PATTERN, 2, 'bold'),
     matchEditorPattern(source, EDITOR_STRIKE_PATTERN, 3, 'strike'),
-    matchEditorPattern(source, EDITOR_SMALL_PATTERN, 4, 'small'),
-    matchEditorPattern(source, EDITOR_ITALIC_PATTERN, 5, 'italic'),
+    matchEditorPattern(source, EDITOR_LARGE_PATTERN, 4, 'large'),
+    matchEditorPattern(source, EDITOR_TITLE_PATTERN, 5, 'title'),
+    matchEditorPattern(source, EDITOR_SMALL_PATTERN, 6, 'small'),
+    matchEditorPattern(source, EDITOR_MUTED_PATTERN, 7, 'muted'),
+    matchEditorPattern(source, EDITOR_ITALIC_PATTERN, 8, 'italic'),
   ].filter((match): match is EditorInlineMatch => Boolean(match))
 
   return matches.sort((a, b) => a.index - b.index || a.priority - b.priority)[0] ?? null
@@ -737,9 +748,16 @@ function appendInlineEditorNodes(
               : 'span'
       )
 
-      if (match.type === 'small') {
-        element.dataset.postySize = 'small'
-        element.className = 'text-[0.86em] leading-relaxed text-[var(--color-text-secondary)]'
+      if (['large', 'title', 'small', 'muted'].includes(match.type)) {
+        element.dataset.postySize = match.type
+        element.className =
+          match.type === 'large'
+            ? RICH_LARGE_CLASS
+            : match.type === 'title'
+              ? RICH_TITLE_CLASS
+              : match.type === 'muted'
+                ? RICH_MUTED_CLASS
+                : RICH_SMALL_CLASS
       }
 
       appendInlineEditorNodes(ownerDocument, element, match.value, mediaById)
@@ -880,6 +898,9 @@ function serializeInlineEditorNode(node: Node): string {
   if (node.tagName === 'DEL' || node.tagName === 'S' || node.tagName === 'STRIKE') {
     return `~~${content}~~`
   }
+  if (node.dataset.postySize === 'large') return `<posty-large>${content}</posty-large>`
+  if (node.dataset.postySize === 'title') return `<posty-title>${content}</posty-title>`
+  if (node.dataset.postySize === 'muted') return `<posty-muted>${content}</posty-muted>`
   if (node.dataset.postySize === 'small' || node.tagName === 'SMALL') {
     return `<small>${content}</small>`
   }
@@ -970,6 +991,62 @@ function insertNodeAtSelection(editor: HTMLDivElement, node: Node) {
   range.deleteContents()
   range.insertNode(node)
   moveSelectionAfterNode(node)
+}
+
+function getEditableBlockForRange(editor: HTMLElement, range: Range) {
+  let node: Node | null = range.commonAncestorContainer
+
+  if (node.nodeType === Node.TEXT_NODE) {
+    node = node.parentNode
+  }
+
+  while (node && node !== editor) {
+    if (node instanceof HTMLElement) {
+      if (['P', 'DIV', 'H1', 'H2', 'H3', 'LI'].includes(node.tagName)) {
+        return node
+      }
+
+      if (node.parentElement === editor) {
+        return node
+      }
+    }
+
+    node = node.parentNode
+  }
+
+  return null
+}
+
+function wrapElementContents(element: HTMLElement, wrapper: HTMLElement) {
+  while (element.firstChild) {
+    wrapper.appendChild(element.firstChild)
+  }
+
+  element.appendChild(wrapper)
+}
+
+function unwrapPostySizeElements(root: HTMLElement, options: { includeRoot?: boolean } = {}) {
+  const targets: HTMLElement[] = []
+
+  if (options.includeRoot && root.matches('[data-posty-size], small')) {
+    targets.push(root)
+  }
+
+  root.querySelectorAll('[data-posty-size], small').forEach((node) => {
+    if (node instanceof HTMLElement) targets.push(node)
+  })
+
+  targets.forEach((wrapper) => {
+    const parent = wrapper?.parentNode
+
+    if (!wrapper || !parent) return
+
+    while (wrapper.firstChild) {
+      parent.insertBefore(wrapper.firstChild, wrapper)
+    }
+
+    parent.removeChild(wrapper)
+  })
 }
 
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
@@ -1808,7 +1885,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     selection.addRange(fallbackRange)
   }
 
-  const ensureBodyEditorSelectionText = (placeholder: string) => {
+  const ensureBodyEditorSelectionText = (
+    placeholder: string,
+    options: { onlyWhenEditorEmpty?: boolean } = {}
+  ) => {
     const editor = bodyEditorRef.current
     const selection = window.getSelection()
 
@@ -1817,6 +1897,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     const range = selection.getRangeAt(0)
 
     if (!range.collapsed) return
+    if (options.onlyWhenEditorEmpty && serializeEditorToMarkdown(editor).trim()) return
 
     const textNode = editor.ownerDocument.createTextNode(placeholder)
     range.insertNode(textNode)
@@ -1831,7 +1912,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     options: { dataset?: Record<string, string>; className?: string; placeholder: string }
   ) => {
     restoreBodyEditorSelection()
-    ensureBodyEditorSelectionText(options.placeholder)
+    ensureBodyEditorSelectionText(options.placeholder, { onlyWhenEditorEmpty: true })
 
     const editor = bodyEditorRef.current
     const selection = window.getSelection()
@@ -1847,6 +1928,24 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
     if (options.className) {
       wrapper.className = options.className
+    }
+
+    if (range.collapsed) {
+      const block = getEditableBlockForRange(editor, range)
+
+      if (block) {
+        unwrapPostySizeElements(block)
+        wrapElementContents(block, wrapper)
+
+        const nextRange = editor.ownerDocument.createRange()
+        nextRange.selectNodeContents(wrapper)
+        selection.removeAllRanges()
+        selection.addRange(nextRange)
+        bodyEditorSelectionRef.current = nextRange.cloneRange()
+        syncBodyDraftFromEditor()
+      }
+
+      return
     }
 
     wrapper.appendChild(range.extractContents())
@@ -1905,37 +2004,61 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     restoreBodyEditorSelection()
 
     if (action === 'bold') {
-      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('bold')
     } else if (action === 'italic') {
-      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('italic')
     } else if (action === 'strike') {
-      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('strikeThrough')
     } else if (action === 'bulletList') {
-      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('insertUnorderedList')
     } else if (action === 'orderedList') {
-      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('insertOrderedList')
     } else if (action === 'link') {
-      ensureBodyEditorSelectionText(RICH_LINK_TEXT_PLACEHOLDER)
+      ensureBodyEditorSelectionText(RICH_LINK_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('createLink', false, RICH_LINK_URL_PLACEHOLDER)
     } else if (action === 'hr') {
       const hr = editor.ownerDocument.createElement('hr')
       insertNodeAtSelection(editor, hr)
+    } else if (action === 'largeHeading') {
+      wrapBodyEditorSelection('span', {
+        placeholder: RICH_HEADING_PLACEHOLDER,
+        dataset: { postySize: 'large' },
+        className: RICH_LARGE_CLASS,
+      })
+      return
     } else if (action === 'heading') {
-      ensureBodyEditorSelectionText(RICH_HEADING_PLACEHOLDER)
-      document.execCommand('formatBlock', false, 'h2')
+      wrapBodyEditorSelection('span', {
+        placeholder: RICH_HEADING_PLACEHOLDER,
+        dataset: { postySize: 'title' },
+        className: RICH_TITLE_CLASS,
+      })
+      return
     } else if (action === 'paragraph') {
-      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER)
+      ensureBodyEditorSelectionText(RICH_TEXT_PLACEHOLDER, { onlyWhenEditorEmpty: true })
       document.execCommand('formatBlock', false, 'p')
+
+      const selection = window.getSelection()
+      if (selection && selection.rangeCount > 0) {
+        const block = getEditableBlockForRange(editor, selection.getRangeAt(0))
+        if (block) unwrapPostySizeElements(block, { includeRoot: true })
+      }
     } else if (action === 'small') {
       wrapBodyEditorSelection('span', {
         placeholder: RICH_SMALL_PLACEHOLDER,
         dataset: { postySize: 'small' },
-        className: 'text-[0.86em] leading-relaxed text-[var(--color-text-secondary)]',
+        className: RICH_SMALL_CLASS,
+      })
+      return
+    } else if (action === 'muted') {
+      wrapBodyEditorSelection('span', {
+        placeholder: RICH_MUTED_PLACEHOLDER,
+        dataset: { postySize: 'muted' },
+        className: RICH_MUTED_CLASS,
       })
       return
     }
@@ -2532,11 +2655,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const renderContentLayout = (children: ReactNode, contentClassName?: string) => (
-    <div className="grid min-h-[calc(100vh-96px)] w-full gap-4 bg-[#F3F4F6] p-5 md:p-6 lg:grid-cols-[240px_minmax(0,1280px)] lg:items-stretch lg:justify-center">
-      {renderCampaignSidebar()}
+    <div className="flex min-h-[calc(100vh-96px)] w-full justify-center bg-[#F3F4F6] p-5 md:p-6">
       <section
         className={clsx(
-          'min-w-0 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]',
+          'w-full max-w-[1280px] min-w-0 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]',
           contentClassName
         )}
       >
@@ -2657,8 +2779,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     <>
       <div className="flex h-full min-h-[640px] w-full flex-col bg-[var(--color-bg-surface)] xl:flex-row">
         <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
-          <div className="topbar flex items-center justify-between border-b border-[var(--color-border-soft)] px-5 py-3">
-            <div className="breadcrumb flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+          <div className="topbar flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] px-5 py-3">
+            <div className="breadcrumb flex min-w-0 flex-1 basis-[220px] items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
               <Link href="/content" className="transition-colors hover:text-[var(--color-text-body)]">
                 콘텐츠
               </Link>
@@ -2666,9 +2788,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               <span className="truncate font-medium text-[var(--color-text-body)]">{titleDraft}</span>
             </div>
 
-            <div className="topbar-actions flex items-center gap-1.5">
+            <div className="topbar-actions flex min-w-0 flex-1 basis-full flex-wrap items-center justify-start gap-1.5 sm:basis-auto sm:flex-none sm:justify-end">
               {saveLabel && (
-                <span className="text-[11px] font-medium text-[var(--color-text-muted)]">
+                <span className="min-w-0 max-w-full text-[11px] font-medium text-[var(--color-text-muted)] sm:max-w-[220px] sm:truncate">
                   {saveLabel}
                 </span>
               )}
@@ -2677,7 +2799,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 type="button"
                 onClick={() => handlePersist('writing')}
                 disabled={isPreview || saveState === 'saving' || deleting}
-                className="inline-flex h-7 items-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                className="inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] sm:px-3"
               >
                 임시저장
               </button>
@@ -2685,18 +2807,18 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 type="button"
                 onClick={() => handlePersist('published')}
                 disabled={isPreview || saveState === 'saving' || deleting}
-                className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] sm:px-3"
               >
-                <Save size={13} />
+                <Save size={13} className="shrink-0" />
                 저장
               </button>
               <button
                 type="button"
                 onClick={handleSoftDelete}
                 disabled={isPreview || saveState === 'saving' || deleting}
-                className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-danger)] transition-[background-color,color,border-color] hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-danger)] transition-[background-color,color,border-color] hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
               >
-                <Trash2 size={13} />
+                <Trash2 size={13} className="shrink-0" />
                 {deleting ? '\uc0ad\uc81c \uc911' : '\uc0ad\uc81c'}
               </button>
               <button
@@ -2704,7 +2826,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 onClick={() => setShareModalOpen(true)}
                 disabled={isPreview || shareBusy}
                 className={clsx(
-                  'flex h-7 w-7 items-center justify-center rounded-[5px] border transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]',
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] border transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]',
                   activeShareLink
                     ? 'border-[var(--color-accent)] bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
                     : 'border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-body)]'
@@ -2716,7 +2838,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               <button
                 type="button"
                 disabled
-                className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] disabled:opacity-100"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] disabled:opacity-100"
                 aria-label="추가 준비 중"
               >
                 <Plus size={14} />
@@ -2725,7 +2847,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 type="button"
                 onClick={() => setPanelOpen((prev) => !prev)}
                 className={clsx(
-                  'flex h-7 w-7 items-center justify-center rounded-[5px] border transition-[background-color,border-color,color]',
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] border transition-[background-color,border-color,color]',
                   panelOpen
                     ? 'border-[var(--color-accent)] bg-[var(--color-bg-accent-soft)] text-[var(--color-accent)]'
                     : 'border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)]'
@@ -2750,7 +2872,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </span>
             )}
 
-            <div className="hidden">
+            <div className="relative mb-2 flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-2 text-[12px] text-[var(--color-text-muted)]">
+              <div className="relative min-w-0">
               <button
                 type="button"
                 aria-expanded={campaignPickerOpen}
@@ -2758,7 +2881,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 onClick={() => setCampaignPickerOpen((prev) => !prev)}
                 disabled={isPreview}
                 className={clsx(
-                  'flex h-8 w-full items-center justify-between gap-3 rounded-[5px] px-0 text-left text-[12px] font-semibold text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
+                  'inline-flex h-8 max-w-[260px] items-center gap-1 bg-transparent p-0 text-left text-[12px] font-semibold text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]',
                   isPreview && 'cursor-not-allowed opacity-60 hover:text-[var(--color-text-muted)]'
                 )}
               >
@@ -2773,18 +2896,21 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </button>
 
               {campaignPickerOpen && !isPreview && (
-                <div id="content-campaign-picker" className="py-1">
+                <div
+                  id="content-campaign-picker"
+                  className="absolute left-0 top-full z-30 mt-1 min-w-[180px] max-w-[260px] rounded-[6px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] py-1 shadow-sm"
+                >
                   <button
                     type="button"
                     onClick={() => handleCampaignSelect('')}
                     className={clsx(
-                      'flex w-full items-center rounded-[5px] px-2 py-2 text-left text-[12px] font-medium transition-colors hover:bg-[var(--color-bg-subtle)]',
+                      'flex w-full items-center px-2.5 py-2 text-left text-[12px] font-medium transition-colors hover:bg-[var(--color-bg-subtle)]',
                       selectedProjectId
                         ? 'text-[var(--color-text-muted)]'
                         : 'bg-[var(--color-bg-subtle)] text-[var(--color-text-body)]'
                     )}
                   >
-                    캠페인 선택
+                    캠페인 없음
                   </button>
                   {projects.map((project) => (
                     <button
@@ -2792,7 +2918,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                       type="button"
                       onClick={() => handleCampaignSelect(project.id)}
                       className={clsx(
-                        'flex w-full items-center rounded-[5px] px-2 py-2 text-left text-[12px] font-medium transition-colors hover:bg-[var(--color-bg-subtle)]',
+                        'flex w-full items-center px-2.5 py-2 text-left text-[12px] font-medium transition-colors hover:bg-[var(--color-bg-subtle)]',
                         selectedProjectId === project.id
                           ? 'bg-[var(--color-bg-subtle)] text-[var(--color-text-body)]'
                           : 'text-[var(--color-text-muted)]'
@@ -2802,7 +2928,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                     </button>
                   ))}
                   {projects.length === 0 && (
-                    <p className="px-2 py-2 text-[12px] text-[var(--color-text-muted)]">
+                    <p className="px-2.5 py-2 text-[12px] text-[var(--color-text-muted)]">
                       캠페인이 없습니다
                     </p>
                   )}
@@ -2810,9 +2936,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               )}
             </div>
 
-            <div className="mb-1 flex w-full flex-wrap items-center justify-between gap-2 text-[12px] text-[var(--color-text-muted)]">
-              <span className="font-semibold">업로드 날짜</span>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto">
+                <span className="font-semibold">업로드 날짜</span>
                 <input
                   type="date"
                   value={scheduledDateDraft}
@@ -3014,7 +3139,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               onKeyUp={storeBodyEditorSelection}
               onMouseUp={storeBodyEditorSelection}
               onFocus={storeBodyEditorSelection}
-              className="min-h-[420px] w-full flex-1 overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[14.5px] leading-[1.85] text-[var(--color-text-body)] outline-none empty:before:pointer-events-none empty:before:text-[var(--color-text-muted-soft)] empty:before:content-[attr(data-placeholder)] [&_h1]:my-0 [&_h2]:my-0 [&_h2]:text-[30px] [&_h2]:font-semibold [&_h2]:leading-[1.35] [&_h3]:my-0 [&_ol]:my-0 [&_p]:my-0 [&_ul]:my-0"
+              className="min-h-[420px] w-full flex-1 overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[16px] leading-[1.75] text-[var(--color-text-body)] outline-none empty:before:pointer-events-none empty:before:text-[var(--color-text-muted-soft)] empty:before:content-[attr(data-placeholder)] [&_div]:my-0 [&_div]:min-h-[1.75em] [&_div]:leading-[1.75] [&_h1]:my-0 [&_h2]:my-0 [&_h2]:min-h-[1.35em] [&_h2]:text-[30px] [&_h2]:font-semibold [&_h2]:leading-[1.35] [&_h3]:my-0 [&_li]:min-h-[1.75em] [&_ol]:my-0 [&_p]:my-0 [&_p]:min-h-[1.75em] [&_p]:leading-[1.75] [&_ul]:my-0"
             />
           </div>
         </div>

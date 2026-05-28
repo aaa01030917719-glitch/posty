@@ -13,9 +13,11 @@ import {
 } from 'lucide-react'
 
 export type MarkdownToolbarAction =
+  | 'largeHeading'
   | 'heading'
   | 'paragraph'
   | 'small'
+  | 'muted'
   | 'bold'
   | 'italic'
   | 'strike'
@@ -46,8 +48,10 @@ type MarkdownSnippet = {
 }
 
 const MARKDOWN_TEXT_PLACEHOLDER = '\uD14D\uC2A4\uD2B8'
+const MARKDOWN_LARGE_HEADING_PLACEHOLDER = '\uD070\uC81C\uBAA9'
 const MARKDOWN_HEADING_PLACEHOLDER = '\uC81C\uBAA9'
 const MARKDOWN_SMALL_PLACEHOLDER = '\uC791\uC740\uAE00\uC528'
+const MARKDOWN_MUTED_PLACEHOLDER = '\uBCF4\uC870\uAE00\uC528'
 const MARKDOWN_LINK_TEXT_PLACEHOLDER = '\uB9C1\uD06C \uD14D\uC2A4\uD2B8'
 const MARKDOWN_LINK_URL_PLACEHOLDER = 'https://example.com'
 const MARKDOWN_MEDIA_IMAGE_LABEL = '\uCCA8\uBD80 \uC774\uBBF8\uC9C0'
@@ -59,9 +63,11 @@ const MARKDOWN_TOOLBAR_ITEMS: Array<{
   text?: string
   mediaOnly?: boolean
 }> = [
+  { value: 'largeHeading', label: '\uD070\uC81C\uBAA9', text: '\uD070\uC81C\uBAA9' },
   { value: 'heading', label: '\uC81C\uBAA9', text: '\uC81C\uBAA9' },
   { value: 'paragraph', label: '\uBCF8\uBB38', text: '\uBCF8\uBB38' },
-  { value: 'small', label: '\uC791\uC740\uAE00\uC528', text: '\uC791\uAC8C' },
+  { value: 'small', label: '\uC791\uC740\uAE00\uC528', text: '\uC791\uC740\uAE00\uC528' },
+  { value: 'muted', label: '\uBCF4\uC870\uAE00\uC528', text: '\uBCF4\uC870\uAE00\uC528' },
   { value: 'bold', label: '\uBCFC\uB4DC', icon: Bold },
   { value: 'italic', label: '\uC774\uD0E4\uB9AD', icon: Italic },
   { value: 'strike', label: '\uCDE8\uC18C\uC120', icon: Strikethrough },
@@ -119,13 +125,22 @@ function createLinkMarkdownSnippet(selectedText: string): MarkdownSnippet {
 
 function createMarkdownSnippet(action: MarkdownToolbarAction, selectedText: string): MarkdownSnippet {
   switch (action) {
+    case 'largeHeading': {
+      const value = selectedText || MARKDOWN_LARGE_HEADING_PLACEHOLDER
+
+      return {
+        text: `<posty-large>${value}</posty-large>`,
+        selectionStartOffset: selectedText ? 27 + value.length : 13,
+        selectionEndOffset: selectedText ? 27 + value.length : 13 + value.length,
+      }
+    }
     case 'heading': {
       const value = selectedText || MARKDOWN_HEADING_PLACEHOLDER
 
       return {
-        text: `## ${value}`,
-        selectionStartOffset: selectedText ? 3 + value.length : 3,
-        selectionEndOffset: selectedText ? 3 + value.length : 3 + value.length,
+        text: `<posty-title>${value}</posty-title>`,
+        selectionStartOffset: selectedText ? 27 + value.length : 13,
+        selectionEndOffset: selectedText ? 27 + value.length : 13 + value.length,
       }
     }
     case 'paragraph': {
@@ -144,6 +159,15 @@ function createMarkdownSnippet(action: MarkdownToolbarAction, selectedText: stri
         text: `<small>${value}</small>`,
         selectionStartOffset: selectedText ? 15 + value.length : 7,
         selectionEndOffset: selectedText ? 15 + value.length : 7 + value.length,
+      }
+    }
+    case 'muted': {
+      const value = selectedText || MARKDOWN_MUTED_PLACEHOLDER
+
+      return {
+        text: `<posty-muted>${value}</posty-muted>`,
+        selectionStartOffset: selectedText ? 27 + value.length : 13,
+        selectionEndOffset: selectedText ? 27 + value.length : 13 + value.length,
       }
     }
     case 'bold':
@@ -203,7 +227,7 @@ export function getMarkdownActionResult(
   const selectedText = value.slice(start, end)
   const snippet = createMarkdownSnippet(action, selectedText)
 
-  if (action === 'hr' || action === 'heading') {
+  if (action === 'hr') {
     return insertBlockAtSelection(value, snippet.text, start, end)
   }
 
