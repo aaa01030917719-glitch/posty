@@ -7,6 +7,7 @@ import type {
   ContentCard,
   ContentCardDraft,
   ContentCardMedia,
+  ContentMediaType,
   ContentStatus,
   Json,
   Priority,
@@ -23,7 +24,8 @@ export type ContentDraftMediaSnapshotItem = {
   storage_path: string
   file_name: string | null
   mime_type: string | null
-  media_type: 'image' | 'video'
+  media_type: ContentMediaType
+  file_size: number | null
   sort_order: number
   purpose: ContentDraftMediaPurpose
 }
@@ -158,6 +160,7 @@ export function createContentDraftSnapshot({
         file_name: item.file_name,
         mime_type: item.mime_type,
         media_type: item.media_type,
+        file_size: item.file_size,
         sort_order: item.sort_order,
         purpose: isInlineContentMedia(item) ? 'inline' : 'attachment',
       })),
@@ -258,7 +261,15 @@ function asMediaSnapshotItems(value: unknown): ContentDraftMediaSnapshotItem[] {
 
       const id = asString(item.id)
       const storagePath = asString(item.storage_path)
-      const mediaType = item.media_type === 'video' ? 'video' : item.media_type === 'image' ? 'image' : null
+      const mediaType =
+        item.media_type === 'video'
+          ? 'video'
+          : item.media_type === 'image'
+            ? 'image'
+            : item.media_type === 'file'
+              ? 'file'
+              : null
+      const fileSize = typeof item.file_size === 'number' ? item.file_size : null
       const purpose = item.purpose === 'inline' ? 'inline' : 'attachment'
       const sortOrder = typeof item.sort_order === 'number' ? item.sort_order : 0
 
@@ -270,6 +281,7 @@ function asMediaSnapshotItems(value: unknown): ContentDraftMediaSnapshotItem[] {
         file_name: asNullableString(item.file_name),
         mime_type: asNullableString(item.mime_type),
         media_type: mediaType,
+        file_size: fileSize,
         sort_order: sortOrder,
         purpose,
       }

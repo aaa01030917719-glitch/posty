@@ -15,6 +15,8 @@ import {
 import {
   ChevronDown,
   Columns2,
+  Download,
+  FileText,
   GripVertical,
   Plus,
   Save,
@@ -25,10 +27,17 @@ import {
 import { clsx } from 'clsx'
 import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import {
-  getContentMediaPathSegment,
   isAttachmentContentMedia,
   type ContentMediaPurpose,
 } from '@/lib/content-media-purpose'
+import {
+  CONTENT_MEDIA_ATTACHMENT_ACCEPT,
+  createContentMediaStoragePath,
+  formatContentMediaFileSize,
+  getContentMediaTypeFromFile,
+  getContentMediaTypeLabel,
+  validateContentMediaFile,
+} from '@/lib/content-media-files'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
 import { getMarkdownTableFromClipboard } from '@/lib/table-paste'
@@ -37,6 +46,7 @@ import {
   MarkdownToolbar,
   type MarkdownToolbarAction,
 } from '@/components/content/MarkdownToolbar'
+import { ContentMediaDownloadLink } from '@/components/content/ContentMediaDownloadLink'
 import {
   RichTextEditor,
   type RichTextEditorHandle,
@@ -115,7 +125,7 @@ const PREVIEW_IDS = new Set(['preview', 'demo'])
 const MEDIA_BUCKET_NAME = 'content-card-media'
 const MEDIA_SIGNED_URL_EXPIRES_IN = 60 * 60
 const MEDIA_SECTION_LABEL = '\uCCA8\uBD80 \uBBF8\uB514\uC5B4'
-const MEDIA_UPLOAD_LABEL = '\uC774\uBBF8\uC9C0/\uB3D9\uC601\uC0C1 \uCCA8\uBD80'
+const MEDIA_UPLOAD_LABEL = '\uD30C\uC77C \uCCA8\uBD80'
 const MEDIA_UPLOADING_LABEL = '\uC5C5\uB85C\uB4DC \uC911...'
 const MEDIA_EMPTY_LABEL = '\uCCA8\uBD80\uB41C \uBBF8\uB514\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
 const MEDIA_DELETE_LABEL = '\uC0AD\uC81C'
@@ -667,36 +677,6 @@ function createShareToken() {
   return randomValues.map((value) => value.toString(16).padStart(2, '0')).join('')
 }
 
-function getMediaType(mimeType: string): ContentMediaType | null {
-  if (mimeType.startsWith('image/')) return 'image'
-  if (mimeType.startsWith('video/')) return 'video'
-
-  return null
-}
-
-function sanitizeMediaFileName(fileName: string) {
-  const safeName = fileName
-    .trim()
-    .replace(/[\\/:*?"<>|#%&{}$!'@+=`]/g, '-')
-    .replace(/\s+/g, '-')
-
-  return safeName || 'media'
-}
-
-function createMediaStoragePath(
-  userId: string,
-  cardId: string,
-  file: File,
-  index: number,
-  purpose: ContentMediaPurpose
-) {
-  const safeName = sanitizeMediaFileName(file.name)
-  const token = createShareToken().slice(0, 12)
-  const purposeSegment = getContentMediaPathSegment(purpose)
-
-  return `${userId}/${cardId}/${purposeSegment}/${Date.now()}-${index + 1}-${token}-${safeName}`
-}
-
 function sortMediaItems<T extends Pick<ContentCardMedia, 'sort_order' | 'created_at'>>(items: T[]) {
   return [...items].sort((a, b) => {
     if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
@@ -713,9 +693,14 @@ async function createSignedMediaItems(
 
   return Promise.all(
     sortedRows.map(async (row) => {
+      const downloadFileName = row.media_type === 'file' ? row.file_name?.trim() ?? '' : ''
       const { data, error } = await supabase.storage
         .from(MEDIA_BUCKET_NAME)
-        .createSignedUrl(row.storage_path, MEDIA_SIGNED_URL_EXPIRES_IN)
+        .createSignedUrl(
+          row.storage_path,
+          MEDIA_SIGNED_URL_EXPIRES_IN,
+          downloadFileName ? { download: downloadFileName } : undefined
+        )
 
       if (error) {
         console.error('Failed to create content media signed URL', error)
@@ -796,7 +781,7 @@ function createEditorMediaNode(
   fallback: { id: string; alt?: string; mediaType?: ContentMediaType }
 ) {
   const figure = ownerDocument.createElement('figure')
-  const mediaType = media?.media_type ?? fallback.mediaType ?? 'image'
+  const mediaType = media?.media_type === 'video' || fallback.mediaType === 'video' ? 'video' : 'image'
   const label = mediaType === 'video' ? RICH_MEDIA_VIDEO_LABEL : RICH_MEDIA_IMAGE_LABEL
 
   figure.dataset.postyMediaId = media?.id ?? fallback.id
@@ -1770,7 +1755,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           .maybeSingle(),
         supabase
           .from('content_card_media')
-          .select('id, user_id, card_id, storage_path, file_name, mime_type, media_type, sort_order, created_at')
+          .select('id, user_id, card_id, storage_path, file_name, mime_type, media_type, file_size, sort_order, created_at')
           .eq('card_id', cardId)
           .order('sort_order', { ascending: true })
           .order('created_at', { ascending: true }),
@@ -2274,13 +2259,22 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     files: File[],
     purpose: ContentMediaPurpose = 'attachment'
   ) => {
+    const firstRejection = files
+      .map((file) => validateContentMediaFile(file, purpose))
+      .find((message): message is string => Boolean(message))
+
+    if (firstRejection) {
+      window.alert(firstRejection)
+      return []
+    }
+
     const uploadableFiles = files
       .map((file) => ({
         file,
-        mediaType: getMediaType(file.type),
+        mediaType: getContentMediaTypeFromFile(file),
       }))
-    .filter(
-      (entry): entry is { file: File; mediaType: ContentMediaType } =>
+      .filter(
+        (entry): entry is { file: File; mediaType: ContentMediaType } =>
           entry.mediaType !== null && (purpose === 'attachment' || entry.mediaType === 'image')
       )
 
@@ -2310,7 +2304,12 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const uploadedItems: MediaItem[] = []
 
       for (const [index, { file, mediaType }] of uploadableFiles.entries()) {
-        const storagePath = createMediaStoragePath(userId, card.id, file, index, purpose)
+        const storagePath = createContentMediaStoragePath({
+          userId,
+          cardId: card.id,
+          file,
+          purpose,
+        })
         const { error: uploadError } = await supabase.storage
           .from(MEDIA_BUCKET_NAME)
           .upload(storagePath, file, {
@@ -2331,6 +2330,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             file_name: file.name,
             mime_type: file.type || null,
             media_type: mediaType,
+            file_size: file.size,
             sort_order: baseSortOrder + index + 1,
           })
           .select('*')
@@ -2564,6 +2564,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     file_name: item.file_name,
     mime_type: item.mime_type,
     media_type: item.media_type,
+    file_size: item.file_size,
     sort_order: item.sort_order,
     created_at: '1970-01-01T00:00:00.000Z',
     signedUrl: null,
@@ -2782,6 +2783,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const insertMediaItemIntoBodyEditor = (media: MediaItem) => {
     const editor = bodyEditorRef.current
 
+    if (media.media_type === 'file') return
     if (!editor) return
 
     restoreBodyEditorSelection()
@@ -3333,7 +3335,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             {mediaUploading ? MEDIA_UPLOADING_LABEL : MEDIA_UPLOAD_LABEL}
             <input
               type="file"
-              accept="image/*,video/*"
+              accept={CONTENT_MEDIA_ATTACHMENT_ACCEPT}
               multiple
               disabled={uploadDisabled}
               onChange={handleMediaUpload}
@@ -3344,47 +3346,83 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         </div>
 
         {attachmentMediaItems.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 divide-y divide-[var(--color-border-soft)] rounded-[var(--radius-md)] border border-[var(--color-border-soft)]">
             {attachmentMediaItems.map((media) => {
               const isDeleting = mediaDeletingIds.includes(media.id)
+              const fileName = media.file_name?.trim() || MEDIA_UNTITLED_FILE_LABEL
+              const typeLabel = getContentMediaTypeLabel(media.media_type, media.file_name)
 
               return (
                 <div
                   key={media.id}
-                  className="group relative h-20 w-20 overflow-hidden rounded-[7px] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)]"
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5"
                 >
-                  {media.signedUrl && media.media_type === 'image' ? (
-                    <img
-                      src={media.signedUrl}
-                      alt={media.file_name ?? MEDIA_SECTION_LABEL}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : media.signedUrl ? (
-                    <video
-                      src={media.signedUrl}
-                      muted
-                      playsInline
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[10px] font-semibold uppercase text-[var(--color-text-muted)]">
-                      {media.media_type}
-                    </div>
-                  )}
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)]">
+                    {media.signedUrl && media.media_type === 'image' ? (
+                      <img
+                        src={media.signedUrl}
+                        alt={fileName}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : media.signedUrl && media.media_type === 'video' ? (
+                      <video
+                        src={media.signedUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <FileText size={18} className="text-[var(--color-text-muted)]" />
+                    )}
+                  </div>
+                  <div className="min-w-[160px] flex-1">
+                    <p className="truncate text-xs font-semibold text-[var(--color-text-primary)]">
+                      {fileName}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
+                      {typeLabel} · {formatContentMediaFileSize(media.file_size)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {media.signedUrl ? (
+                      media.media_type === 'file' ? (
+                        <ContentMediaDownloadLink
+                          url={media.signedUrl}
+                          fileName={fileName}
+                          className="inline-flex h-8 items-center gap-1 rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                        >
+                          <Download size={13} />
+                          다운로드
+                        </ContentMediaDownloadLink>
+                      ) : (
+                        <a
+                          href={media.signedUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={fileName}
+                          className="inline-flex h-8 items-center gap-1 rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                        >
+                          <Download size={13} />
+                          다운로드
+                        </a>
+                      )
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMedia(media)}
+                      disabled={isPreview || isDeleting}
+                      className="inline-flex h-8 items-center rounded-[6px] px-3 text-xs font-semibold text-[var(--color-danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                      aria-label={MEDIA_DELETE_LABEL}
+                    >
+                      {isDeleting ? MEDIA_DELETING_LABEL : MEDIA_DELETE_LABEL}
+                    </button>
+                  </div>
                   {isDeleting && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-bg-surface)_82%,transparent)] text-[10px] font-semibold text-[var(--color-text-muted)]">
+                    <div className="w-full text-[11px] font-semibold text-[var(--color-text-muted)]">
                       {MEDIA_DELETING_LABEL}
                     </div>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteMedia(media)}
-                    disabled={isPreview || isDeleting}
-                    className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-bg-surface)_88%,transparent)] text-[var(--color-text-body)] shadow-sm transition-colors hover:bg-[var(--color-bg-surface)] hover:text-[var(--color-danger)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
-                    aria-label={MEDIA_DELETE_LABEL}
-                  >
-                    <X size={12} />
-                  </button>
                 </div>
               )
             })}

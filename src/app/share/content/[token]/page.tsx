@@ -1,9 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { ContentMediaDownloadLink } from '@/components/content/ContentMediaDownloadLink'
 import { SharedMediaCarousel, type SharedMediaCarouselItem } from '@/components/content/SharedMediaCarousel'
 import { isAttachmentContentMedia } from '@/lib/content-media-purpose'
-import { FormattedText } from '@/lib/text-format'
+import {
+  formatContentMediaFileSize,
+  getContentMediaTypeLabel,
+} from '@/lib/content-media-files'
+import { FormattedText, type FormattedTextMediaItem } from '@/lib/text-format'
 import type { ChecklistItem, ContentMediaType, Database, ShareSection } from '@/lib/types'
 
 type SharePageProps = {
@@ -34,8 +39,18 @@ type SharedMedia = {
   file_name: string | null
   mime_type: string | null
   media_type: ContentMediaType
+  file_size: number | null
   sort_order: number
   created_at: string
+}
+
+type SharedMediaItem = {
+  id: string
+  fileName: string | null
+  mimeType: string | null
+  mediaType: ContentMediaType
+  fileSize: number | null
+  signedUrl: string | null
 }
 
 type SharedScript = {
@@ -209,7 +224,7 @@ function normalizeChecklist(value: unknown) {
 async function createSharedMediaItems(
   supabase: NonNullable<ReturnType<typeof createServiceClient>>,
   rows: SharedMedia[]
-): Promise<SharedMediaCarouselItem[]> {
+): Promise<SharedMediaItem[]> {
   const sortedRows = [...rows].sort((a, b) => {
     if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order
 
@@ -218,9 +233,14 @@ async function createSharedMediaItems(
 
   return Promise.all(
     sortedRows.map(async (row) => {
+      const downloadFileName = row.media_type === 'file' ? row.file_name?.trim() ?? '' : ''
       const { data, error } = await supabase.storage
         .from(MEDIA_BUCKET_NAME)
-        .createSignedUrl(row.storage_path, MEDIA_SIGNED_URL_EXPIRES_IN)
+        .createSignedUrl(
+          row.storage_path,
+          MEDIA_SIGNED_URL_EXPIRES_IN,
+          downloadFileName ? { download: downloadFileName } : undefined
+        )
 
       if (error) {
         console.error('Failed to create shared content media signed URL', error)
@@ -231,10 +251,17 @@ async function createSharedMediaItems(
         fileName: row.file_name,
         mimeType: row.mime_type,
         mediaType: row.media_type,
+        fileSize: row.file_size,
         signedUrl: data?.signedUrl ?? null,
       }
     })
   )
+}
+
+function isEmbeddableMediaItem(
+  item: SharedMediaItem
+): item is SharedMediaItem & { mediaType: 'image' | 'video' } {
+  return item.mediaType === 'image' || item.mediaType === 'video'
 }
 
 function normalizeShareSections(value: ShareSection[] | null) {
@@ -419,6 +446,51 @@ function UnavailableSharePage() {
   )
 }
 
+function SharedAttachmentFileList({ items }: { items: SharedMediaItem[] }) {
+  if (items.length === 0) return null
+
+  return (
+    <SharedContentSection label="첨부파일">
+      <div className="divide-y divide-[var(--color-border-soft)]">
+        {items.map((item) => {
+          const label = getContentMediaTypeLabel(item.mediaType, item.fileName)
+          const fileName = item.fileName?.trim() || '첨부파일'
+
+          return (
+            <div
+              key={item.id}
+              className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 first:pt-0 last:pb-0"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] text-[10px] font-bold uppercase text-[var(--color-text-muted)]">
+                {label}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                  {fileName}
+                </p>
+                <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                  {label} · {formatContentMediaFileSize(item.fileSize)}
+                </p>
+              </div>
+              {item.signedUrl ? (
+                <ContentMediaDownloadLink
+                  url={item.signedUrl}
+                  fileName={fileName}
+                  className="inline-flex h-8 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                >
+                  다운로드
+                </ContentMediaDownloadLink>
+              ) : (
+                <span className="text-xs text-[var(--color-text-muted)]">다운로드 불가</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </SharedContentSection>
+  )
+}
+
 export default async function ShareContentPage({ params }: SharePageProps) {
   const { token } = await params
   const supabase = createServiceClient()
@@ -443,7 +515,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
   ] = await Promise.all([
     supabase
       .from('content_card_media')
-      .select('id, storage_path, file_name, mime_type, media_type, sort_order, created_at')
+      .select('id, storage_path, file_name, mime_type, media_type, file_size, sort_order, created_at')
       .eq('card_id', card.id)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true }),
@@ -462,6 +534,24 @@ export default async function ShareContentPage({ params }: SharePageProps) {
     fetchedMediaRows.filter(isAttachmentContentMedia).map((row) => row.id)
   )
   const attachmentMediaItems = mediaItems.filter((item) => attachmentMediaIds.has(item.id))
+  const embeddableMediaItems: FormattedTextMediaItem[] = mediaItems
+    .filter(isEmbeddableMediaItem)
+    .map((item) => ({
+      id: item.id,
+      fileName: item.fileName,
+      mediaType: item.mediaType,
+      signedUrl: item.signedUrl,
+    }))
+  const carouselMediaItems: SharedMediaCarouselItem[] = attachmentMediaItems
+    .filter(isEmbeddableMediaItem)
+    .map((item) => ({
+      id: item.id,
+      fileName: item.fileName,
+      mimeType: item.mimeType,
+      mediaType: item.mediaType,
+      signedUrl: item.signedUrl,
+    }))
+  const fileAttachmentItems = attachmentMediaItems.filter((item) => item.mediaType === 'file')
   const scriptScenes = normalizeScriptScenes(script?.body)
   const plainScriptBody = getPlainScriptBody(script?.body)
   const captionContent = normalizeText(script?.caption)
@@ -505,7 +595,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
           </h1>
         </header>
 
-        <SharedMediaCarousel items={attachmentMediaItems} />
+        <SharedMediaCarousel items={carouselMediaItems} />
 
         {anchorLinks.length > 0 ? (
           <nav
@@ -526,11 +616,13 @@ export default async function ShareContentPage({ params }: SharePageProps) {
 
         {hasPublicContent ? (
           <div className="space-y-5">
+            <SharedAttachmentFileList items={fileAttachmentItems} />
+
             {bodyContent ? (
               <SharedContentSection id={SHARE_SECTION_IDS.body} label="원고">
                 <FormattedText
                   text={bodyContent}
-                  mediaItems={mediaItems}
+                  mediaItems={embeddableMediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -548,7 +640,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                         {scene.body ? (
                           <FormattedText
                             text={scene.body}
-                            mediaItems={mediaItems}
+                            mediaItems={embeddableMediaItems}
                             className="mt-1 text-sm leading-7 text-[var(--color-text-body)]"
                           />
                         ) : null}
@@ -558,7 +650,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                 ) : (
                   <FormattedText
                     text={plainScriptBody}
-                    mediaItems={mediaItems}
+                    mediaItems={embeddableMediaItems}
                     className="text-sm leading-7 text-[var(--color-text-body)]"
                   />
                 )}
@@ -569,7 +661,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
               <SharedContentSection id={SHARE_SECTION_IDS.caption} label="캡션">
                 <FormattedText
                   text={captionContent}
-                  mediaItems={mediaItems}
+                  mediaItems={embeddableMediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -579,7 +671,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
               <SharedContentSection id={SHARE_SECTION_IDS.hashtags} label="해시태그">
                 <FormattedText
                   text={hashtagsContent}
-                  mediaItems={mediaItems}
+                  mediaItems={embeddableMediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -589,7 +681,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
               <SharedContentSection id={SHARE_SECTION_IDS.thumbnail} label="썸네일 문구">
                 <FormattedText
                   text={thumbnailContent}
-                  mediaItems={mediaItems}
+                  mediaItems={embeddableMediaItems}
                   className="text-sm leading-7 text-[var(--color-text-body)]"
                 />
               </SharedContentSection>
@@ -625,7 +717,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
                 {section.body ? (
                   <FormattedText
                     text={section.body}
-                    mediaItems={mediaItems}
+                    mediaItems={embeddableMediaItems}
                     className={
                       section.title.trim()
                         ? 'mt-3 text-sm leading-7 text-[var(--color-text-body)]'

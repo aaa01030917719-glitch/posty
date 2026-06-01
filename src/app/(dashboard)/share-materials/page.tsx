@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { Copy, ExternalLink, Plus, Save, Share2, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, FileText, Plus, Save, Share2, Trash2, Upload } from 'lucide-react'
 import { clsx } from 'clsx'
 import { createContentCard } from '@/components/content/createContentCard'
 import {
@@ -10,13 +10,21 @@ import {
   type RichTextEditorMediaItem,
 } from '@/components/content/RichTextEditor'
 import { MarkdownToolbar, type MarkdownToolbarAction } from '@/components/content/MarkdownToolbar'
+import { ContentMediaDownloadLink } from '@/components/content/ContentMediaDownloadLink'
 import {
   createSignedMediaItems,
+  CONTENT_MEDIA_ATTACHMENT_ACCEPT,
+  MEDIA_BUCKET_NAME,
   sortMediaItems,
   uploadContentCardMediaFiles,
 } from '@/components/content/contentMedia'
 import { Button } from '@/components/ui/Button'
 import { Toast } from '@/components/ui/Toast'
+import { isAttachmentContentMedia } from '@/lib/content-media-purpose'
+import {
+  formatContentMediaFileSize,
+  getContentMediaTypeLabel,
+} from '@/lib/content-media-files'
 import { createClient } from '@/lib/supabase/client'
 import type { ContentCardMedia, ContentShareLink, Database, ShareSection } from '@/lib/types'
 
@@ -45,6 +53,21 @@ const CREATE_ERROR = '공유 자료를 만들지 못했습니다. 잠시 후 다
 const SAVE_ERROR = '공유 자료를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
 const DISABLE_ERROR = '공유를 중지하지 못했습니다. 잠시 후 다시 시도해주세요.'
 const COPY_ERROR = '링크를 복사하지 못했습니다. 직접 선택해서 복사해주세요.'
+
+const ATTACHMENT_SECTION_LABEL = '첨부파일'
+const ATTACHMENT_UPLOAD_LABEL = '파일 첨부'
+const ATTACHMENT_UPLOADING_LABEL = '업로드 중...'
+const ATTACHMENT_EMPTY_LABEL = '첨부된 파일이 없습니다'
+const ATTACHMENT_OPEN_LABEL = '열기'
+const ATTACHMENT_DELETE_LABEL = '삭제'
+const ATTACHMENT_DELETING_LABEL = '삭제 중'
+const ATTACHMENT_UPLOAD_ERROR =
+  '첨부파일을 업로드하지 못했습니다. 파일 형식과 크기를 확인한 뒤 다시 시도해주세요.'
+const ATTACHMENT_DELETE_ERROR =
+  '첨부파일을 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.'
+const ATTACHMENT_DELETE_CONFIRM = '선택한 첨부파일을 삭제하시겠습니까?'
+const ATTACHMENT_STORAGE_DELETE_WARNING =
+  '첨부 목록에서는 제거했지만 저장소 파일 정리에 실패했습니다.'
 
 function createShareToken() {
   const browserCrypto = globalThis.crypto
@@ -132,6 +155,7 @@ export default function ShareMaterialsPage() {
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [mediaUploading, setMediaUploading] = useState(false)
+  const [mediaDeletingIds, setMediaDeletingIds] = useState<string[]>([])
   const [disablingId, setDisablingId] = useState<string | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -143,6 +167,10 @@ export default function ShareMaterialsPage() {
   const selectedTitleDraft = selectedCard ? titleDrafts[selectedCard.id] ?? selectedCard.title : ''
   const selectedBodyDraft = selectedCard ? bodyDrafts[selectedCard.id] ?? '' : ''
   const selectedMediaItems = selectedCard ? mediaItemsByCardId[selectedCard.id] ?? [] : []
+  const selectedAttachmentItems = useMemo(
+    () => selectedMediaItems.filter(isAttachmentContentMedia),
+    [selectedMediaItems]
+  )
   const selectedSections: ShareSectionDraft[] = []
   const activeShareUrl = selectedMaterial ? getShareUrl(selectedMaterial.token) : ''
 
@@ -385,6 +413,97 @@ export default function ShareMaterialsPage() {
       return []
     } finally {
       setMediaUploading(false)
+    }
+  }
+
+  const handleShareMaterialAttachmentUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const files = Array.from(input.files ?? [])
+
+    if (!selectedCard || mediaUploading || files.length === 0) {
+      input.value = ''
+      return
+    }
+
+    setMediaUploading(true)
+
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) throw userError
+      if (!user) throw new Error('Authenticated user not found')
+
+      const baseSortOrder = selectedMediaItems.reduce(
+        (maxSortOrder, item) => Math.max(maxSortOrder, item.sort_order),
+        -1
+      )
+      const uploadedItems = await uploadContentCardMediaFiles({
+        supabase,
+        userId: user.id,
+        cardId: selectedCard.id,
+        files,
+        baseSortOrder,
+        purpose: 'attachment',
+      })
+
+      if (uploadedItems.length > 0) {
+        setMediaItemsByCardId((prev) => ({
+          ...prev,
+          [selectedCard.id]: sortMediaItems([
+            ...(prev[selectedCard.id] ?? []),
+            ...uploadedItems,
+          ]),
+        }))
+      }
+    } catch (error) {
+      console.error('Failed to upload share material attachments', error)
+      window.alert(error instanceof Error && error.message ? error.message : ATTACHMENT_UPLOAD_ERROR)
+    } finally {
+      setMediaUploading(false)
+      input.value = ''
+    }
+  }
+
+  const handleDeleteShareMaterialAttachment = async (media: RichTextEditorMediaItem) => {
+    if (!selectedCard || mediaDeletingIds.includes(media.id)) return
+    if (!window.confirm(ATTACHMENT_DELETE_CONFIRM)) return
+
+    setMediaDeletingIds((prev) => [...prev, media.id])
+
+    try {
+      const supabase = createClient()
+      const { error: storageError } = await supabase.storage
+        .from(MEDIA_BUCKET_NAME)
+        .remove([media.storage_path])
+
+      if (storageError) {
+        console.warn('Failed to remove share material attachment object', storageError)
+      }
+
+      const { error: deleteError } = await supabase
+        .from('content_card_media')
+        .delete()
+        .eq('id', media.id)
+
+      if (deleteError) throw deleteError
+
+      setMediaItemsByCardId((prev) => ({
+        ...prev,
+        [selectedCard.id]: (prev[selectedCard.id] ?? []).filter((item) => item.id !== media.id),
+      }))
+
+      if (storageError) {
+        window.alert(ATTACHMENT_STORAGE_DELETE_WARNING)
+      }
+    } catch (error) {
+      console.error('Failed to delete share material attachment', error)
+      window.alert(ATTACHMENT_DELETE_ERROR)
+    } finally {
+      setMediaDeletingIds((prev) => prev.filter((mediaId) => mediaId !== media.id))
     }
   }
 
@@ -634,6 +753,113 @@ export default function ShareMaterialsPage() {
                 </div>
 
                 <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
+                  <section className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        {ATTACHMENT_SECTION_LABEL}
+                      </p>
+                      <label
+                        className={clsx(
+                          'inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors',
+                          'hover:bg-[var(--color-bg-subtle)] focus-within:[box-shadow:var(--focus-ring)]',
+                          mediaUploading && 'cursor-not-allowed text-[var(--color-text-muted)] opacity-70'
+                        )}
+                      >
+                        <Upload size={13} />
+                        {mediaUploading ? ATTACHMENT_UPLOADING_LABEL : ATTACHMENT_UPLOAD_LABEL}
+                        <input
+                          type="file"
+                          accept={CONTENT_MEDIA_ATTACHMENT_ACCEPT}
+                          multiple
+                          disabled={mediaUploading || !selectedCard}
+                          onChange={handleShareMaterialAttachmentUpload}
+                          className="sr-only"
+                          aria-label={ATTACHMENT_UPLOAD_LABEL}
+                        />
+                      </label>
+                    </div>
+
+                    {selectedAttachmentItems.length > 0 ? (
+                      <div className="divide-y divide-[var(--color-border-soft)] rounded-[var(--radius-md)] border border-[var(--color-border-soft)]">
+                        {selectedAttachmentItems.map((media) => {
+                          const typeLabel = getContentMediaTypeLabel(media.media_type, media.file_name)
+                          const fileName = media.file_name?.trim() || '첨부파일'
+                          const isDeleting = mediaDeletingIds.includes(media.id)
+
+                          return (
+                            <div
+                              key={media.id}
+                              className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5"
+                            >
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[6px] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)]">
+                                {media.signedUrl && media.media_type === 'image' ? (
+                                  <img
+                                    src={media.signedUrl}
+                                    alt={fileName}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : media.signedUrl && media.media_type === 'video' ? (
+                                  <video
+                                    src={media.signedUrl}
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <FileText size={18} className="text-[var(--color-text-muted)]" />
+                                )}
+                              </div>
+                              <div className="min-w-[160px] flex-1">
+                                <p className="truncate text-sm font-medium text-[var(--color-text-primary)]">
+                                  {fileName}
+                                </p>
+                                <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+                                  {typeLabel} · {formatContentMediaFileSize(media.file_size)}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {media.signedUrl ? (
+                                  media.media_type === 'file' ? (
+                                    <ContentMediaDownloadLink
+                                      url={media.signedUrl}
+                                      fileName={fileName}
+                                      className="inline-flex h-8 items-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                                    >
+                                      다운로드
+                                    </ContentMediaDownloadLink>
+                                  ) : (
+                                    <a
+                                      href={media.signedUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      download={fileName}
+                                      className="inline-flex h-8 items-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                                    >
+                                      {ATTACHMENT_OPEN_LABEL}
+                                    </a>
+                                  )
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteShareMaterialAttachment(media)}
+                                  disabled={isDeleting}
+                                  className="inline-flex h-8 items-center rounded-[6px] px-3 text-xs font-semibold text-[var(--color-danger)] transition-colors hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                                >
+                                  {isDeleting ? ATTACHMENT_DELETING_LABEL : ATTACHMENT_DELETE_LABEL}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-[var(--color-text-muted)]">
+                        {ATTACHMENT_EMPTY_LABEL}
+                      </p>
+                    )}
+                  </section>
+
                   <div className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
                     <RichTextEditor
                       value={selectedBodyDraft}

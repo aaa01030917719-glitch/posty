@@ -45,7 +45,11 @@ function getCampaignLabel(card: ContentCard) {
 }
 
 function getPrimaryMedia(card: ContentCardPreview): ContentCardMediaPreview | null {
-  return card.media?.find((media) => isAttachmentContentMedia(media)) ?? null
+  return (
+    card.media?.find(
+      (media) => isAttachmentContentMedia(media) && media.media_type !== 'file'
+    ) ?? null
+  )
 }
 
 function getCardPreviewText(card: ContentCardPreview) {

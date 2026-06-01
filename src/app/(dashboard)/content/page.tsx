@@ -83,7 +83,7 @@ async function attachMediaPreviewUrls(
 
   const { data, error } = await supabase
     .from('content_card_media')
-    .select('id, user_id, card_id, storage_path, file_name, mime_type, media_type, sort_order, created_at')
+    .select('id, user_id, card_id, storage_path, file_name, mime_type, media_type, file_size, sort_order, created_at')
     .in('card_id', cardIds)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
@@ -94,7 +94,7 @@ async function attachMediaPreviewUrls(
   }
 
   const firstMediaByCard = ((data as ContentCardMedia[] | null) ?? [])
-    .filter(isAttachmentContentMedia)
+    .filter((media) => isAttachmentContentMedia(media) && media.media_type !== 'file')
     .reduce<Record<string, ContentCardMedia>>((acc, media) => {
       if (!acc[media.card_id]) {
         acc[media.card_id] = media

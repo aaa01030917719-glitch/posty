@@ -1,6 +1,6 @@
 export type ChannelType = 'instagram' | 'threads' | 'youtube' | 'blog' | 'custom'
 export type ContentStatus = 'idea' | 'planning' | 'writing' | 'review' | 'scheduled' | 'published' | 'hold'
-export type ContentMediaType = 'image' | 'video'
+export type ContentMediaType = 'image' | 'video' | 'file'
 export type Priority = 'low' | 'normal' | 'high'
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
@@ -67,6 +67,7 @@ export interface ContentCardMedia {
   file_name: string | null
   mime_type: string | null
   media_type: ContentMediaType
+  file_size: number | null
   sort_order: number
   created_at: string
 }
@@ -262,8 +263,8 @@ export type Database = {
       }
       content_card_media: {
         Row: ContentCardMedia
-        Insert: Omit<ContentCardMedia, 'id' | 'created_at'> & {
-          id?: string; created_at?: string
+        Insert: Omit<ContentCardMedia, 'id' | 'created_at' | 'file_size'> & {
+          id?: string; created_at?: string; file_size?: number | null
         }
         Update: Partial<Omit<ContentCardMedia, 'id' | 'created_at'>>
       }

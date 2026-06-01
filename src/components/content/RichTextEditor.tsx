@@ -206,7 +206,7 @@ function createEditorMediaNode(
   editable: boolean
 ) {
   const figure = ownerDocument.createElement('figure')
-  const mediaType = media?.media_type ?? fallback.mediaType ?? 'image'
+  const mediaType = media?.media_type === 'video' || fallback.mediaType === 'video' ? 'video' : 'image'
   const mediaSize = fallback.size ?? 'original'
   const label = mediaType === 'video' ? RICH_MEDIA_VIDEO_LABEL : RICH_MEDIA_IMAGE_LABEL
 
@@ -1001,6 +1001,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     const insertMediaItem = (media: RichTextEditorMediaItem) => {
       const editor = editorRef.current
 
+      if (media.media_type === 'file') return
       if (!editor) return
 
       restoreEditorSelection()

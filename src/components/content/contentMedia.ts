@@ -1,8 +1,11 @@
 import { createClient } from '@/lib/supabase/client'
+import type { ContentMediaPurpose } from '@/lib/content-media-purpose'
 import {
-  getContentMediaPathSegment,
-  type ContentMediaPurpose,
-} from '@/lib/content-media-purpose'
+  CONTENT_MEDIA_ATTACHMENT_ACCEPT,
+  createContentMediaStoragePath,
+  getContentMediaTypeFromFile,
+  validateContentMediaFile,
+} from '@/lib/content-media-files'
 import type { ContentCardMedia, ContentMediaType } from '@/lib/types'
 
 export type SignedContentCardMedia = ContentCardMedia & {
@@ -11,50 +14,14 @@ export type SignedContentCardMedia = ContentCardMedia & {
 
 export const MEDIA_BUCKET_NAME = 'content-card-media'
 export const MEDIA_SIGNED_URL_EXPIRES_IN = 60 * 60
+export { CONTENT_MEDIA_ATTACHMENT_ACCEPT }
 
-function createShareToken() {
-  const browserCrypto = globalThis.crypto
-
-  if (browserCrypto?.randomUUID) {
-    return browserCrypto.randomUUID().replaceAll('-', '')
-  }
-
-  const randomValues =
-    browserCrypto?.getRandomValues
-      ? Array.from(browserCrypto.getRandomValues(new Uint8Array(24)))
-      : Array.from({ length: 24 }, () => Math.floor(Math.random() * 256))
-
-  return randomValues.map((value) => value.toString(16).padStart(2, '0')).join('')
-}
-
-export function getMediaType(mimeType: string): ContentMediaType | null {
-  if (mimeType.startsWith('image/')) return 'image'
-  if (mimeType.startsWith('video/')) return 'video'
-
-  return null
-}
-
-function sanitizeMediaFileName(fileName: string) {
-  const safeName = fileName
-    .trim()
-    .replace(/[\\/:*?"<>|#%&{}$!'@+=`]/g, '-')
-    .replace(/\s+/g, '-')
-
-  return safeName || 'media'
-}
-
-function createMediaStoragePath(
-  userId: string,
-  cardId: string,
-  file: File,
-  index: number,
-  purpose: ContentMediaPurpose
-) {
-  const safeName = sanitizeMediaFileName(file.name)
-  const token = createShareToken().slice(0, 12)
-  const purposeSegment = getContentMediaPathSegment(purpose)
-
-  return `${userId}/${cardId}/${purposeSegment}/${Date.now()}-${index + 1}-${token}-${safeName}`
+export function getMediaType(mimeType: string, fileName = ''): ContentMediaType | null {
+  return getContentMediaTypeFromFile({
+    name: fileName,
+    type: mimeType,
+    size: 0,
+  })
 }
 
 export function sortMediaItems<T extends Pick<ContentCardMedia, 'sort_order' | 'created_at'>>(
@@ -75,9 +42,14 @@ export async function createSignedMediaItems(
 
   return Promise.all(
     sortedRows.map(async (row) => {
+      const downloadFileName = row.media_type === 'file' ? row.file_name?.trim() ?? '' : ''
       const { data, error } = await supabase.storage
         .from(MEDIA_BUCKET_NAME)
-        .createSignedUrl(row.storage_path, MEDIA_SIGNED_URL_EXPIRES_IN)
+        .createSignedUrl(
+          row.storage_path,
+          MEDIA_SIGNED_URL_EXPIRES_IN,
+          downloadFileName ? { download: downloadFileName } : undefined
+        )
 
       if (error) {
         console.error('Failed to create content media signed URL', error)
@@ -109,17 +81,36 @@ export async function uploadContentCardMediaFiles({
   const uploadableFiles = files
     .map((file) => ({
       file,
-      mediaType: getMediaType(file.type),
+      mediaType: getContentMediaTypeFromFile(file),
+      rejectionMessage: validateContentMediaFile(file, purpose),
     }))
     .filter(
-      (entry): entry is { file: File; mediaType: ContentMediaType } =>
-        entry.mediaType !== null && (purpose === 'attachment' || entry.mediaType === 'image')
+      (
+        entry
+      ): entry is {
+        file: File
+        mediaType: ContentMediaType
+        rejectionMessage: null
+      } => entry.mediaType !== null && entry.rejectionMessage === null
     )
+
+  const firstRejection = files
+    .map((file) => validateContentMediaFile(file, purpose))
+    .find((message): message is string => Boolean(message))
+
+  if (firstRejection) {
+    throw new Error(firstRejection)
+  }
 
   const uploadedItems: SignedContentCardMedia[] = []
 
   for (const [index, { file, mediaType }] of uploadableFiles.entries()) {
-    const storagePath = createMediaStoragePath(userId, cardId, file, index, purpose)
+    const storagePath = createContentMediaStoragePath({
+      userId,
+      cardId,
+      file,
+      purpose,
+    })
     const { error: uploadError } = await supabase.storage
       .from(MEDIA_BUCKET_NAME)
       .upload(storagePath, file, {
@@ -140,6 +131,7 @@ export async function uploadContentCardMediaFiles({
         file_name: file.name,
         mime_type: file.type || null,
         media_type: mediaType,
+        file_size: file.size,
         sort_order: baseSortOrder + index + 1,
       })
       .select('*')
