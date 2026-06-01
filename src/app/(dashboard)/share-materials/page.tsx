@@ -6,15 +6,19 @@ import { Copy, ExternalLink, Plus, Save, Share2, Trash2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { createContentCard } from '@/components/content/createContentCard'
 import {
-  getMarkdownActionResult,
-  MarkdownToolbar,
-  type MarkdownToolbarAction,
-} from '@/components/content/MarkdownToolbar'
+  RichTextEditor,
+  type RichTextEditorMediaItem,
+} from '@/components/content/RichTextEditor'
+import { MarkdownToolbar, type MarkdownToolbarAction } from '@/components/content/MarkdownToolbar'
+import {
+  createSignedMediaItems,
+  sortMediaItems,
+  uploadContentCardMediaFiles,
+} from '@/components/content/contentMedia'
 import { Button } from '@/components/ui/Button'
 import { Toast } from '@/components/ui/Toast'
 import { createClient } from '@/lib/supabase/client'
-import { getMarkdownTableFromClipboard, insertTextAtSelection } from '@/lib/table-paste'
-import type { ContentShareLink, Database, ShareSection } from '@/lib/types'
+import type { ContentCardMedia, ContentShareLink, Database, ShareSection } from '@/lib/types'
 
 type ShareMaterialCard = {
   id: string
@@ -57,18 +61,6 @@ function createShareToken() {
   return randomValues.map((value) => value.toString(16).padStart(2, '0')).join('')
 }
 
-function createSectionDraft(): ShareSectionDraft {
-  const id =
-    globalThis.crypto?.randomUUID?.() ??
-    `section-${Date.now()}-${Math.random().toString(16).slice(2)}`
-
-  return {
-    id,
-    title: '',
-    body: '',
-  }
-}
-
 function normalizeShareSections(value: ShareMaterialCard['share_sections']): ShareSectionDraft[] {
   if (!Array.isArray(value)) return []
 
@@ -91,14 +83,33 @@ function normalizeShareSections(value: ShareMaterialCard['share_sections']): Sha
     .filter((section): section is ShareSectionDraft => Boolean(section))
 }
 
-function serializeShareSections(sections: ShareSectionDraft[]): ShareSection[] {
-  return sections
-    .map((section) => ({
-      id: section.id,
-      title: section.title.trim(),
-      body: section.body.trim(),
-    }))
-    .filter((section) => section.title || section.body)
+function mergeShareSectionsForEditor(value: ShareMaterialCard['share_sections']) {
+  return normalizeShareSections(value)
+    .map((section) => {
+      const title = section.title.trim()
+      const body = section.body.trim()
+
+      if (title && body) return `## ${title}\n${body}`
+      if (title) return `## ${title}`
+
+      return body
+    })
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function serializeUnifiedShareBody(body: string): ShareSection[] {
+  const value = body.trim()
+
+  if (!value) return []
+
+  return [
+    {
+      id: 'section-main',
+      title: '',
+      body: value,
+    },
+  ]
 }
 
 function getShareUrl(token: string) {
@@ -113,10 +124,14 @@ export default function ShareMaterialsPage() {
   const [materials, setMaterials] = useState<ShareMaterialLink[]>([])
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null)
   const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({})
-  const [sectionDrafts, setSectionDrafts] = useState<Record<string, ShareSectionDraft[]>>({})
+  const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({})
+  const [mediaItemsByCardId, setMediaItemsByCardId] = useState<
+    Record<string, RichTextEditorMediaItem[]>
+  >({})
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [mediaUploading, setMediaUploading] = useState(false)
   const [disablingId, setDisablingId] = useState<string | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
@@ -126,7 +141,9 @@ export default function ShareMaterialsPage() {
 
   const selectedCard = selectedMaterial?.card ?? null
   const selectedTitleDraft = selectedCard ? titleDrafts[selectedCard.id] ?? selectedCard.title : ''
-  const selectedSections = selectedCard ? sectionDrafts[selectedCard.id] ?? [] : []
+  const selectedBodyDraft = selectedCard ? bodyDrafts[selectedCard.id] ?? '' : ''
+  const selectedMediaItems = selectedCard ? mediaItemsByCardId[selectedCard.id] ?? [] : []
+  const selectedSections: ShareSectionDraft[] = []
   const activeShareUrl = selectedMaterial ? getShareUrl(selectedMaterial.token) : ''
 
   useEffect(() => {
@@ -178,10 +195,10 @@ export default function ShareMaterialsPage() {
         if (prev && nextMaterials.some((material) => material.id === prev)) return prev
         return nextMaterials[0]?.id ?? null
       })
-      setSectionDrafts(
-        nextMaterials.reduce<Record<string, ShareSectionDraft[]>>((acc, material) => {
+      setBodyDrafts(
+        nextMaterials.reduce<Record<string, string>>((acc, material) => {
           if (material.card) {
-            acc[material.card.id] = normalizeShareSections(material.card.share_sections)
+            acc[material.card.id] = mergeShareSectionsForEditor(material.card.share_sections)
           }
           return acc
         }, {})
@@ -203,6 +220,51 @@ export default function ShareMaterialsPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!selectedCard || mediaItemsByCardId[selectedCard.id]) return
+
+    let cancelled = false
+
+    const fetchMediaItems = async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('content_card_media')
+        .select('*')
+        .eq('card_id', selectedCard.id)
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: true })
+
+      if (cancelled) return
+
+      if (error) {
+        console.error('Failed to fetch share material media', error)
+        setMediaItemsByCardId((prev) => ({
+          ...prev,
+          [selectedCard.id]: [],
+        }))
+        return
+      }
+
+      const signedItems = await createSignedMediaItems(
+        supabase,
+        ((data as ContentCardMedia[] | null) ?? [])
+      )
+
+      if (cancelled) return
+
+      setMediaItemsByCardId((prev) => ({
+        ...prev,
+        [selectedCard.id]: signedItems,
+      }))
+    }
+
+    fetchMediaItems()
+
+    return () => {
+      cancelled = true
+    }
+  }, [mediaItemsByCardId, selectedCard])
 
   const handleCreateMaterial = async () => {
     if (creating) return
@@ -253,9 +315,11 @@ export default function ShareMaterialsPage() {
           ...prev,
           [nextMaterial.card!.id]: nextMaterial.card!.title,
         }))
-        setSectionDrafts((prev) => ({
+        setBodyDrafts((prev) => ({
           ...prev,
-          [nextMaterial.card!.id]: normalizeShareSections(nextMaterial.card!.share_sections),
+          [nextMaterial.card!.id]: mergeShareSectionsForEditor(
+            nextMaterial.card!.share_sections
+          ),
         }))
       }
       setToastMessage('공유 자료가 생성되었습니다.')
@@ -267,100 +331,74 @@ export default function ShareMaterialsPage() {
     }
   }
 
-  const updateSection = (sectionId: string, key: 'title' | 'body', value: string) => {
+  const updateBodyDraft = (value: string) => {
     if (!selectedCard) return
 
-    setSectionDrafts((prev) => ({
+    setBodyDrafts((prev) => ({
       ...prev,
-      [selectedCard.id]: selectedSections.map((section) =>
-        section.id === sectionId ? { ...section, [key]: value } : section
-      ),
+      [selectedCard.id]: value,
     }))
   }
 
-  const handleSectionBodyPaste = (
-    event: ClipboardEvent<HTMLTextAreaElement>,
-    sectionId: string
-  ) => {
-    const markdownTable = getMarkdownTableFromClipboard(event.clipboardData)
+  const uploadShareMaterialMedia = async (files: File[]) => {
+    if (!selectedCard || mediaUploading) return []
 
-    if (!markdownTable) return
+    setMediaUploading(true)
 
-    event.preventDefault()
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
 
-    const textarea = event.currentTarget
-    const nextDraft = insertTextAtSelection(
-      textarea.value,
-      markdownTable,
-      textarea.selectionStart,
-      textarea.selectionEnd
-    )
+      if (userError) throw userError
+      if (!user) throw new Error('Authenticated user not found')
 
-    updateSection(sectionId, 'body', nextDraft.value)
+      const baseSortOrder = selectedMediaItems.reduce(
+        (maxSortOrder, item) => Math.max(maxSortOrder, item.sort_order),
+        -1
+      )
+      const uploadedItems = await uploadContentCardMediaFiles({
+        supabase,
+        userId: user.id,
+        cardId: selectedCard.id,
+        files,
+        baseSortOrder,
+        purpose: 'inline',
+      })
 
-    window.requestAnimationFrame(() => {
-      textarea.selectionStart = nextDraft.cursorPosition
-      textarea.selectionEnd = nextDraft.cursorPosition
-      textarea.focus()
-    })
+      if (uploadedItems.length > 0) {
+        setMediaItemsByCardId((prev) => ({
+          ...prev,
+          [selectedCard.id]: sortMediaItems([
+            ...(prev[selectedCard.id] ?? []),
+            ...uploadedItems,
+          ]),
+        }))
+      }
+
+      return uploadedItems
+    } catch (error) {
+      console.error('Failed to upload share material media', error)
+      window.alert('이미지를 업로드하지 못했습니다. 잠시 후 다시 시도해주세요.')
+      return []
+    } finally {
+      setMediaUploading(false)
+    }
   }
 
-  const updateSectionBodyWithSelection = (
-    sectionId: string,
-    value: string,
-    selectionStart: number,
-    selectionEnd: number
-  ) => {
-    updateSection(sectionId, 'body', value)
-
-    window.requestAnimationFrame(() => {
-      const textarea = sectionTextareaRefs.current[sectionId]
-
-      if (!textarea) return
-
-      textarea.selectionStart = selectionStart
-      textarea.selectionEnd = selectionEnd
-      textarea.focus()
-    })
-  }
-
+  const addSection = () => {}
+  const removeSection = (_sectionId: string) => {}
+  const updateSection = (_sectionId: string, _key: 'title' | 'body', _value: string) => {}
   const handleSectionToolbarAction = (
-    section: ShareSectionDraft,
-    action: MarkdownToolbarAction
-  ) => {
-    const textarea = sectionTextareaRefs.current[section.id]
-    const source = textarea?.value ?? section.body
-    const selectionStart = textarea?.selectionStart ?? source.length
-    const selectionEnd = textarea?.selectionEnd ?? selectionStart
-    const nextDraft = getMarkdownActionResult(source, selectionStart, selectionEnd, action)
-
-    updateSectionBodyWithSelection(
-      section.id,
-      nextDraft.value,
-      nextDraft.selectionStart,
-      nextDraft.selectionEnd
-    )
-  }
-
-  const addSection = () => {
-    if (!selectedCard) return
-
-    setSectionDrafts((prev) => ({
-      ...prev,
-      [selectedCard.id]: [...selectedSections, createSectionDraft()],
-    }))
-  }
-
-  const removeSection = (sectionId: string) => {
-    if (!selectedCard) return
-
-    delete sectionTextareaRefs.current[sectionId]
-
-    setSectionDrafts((prev) => ({
-      ...prev,
-      [selectedCard.id]: selectedSections.filter((section) => section.id !== sectionId),
-    }))
-  }
+    _section: ShareSectionDraft,
+    _action: MarkdownToolbarAction
+  ) => {}
+  const handleSectionBodyPaste = (
+    _event: ClipboardEvent<HTMLTextAreaElement>,
+    _sectionId: string
+  ) => {}
 
   const handleSaveSections = async () => {
     if (!selectedCard || saving) return
@@ -369,7 +407,7 @@ export default function ShareMaterialsPage() {
 
     try {
       const supabase = createClient()
-      const nextSections = serializeShareSections(selectedSections)
+      const nextSections = serializeUnifiedShareBody(selectedBodyDraft)
       const nextTitle = selectedTitleDraft.trim() || UNTITLED_MATERIAL_TITLE
       const payload: ContentCardUpdate = {
         title: nextTitle,
@@ -391,9 +429,9 @@ export default function ShareMaterialsPage() {
           material.card_id === nextCard.id ? { ...material, card: nextCard } : material
         )
       )
-      setSectionDrafts((prev) => ({
+      setBodyDrafts((prev) => ({
         ...prev,
-        [nextCard.id]: normalizeShareSections(nextCard.share_sections),
+        [nextCard.id]: mergeShareSectionsForEditor(nextCard.share_sections),
       }))
       setTitleDrafts((prev) => ({
         ...prev,
@@ -496,7 +534,11 @@ export default function ShareMaterialsPage() {
             <div className="flex flex-col gap-1">
               {materials.map((material) => {
                 const active = material.id === selectedMaterial?.id
-                const sectionCount = normalizeShareSections(material.card?.share_sections ?? []).length
+                const cardId = material.card?.id ?? ''
+                const bodyPreview = cardId
+                  ? bodyDrafts[cardId] ?? mergeShareSectionsForEditor(material.card?.share_sections ?? [])
+                  : ''
+                const hasBody = Boolean(bodyPreview.trim())
 
                 return (
                   <button
@@ -514,7 +556,7 @@ export default function ShareMaterialsPage() {
                       {material.card?.title ?? NEW_MATERIAL_TITLE}
                     </span>
                     <span className="mt-1 flex items-center gap-2 text-[11px] text-[var(--color-text-muted)]">
-                      <span>{sectionCount}개 섹션</span>
+                      <span>{hasBody ? '본문 있음' : '비어 있음'}</span>
                       <span>{material.is_enabled ? '공유 중' : '중지됨'}</span>
                     </span>
                   </button>
@@ -592,7 +634,29 @@ export default function ShareMaterialsPage() {
                 </div>
 
                 <div className="flex flex-1 flex-col gap-4 p-4 sm:p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
+                    <RichTextEditor
+                      value={selectedBodyDraft}
+                      onChange={updateBodyDraft}
+                      mediaItems={selectedMediaItems}
+                      onUploadMedia={uploadShareMaterialMedia}
+                      uploadDisabled={mediaUploading || !selectedCard}
+                      uploadDisabledMessage={'저장된 공유자료에서만 이미지를 본문에 삽입할 수 있습니다.'}
+                      placeholder={'공유할 내용을 처음부터 끝까지 이어서 작성해보세요...'}
+                      className="flex min-h-0 flex-1 flex-col"
+                      bodyClassName="editor-body-wrap flex min-h-0 flex-1 flex-col px-4 py-3 sm:px-6"
+                      editorClassName="min-h-[460px]"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap justify-end border-t border-[var(--color-border-soft)] pt-4">
+                    <Button type="button" onClick={handleSaveSections} disabled={saving}>
+                      <Save size={14} />
+                      {saving ? '저장 중' : '저장'}
+                    </Button>
+                  </div>
+
+                  <div className="hidden">
                     <p className="text-sm font-semibold text-[var(--color-text-primary)]">섹션</p>
                     <Button type="button" size="sm" variant="secondary" onClick={addSection}>
                       <Plus size={14} />
@@ -601,7 +665,7 @@ export default function ShareMaterialsPage() {
                   </div>
 
                   {selectedSections.length === 0 ? (
-                    <div className="rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-default)] px-4 py-8 text-center">
+                    <div className="hidden">
                       <p className="text-sm font-medium text-[var(--color-text-primary)]">
                         아직 섹션이 없습니다.
                       </p>
@@ -610,7 +674,7 @@ export default function ShareMaterialsPage() {
                       </p>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-3">
+                    <div className="hidden">
                       {selectedSections.map((section) => (
                         <article
                           key={section.id}
@@ -667,7 +731,7 @@ export default function ShareMaterialsPage() {
                     </div>
                   )}
 
-                  <div className="flex flex-wrap justify-end border-t border-[var(--color-border-soft)] pt-4">
+                  <div className="hidden">
                     <Button type="button" onClick={handleSaveSections} disabled={saving}>
                       <Save size={14} />
                       {saving ? '저장 중' : '저장'}

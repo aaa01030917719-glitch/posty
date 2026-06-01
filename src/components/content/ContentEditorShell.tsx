@@ -16,7 +16,6 @@ import {
   ChevronDown,
   Columns2,
   GripVertical,
-  ImagePlus,
   Plus,
   Save,
   Share2,
@@ -25,6 +24,11 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
+import {
+  getContentMediaPathSegment,
+  isAttachmentContentMedia,
+  type ContentMediaPurpose,
+} from '@/lib/content-media-purpose'
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
 import { getMarkdownTableFromClipboard } from '@/lib/table-paste'
@@ -33,6 +37,11 @@ import {
   MarkdownToolbar,
   type MarkdownToolbarAction,
 } from '@/components/content/MarkdownToolbar'
+import {
+  RichTextEditor,
+  type RichTextEditorHandle,
+  type RichTextEditorMediaItem,
+} from '@/components/content/RichTextEditor'
 import { Modal } from '@/components/ui/Modal'
 import type {
   ChecklistItem,
@@ -84,9 +93,7 @@ type ChecklistDraft = {
 }
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
-type MediaItem = ContentCardMedia & {
-  signedUrl: string | null
-}
+type MediaItem = RichTextEditorMediaItem
 type PersistedSceneDraft = Pick<SceneDraft, 'id' | 'number' | 'title' | 'body'>
 type PersistedChecklistDraft = Partial<ChecklistItem> & {
   checked?: boolean
@@ -101,8 +108,6 @@ const MEDIA_UPLOADING_LABEL = '\uC5C5\uB85C\uB4DC \uC911...'
 const MEDIA_EMPTY_LABEL = '\uCCA8\uBD80\uB41C \uBBF8\uB514\uC5B4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4'
 const MEDIA_DELETE_LABEL = '\uC0AD\uC81C'
 const MEDIA_DELETING_LABEL = '\uC0AD\uC81C \uC911'
-const MEDIA_INSERT_LABEL = '\uBCF8\uBB38\uC5D0 \uC0BD\uC785'
-const MEDIA_INSERT_SHORT_LABEL = '\uC0BD\uC785'
 const MEDIA_UNTITLED_FILE_LABEL = '\uD30C\uC77C\uBA85 \uC5C6\uC74C'
 const MEDIA_UPLOAD_ERROR =
   '\uBBF8\uB514\uC5B4\uB97C \uC5C5\uB85C\uB4DC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
@@ -175,6 +180,17 @@ const SECTION_ITEMS: Array<{ value: EditorSection; label: string }> = [
   { value: 'scenes', label: '대본' },
   { value: 'thumbnail', label: '썸네일문구' },
 ]
+
+const CLOSED_EDITOR_SECTIONS: Record<EditorSection, boolean> = {
+  body: false,
+  scenes: false,
+  caption: false,
+  hashtags: false,
+  thumbnail: false,
+  checklist: false,
+  memo: false,
+}
+const PANEL_STATE_STORAGE_PREFIX = 'posty:content-editor-panels:'
 
 const SAMPLE_CARD: ContentCard = {
   id: 'preview',
@@ -548,11 +564,18 @@ function sanitizeMediaFileName(fileName: string) {
   return safeName || 'media'
 }
 
-function createMediaStoragePath(userId: string, cardId: string, file: File, index: number) {
+function createMediaStoragePath(
+  userId: string,
+  cardId: string,
+  file: File,
+  index: number,
+  purpose: ContentMediaPurpose
+) {
   const safeName = sanitizeMediaFileName(file.name)
   const token = createShareToken().slice(0, 12)
+  const purposeSegment = getContentMediaPathSegment(purpose)
 
-  return `${userId}/${cardId}/${Date.now()}-${index + 1}-${token}-${safeName}`
+  return `${userId}/${cardId}/${purposeSegment}/${Date.now()}-${index + 1}-${token}-${safeName}`
 }
 
 function sortMediaItems<T extends Pick<ContentCardMedia, 'sort_order' | 'created_at'>>(items: T[]) {
@@ -797,7 +820,8 @@ function appendInlineEditorNodes(
       link.dataset.postyLink = 'true'
       link.target = '_blank'
       link.rel = 'noreferrer noopener'
-      link.className = 'text-[var(--color-accent)] underline underline-offset-2'
+      link.className =
+        'cursor-pointer text-blue-600 underline underline-offset-2 hover:text-blue-700 [&_*]:text-blue-600'
       appendInlineEditorNodes(ownerDocument, link, match.label, mediaById)
       parent.appendChild(link)
     } else {
@@ -1190,7 +1214,8 @@ function normalizeEditorLinks(editor: HTMLElement) {
     link.dataset.postyLink = 'true'
     link.target = '_blank'
     link.rel = 'noreferrer noopener'
-    link.className = 'text-[var(--color-accent)] underline underline-offset-2'
+    link.className =
+      'cursor-pointer text-blue-600 underline underline-offset-2 hover:text-blue-700 [&_*]:text-blue-600'
   })
 }
 
@@ -1258,10 +1283,54 @@ function normalizeEditorLinkUrl(value: string) {
   return `https://${trimmed}`
 }
 
+function getPanelStateStorageKey(cardId: string) {
+  return `${PANEL_STATE_STORAGE_PREFIX}${cardId}`
+}
+
+function normalizePanelState(value: unknown): Record<EditorSection, boolean> {
+  const source = value && typeof value === 'object' ? value : {}
+
+  return {
+    body: Boolean((source as Partial<Record<EditorSection, unknown>>).body),
+    scenes: Boolean((source as Partial<Record<EditorSection, unknown>>).scenes),
+    caption: Boolean((source as Partial<Record<EditorSection, unknown>>).caption),
+    hashtags: Boolean((source as Partial<Record<EditorSection, unknown>>).hashtags),
+    thumbnail: Boolean((source as Partial<Record<EditorSection, unknown>>).thumbnail),
+    checklist: Boolean((source as Partial<Record<EditorSection, unknown>>).checklist),
+    memo: Boolean((source as Partial<Record<EditorSection, unknown>>).memo),
+  }
+}
+
+function readPanelState(cardId: string): Record<EditorSection, boolean> {
+  if (typeof window === 'undefined') return { ...CLOSED_EDITOR_SECTIONS }
+
+  try {
+    const value = window.localStorage.getItem(getPanelStateStorageKey(cardId))
+
+    if (!value) return { ...CLOSED_EDITOR_SECTIONS }
+
+    return normalizePanelState(JSON.parse(value))
+  } catch (error) {
+    console.warn('Failed to read content editor panel state', error)
+    return { ...CLOSED_EDITOR_SECTIONS }
+  }
+}
+
+function writePanelState(cardId: string, value: Record<EditorSection, boolean>) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(getPanelStateStorageKey(cardId), JSON.stringify(value))
+  } catch (error) {
+    console.warn('Failed to save content editor panel state', error)
+  }
+}
+
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const bodyEditorRef = useRef<HTMLDivElement | null>(null)
+  const bodyEditorApiRef = useRef<RichTextEditorHandle | null>(null)
   const bodyImageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const bodyEditorSelectionRef = useRef<Range | null>(null)
   const bodyLinkUrlInputRef = useRef<HTMLInputElement | null>(null)
@@ -1270,15 +1339,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [card, setCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(true)
-  const [expandedSections, setExpandedSections] = useState<Record<EditorSection, boolean>>({
-    body: true,
-    scenes: true,
-    caption: false,
-    hashtags: false,
-    thumbnail: false,
-    checklist: false,
-    memo: false,
-  })
+  const [expandedSections, setExpandedSections] = useState<Record<EditorSection, boolean>>(
+    () => ({ ...CLOSED_EDITOR_SECTIONS })
+  )
   const [titleDraft, setTitleDraft] = useState('')
   const [scheduledDateDraft, setScheduledDateDraft] = useState('')
   const [scheduledTimeDraft, setScheduledTimeDraft] = useState('')
@@ -1351,6 +1414,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     () => mediaItems.map((item) => `${item.id}:${item.signedUrl ?? ''}`).join('|'),
     [mediaItems]
   )
+  const attachmentMediaItems = useMemo(
+    () => mediaItems.filter(isAttachmentContentMedia),
+    [mediaItems]
+  )
 
   useEffect(() => {
     if (saveState !== 'saved') return
@@ -1361,6 +1428,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }, 1500)
     return () => window.clearTimeout(timer)
   }, [saveState])
+
+  useEffect(() => {
+    if (!card?.id || isPreview) {
+      setExpandedSections({ ...CLOSED_EDITOR_SECTIONS })
+      return
+    }
+
+    setExpandedSections(readPanelState(card.id))
+  }, [card?.id, isPreview])
 
   useEffect(() => {
     if (!shareFeedback) return
@@ -1686,6 +1762,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setSceneDrafts(createEditableSceneDrafts(nextScript))
       setChecklistDrafts(normalizeChecklistDrafts(nextCard.checklist))
       setSelectedProjectId(nextCard.project_id ?? '')
+      writePanelState(nextCard.id, expandedSections)
       setSaveFeedbackLabel(
         nextStatus === 'writing' ? '임시저장되었습니다' : '저장되었습니다'
       )
@@ -1920,15 +1997,18 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }
   }
 
-  const uploadMediaFiles = async (files: File[]) => {
+  const uploadMediaFiles = async (
+    files: File[],
+    purpose: ContentMediaPurpose = 'attachment'
+  ) => {
     const uploadableFiles = files
       .map((file) => ({
         file,
         mediaType: getMediaType(file.type),
       }))
-      .filter(
-        (entry): entry is { file: File; mediaType: ContentMediaType } =>
-          entry.mediaType !== null
+    .filter(
+      (entry): entry is { file: File; mediaType: ContentMediaType } =>
+          entry.mediaType !== null && (purpose === 'attachment' || entry.mediaType === 'image')
       )
 
     if (uploadableFiles.length === 0) {
@@ -1957,7 +2037,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const uploadedItems: MediaItem[] = []
 
       for (const [index, { file, mediaType }] of uploadableFiles.entries()) {
-        const storagePath = createMediaStoragePath(userId, card.id, file, index)
+        const storagePath = createMediaStoragePath(userId, card.id, file, index, purpose)
         const { error: uploadError } = await supabase.storage
           .from(MEDIA_BUCKET_NAME)
           .upload(storagePath, file, {
@@ -2014,7 +2094,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       return
     }
 
-    await uploadMediaFiles(files)
+    await uploadMediaFiles(files, 'attachment')
     input.value = ''
   }
 
@@ -2035,7 +2115,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       return
     }
 
-    const uploadedItems = await uploadMediaFiles(imageFiles)
+    const uploadedItems = await uploadMediaFiles(imageFiles, 'inline')
     uploadedItems.forEach(insertMediaItemIntoBodyEditor)
     input.value = ''
   }
@@ -2376,10 +2456,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     storeBodyEditorSelection()
   }
 
-  const handleInsertMediaIntoBody = (media: MediaItem) => {
-    insertMediaItemIntoBodyEditor(media)
-  }
-
   const handleBodyEditorInput = (_event: FormEvent<HTMLDivElement>) => {
     syncBodyDraftFromEditor()
     storeBodyEditorSelection()
@@ -2387,7 +2463,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
   const handleBodyPaste = async (event: ClipboardEvent<HTMLDivElement>) => {
     const files = Array.from(event.clipboardData.files ?? []).filter((file) =>
-      Boolean(getMediaType(file.type))
+      file.type.startsWith('image/')
     )
 
     if (files.length > 0) {
@@ -2398,7 +2474,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         return
       }
 
-      const uploadedItems = await uploadMediaFiles(files)
+      const uploadedItems = await uploadMediaFiles(files, 'inline')
       uploadedItems.forEach(insertMediaItemIntoBodyEditor)
       return
     }
@@ -2420,10 +2496,18 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const togglePanelSection = (section: EditorSection) => {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }))
+    setExpandedSections((prev) => {
+      const next = {
+        ...prev,
+        [section]: !prev[section],
+      }
+
+      if (card?.id && !isPreview) {
+        writePanelState(card.id, next)
+      }
+
+      return next
+    })
   }
 
   const toggleCampaignSection = (campaignId: string) => {
@@ -2613,9 +2697,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           </label>
         </div>
 
-        {mediaItems.length > 0 ? (
+        {attachmentMediaItems.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            {mediaItems.map((media) => {
+            {attachmentMediaItems.map((media) => {
               const isDeleting = mediaDeletingIds.includes(media.id)
 
               return (
@@ -2654,17 +2738,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                     aria-label={MEDIA_DELETE_LABEL}
                   >
                     <X size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleInsertMediaIntoBody(media)}
-                    disabled={isPreview || isDeleting}
-                    title={MEDIA_INSERT_LABEL}
-                    aria-label={MEDIA_INSERT_LABEL}
-                    className="absolute bottom-1 left-1 inline-flex h-5 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--color-bg-surface)_88%,transparent)] px-1.5 text-[10px] font-semibold text-[var(--color-text-body)] shadow-sm transition-colors hover:bg-[var(--color-bg-surface)] hover:text-[var(--color-accent)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
-                  >
-                    <ImagePlus size={10} />
-                    {MEDIA_INSERT_SHORT_LABEL}
                   </button>
                 </div>
               )
@@ -3424,96 +3497,32 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             {renderMediaAttachmentSection()}
           </div>
 
-          {renderMarkdownToolbar()}
-          {renderBodyLinkPopover()}
-          <input
-            ref={bodyImageUploadInputRef}
-            type="file"
-            accept="image/*"
-            disabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
-            onChange={handleBodyImageUpload}
-            className="sr-only"
-            aria-label="본문 이미지 첨부"
-          />
-          <div className="hidden">
-            <div className="toolbar flex h-9 items-center gap-1 overflow-x-auto">
-              <div className="flex items-center gap-2 pr-1">
-                <span className="min-w-[28px] text-center text-xs font-medium text-[var(--color-text-body)]">
-                  14px
+          <RichTextEditor
+            ref={bodyEditorApiRef}
+            value={bodyDraft}
+            onChange={setBodyDraft}
+            mediaItems={mediaItems}
+            disabled={isPreview}
+            placeholder={EDITOR_PLACEHOLDER}
+            onUploadMedia={(files) => uploadMediaFiles(files, 'inline')}
+            uploadDisabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
+            bodyHeader={
+              <div className="mb-2 flex w-full items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
+                <span className="min-w-0 truncate font-medium">
+                  {'\uCF58\uD150\uCE20 \uB0B4\uC6A9\uC774 \uB4E4\uC5B4\uAC11\uB2C8\uB2E4'}
+                </span>
+                <span className="shrink-0 font-medium">
+                  {'\uC791\uC131\uC77C '}{createdDateLabel}{' '}
+                  <span
+                    title={`\uB9C8\uC9C0\uB9C9 \uC218\uC815 ${updatedDateLabel}`}
+                    className="cursor-help"
+                  >
+                    i
+                  </span>
                 </span>
               </div>
-              <span className="mx-1 h-4 w-px bg-[var(--color-border-soft)]" />
-              {['B', 'I', 'U', 'S'].map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  disabled
-                  className={clsx(
-                    'flex h-6 w-6 items-center justify-center rounded-[4px] text-[13px] text-[var(--color-text-secondary)] disabled:opacity-100',
-                    label === 'B' && 'font-bold text-[var(--color-text-body)]',
-                    label === 'I' && 'italic text-[var(--color-text-body)]',
-                    label === 'U' && 'underline text-[var(--color-text-body)]',
-                    label === 'S' && 'line-through text-[var(--color-text-body)]'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-              <span className="mx-1 h-4 w-px bg-[var(--color-border-soft)]" />
-              {['좌측', '가운데', '오른쪽', '목록', '번호'].map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  disabled
-                  className="rounded-[4px] px-2 py-1 text-xs text-[var(--color-text-secondary)] disabled:opacity-100"
-                >
-                  {label}
-                </button>
-              ))}
-              <span className="mx-1 h-4 w-px bg-[var(--color-border-soft)]" />
-              <button
-                type="button"
-                disabled
-                className="rounded-[4px] px-2 py-1 text-xs text-[var(--color-text-secondary)] disabled:opacity-100"
-              >
-                링크
-              </button>
-              <button
-                type="button"
-                disabled
-                className="rounded-[4px] px-2 py-1 text-xs text-[var(--color-text-secondary)] disabled:opacity-100"
-              >
-                구분선
-              </button>
-            </div>
-          </div>
-
-          <div className="editor-body-wrap flex min-h-0 flex-1 flex-col px-4 py-3 sm:px-6 lg:px-11">
-            <div className="mb-2 flex w-full items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
-              <span className="min-w-0 truncate font-medium">콘텐츠 내용이 들어갑니다</span>
-              <span className="shrink-0 font-medium">
-                작성일 {createdDateLabel}{' '}
-                <span title={`마지막 수정 ${updatedDateLabel}`} className="cursor-help">
-                  ⓘ
-                </span>
-              </span>
-            </div>
-            <div
-              ref={bodyEditorRef}
-              contentEditable={!isPreview}
-              suppressContentEditableWarning
-              role="textbox"
-              aria-label="원고"
-              aria-multiline="true"
-              data-placeholder={EDITOR_PLACEHOLDER}
-              onInput={handleBodyEditorInput}
-              onPaste={handleBodyPaste}
-              onKeyUp={storeBodyEditorSelection}
-              onMouseUp={storeBodyEditorSelection}
-              onFocus={storeBodyEditorSelection}
-              className="min-h-[420px] w-full flex-1 overflow-y-auto whitespace-pre-wrap break-words border-0 bg-transparent text-[16px] leading-[1.75] text-[var(--color-text-body)] outline-none empty:before:pointer-events-none empty:before:text-[var(--color-text-muted-soft)] empty:before:content-[attr(data-placeholder)] [&_a]:text-[var(--color-accent)] [&_a]:underline [&_a]:underline-offset-2 [&_div]:my-0 [&_div]:min-h-[1.75em] [&_div]:leading-[1.75] [&_font[size='2']]:text-[14px] [&_font[size='2']]:leading-[1.6] [&_font[size='6']]:text-[24px] [&_font[size='6']]:font-semibold [&_font[size='6']]:leading-[1.3] [&_font[size='7']]:text-[30px] [&_font[size='7']]:font-semibold [&_font[size='7']]:leading-[1.25] [&_h1]:my-0 [&_h2]:my-0 [&_h2]:min-h-[1.25em] [&_h2]:text-[30px] [&_h2]:font-semibold [&_h2]:leading-[1.25] [&_h3]:my-0 [&_li]:min-h-[1.75em] [&_li]:pl-1 [&_li]:leading-[1.75] [&_ol]:my-0 [&_ol]:list-decimal [&_ol]:space-y-0 [&_ol]:pl-5 [&_p]:my-0 [&_p]:min-h-[1.75em] [&_p]:leading-[1.75] [&_span[data-posty-size=large]]:leading-[1.25] [&_span[data-posty-size=muted]]:leading-[1.6] [&_span[data-posty-size=small]]:leading-[1.6] [&_span[data-posty-size=title]]:leading-[1.3] [&_ul]:my-0 [&_ul]:list-disc [&_ul]:space-y-0 [&_ul]:pl-5"
-            />
-          </div>
+            }
+          />
         </div>
 
         {panelOpen && (

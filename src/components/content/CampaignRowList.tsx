@@ -1,6 +1,7 @@
 'use client'
 
 import { format } from 'date-fns'
+import { isAttachmentContentMedia } from '@/lib/content-media-purpose'
 import { getPlainTextPreview } from '@/lib/text-format'
 import type { ContentCard, ContentCardMedia } from '@/lib/types'
 
@@ -43,8 +44,8 @@ function getCampaignLabel(card: ContentCard) {
   return card.project?.title?.trim() || NO_CAMPAIGN_LABEL
 }
 
-function getPrimaryMedia(card: ContentCardPreview) {
-  return card.media?.[0] ?? null
+function getPrimaryMedia(card: ContentCardPreview): ContentCardMediaPreview | null {
+  return card.media?.find((media) => isAttachmentContentMedia(media)) ?? null
 }
 
 function getCardPreviewText(card: ContentCardPreview) {

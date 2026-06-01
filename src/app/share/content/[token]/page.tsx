@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { SharedMediaCarousel, type SharedMediaCarouselItem } from '@/components/content/SharedMediaCarousel'
+import { isAttachmentContentMedia } from '@/lib/content-media-purpose'
 import { FormattedText } from '@/lib/text-format'
 import type { ChecklistItem, ContentMediaType, Database, ShareSection } from '@/lib/types'
 
@@ -453,9 +454,14 @@ export default async function ShareContentPage({ params }: SharePageProps) {
     console.error('Failed to fetch shared content media', mediaError)
   }
 
+  const fetchedMediaRows = (mediaRows as SharedMedia[] | null) ?? []
   const mediaItems = mediaError
     ? []
-    : await createSharedMediaItems(supabase, (mediaRows as SharedMedia[] | null) ?? [])
+    : await createSharedMediaItems(supabase, fetchedMediaRows)
+  const attachmentMediaIds = new Set(
+    fetchedMediaRows.filter(isAttachmentContentMedia).map((row) => row.id)
+  )
+  const attachmentMediaItems = mediaItems.filter((item) => attachmentMediaIds.has(item.id))
   const scriptScenes = normalizeScriptScenes(script?.body)
   const plainScriptBody = getPlainScriptBody(script?.body)
   const captionContent = normalizeText(script?.caption)
@@ -464,7 +470,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
   const checklistItems = normalizeChecklist(card.checklist)
   const hasScriptContent = scriptScenes.length > 0 || Boolean(plainScriptBody)
   const hasPublicContent =
-    mediaItems.length > 0 ||
+    attachmentMediaItems.length > 0 ||
     Boolean(bodyContent) ||
     hasScriptContent ||
     Boolean(captionContent) ||
@@ -499,7 +505,7 @@ export default async function ShareContentPage({ params }: SharePageProps) {
           </h1>
         </header>
 
-        <SharedMediaCarousel items={mediaItems} />
+        <SharedMediaCarousel items={attachmentMediaItems} />
 
         {anchorLinks.length > 0 ? (
           <nav

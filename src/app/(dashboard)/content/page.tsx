@@ -9,6 +9,7 @@ import { createContentCard } from '@/components/content/createContentCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Toast } from '@/components/ui/Toast'
+import { isAttachmentContentMedia } from '@/lib/content-media-purpose'
 import { createClient } from '@/lib/supabase/client'
 import { STATUS_COLORS, STATUS_LABELS } from '@/lib/constants'
 import type {
@@ -92,15 +93,15 @@ async function attachMediaPreviewUrls(
     return contentCards
   }
 
-  const firstMediaByCard = ((data as ContentCardMedia[] | null) ?? []).reduce<
-    Record<string, ContentCardMedia>
-  >((acc, media) => {
-    if (!acc[media.card_id]) {
-      acc[media.card_id] = media
-    }
+  const firstMediaByCard = ((data as ContentCardMedia[] | null) ?? [])
+    .filter(isAttachmentContentMedia)
+    .reduce<Record<string, ContentCardMedia>>((acc, media) => {
+      if (!acc[media.card_id]) {
+        acc[media.card_id] = media
+      }
 
-    return acc
-  }, {})
+      return acc
+    }, {})
 
   const mediaWithUrls = await Promise.all(
     Object.values(firstMediaByCard).map(async (media) => {

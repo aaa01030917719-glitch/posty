@@ -7,6 +7,8 @@ export type FormattedTextMediaItem = {
   signedUrl: string | null
 }
 
+type MediaSizePreset = 'original' | 'small' | 'medium' | 'large' | 'full'
+
 type TextBlock =
   | {
       type: 'text'
@@ -33,6 +35,7 @@ type TextBlock =
       type: 'media'
       id: string
       alt: string
+      size: MediaSizePreset
     }
 
 type FormattedTextProps = {
@@ -48,6 +51,7 @@ type InlineMatch =
       end: number
       alt: string
       id: string
+      size: MediaSizePreset
       priority: number
     }
   | {
@@ -78,8 +82,10 @@ type InlineMatch =
       priority: number
     }
 
-const MEDIA_TOKEN_PATTERN = /!\[([^\]]*)\]\(posty-media:([A-Za-z0-9_-]+)\)/
-const MEDIA_TOKEN_ONLY_PATTERN = /^!\[([^\]]*)\]\(posty-media:([A-Za-z0-9_-]+)\)$/
+const MEDIA_TOKEN_PATTERN =
+  /!\[([^\]]*)\]\(posty-media:([A-Za-z0-9_-]+)(?:\|size=(original|small|medium|large|full))?\)/
+const MEDIA_TOKEN_ONLY_PATTERN =
+  /^!\[([^\]]*)\]\(posty-media:([A-Za-z0-9_-]+)(?:\|size=(original|small|medium|large|full))?\)$/
 const LINK_PATTERN = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/
 const BOLD_PATTERN = /\*\*([^*\n]+?)\*\*/
 const STRIKE_PATTERN = /~~([^~\n]+?)~~/
@@ -123,6 +129,29 @@ function getColorInlineClass(type: ColorInlineType) {
     case 'colorCalm':
       return COLOR_CLASS_BY_TYPE.colorCalm
   }
+}
+
+function normalizeMediaSize(value: string | null | undefined): MediaSizePreset {
+  if (
+    value === 'small' ||
+    value === 'medium' ||
+    value === 'large' ||
+    value === 'full' ||
+    value === 'original'
+  ) {
+    return value
+  }
+
+  return 'original'
+}
+
+function getMediaSizeWidth(size: MediaSizePreset) {
+  if (size === 'small') return '25%'
+  if (size === 'medium') return '50%'
+  if (size === 'large') return '75%'
+  if (size === 'full') return '100%'
+
+  return 'auto'
 }
 
 function splitMarkdownRow(line: string) {
@@ -202,6 +231,7 @@ function getMediaToken(line: string) {
   return {
     alt: match[1]?.trim() ?? '',
     id: match[2],
+    size: normalizeMediaSize(match[3]),
   }
 }
 
@@ -345,6 +375,7 @@ function matchPattern(
       end: match.index + match[0].length,
       alt: match[1] ?? '',
       id: match[2],
+      size: normalizeMediaSize(match[3]),
       priority,
     }
   }
@@ -465,7 +496,7 @@ function renderInlineContent(source: string, keyPrefix: string): ReactNode[] {
           href={match.href}
           target="_blank"
           rel="noreferrer noopener"
-          className="text-[var(--color-accent)] underline underline-offset-2"
+          className="cursor-pointer text-blue-600 underline underline-offset-2 hover:text-blue-700 [&_*]:text-blue-600"
         >
           {renderInlineContent(match.label, `${key}-link`)}
         </a>
@@ -496,11 +527,13 @@ function createMediaMap(mediaItems: FormattedTextMediaItem[] | undefined) {
 function renderMediaBlock(
   id: string,
   alt: string,
+  size: MediaSizePreset,
   mediaById: Map<string, FormattedTextMediaItem>
 ) {
   const media = mediaById.get(id)
   const label = media?.mediaType === 'video' ? MEDIA_VIDEO_LABEL : MEDIA_IMAGE_LABEL
   const altText = alt || media?.fileName || label
+  const width = getMediaSizeWidth(size)
 
   if (!media?.signedUrl) {
     return (
@@ -511,19 +544,21 @@ function renderMediaBlock(
   }
 
   return (
-    <figure className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)]">
+    <figure className="my-3 inline-block max-w-full align-top" style={{ width, maxWidth: '100%' }}>
       {media.mediaType === 'image' ? (
         <img
           src={media.signedUrl}
           alt={altText}
-          className="max-h-[460px] w-full object-contain"
+          className="block h-auto max-h-[520px] max-w-full rounded-[var(--radius-md)] object-contain"
+          style={{ width: size === 'original' ? 'auto' : '100%', maxWidth: '100%' }}
         />
       ) : (
         <video
           src={media.signedUrl}
           controls
           preload="metadata"
-          className="max-h-[460px] w-full object-contain"
+          className="block h-auto max-h-[520px] max-w-full rounded-[var(--radius-md)] object-contain"
+          style={{ width: size === 'original' ? 'auto' : '100%', maxWidth: '100%' }}
         />
       )}
     </figure>
@@ -623,7 +658,11 @@ export function FormattedText({ text, className, mediaItems }: FormattedTextProp
         }
 
         if (block.type === 'media') {
-          return <div key={`media-${index}`}>{renderMediaBlock(block.id, block.alt, mediaById)}</div>
+          return (
+            <div key={`media-${index}`}>
+              {renderMediaBlock(block.id, block.alt, block.size, mediaById)}
+            </div>
+          )
         }
 
         return (

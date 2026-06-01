@@ -271,10 +271,17 @@ export function getMarkdownActionResult(
   }
 }
 
-export function createMediaMarkdownToken(media: { id: string; media_type: 'image' | 'video' }) {
-  const label = media.media_type === 'video' ? MARKDOWN_MEDIA_VIDEO_LABEL : MARKDOWN_MEDIA_IMAGE_LABEL
+export type MediaSizePreset = 'original' | 'small' | 'medium' | 'large' | 'full'
 
-  return `![${label}](posty-media:${media.id})`
+export function createMediaMarkdownToken(media: {
+  id: string
+  media_type: 'image' | 'video'
+  size?: MediaSizePreset
+}) {
+  const label = media.media_type === 'video' ? MARKDOWN_MEDIA_VIDEO_LABEL : MARKDOWN_MEDIA_IMAGE_LABEL
+  const size = media.size ?? 'original'
+
+  return `![${label}](posty-media:${media.id}|size=${size})`
 }
 
 export function MarkdownToolbar({
