@@ -2,6 +2,7 @@ export type ChannelType = 'instagram' | 'threads' | 'youtube' | 'blog' | 'custom
 export type ContentStatus = 'idea' | 'planning' | 'writing' | 'review' | 'scheduled' | 'published' | 'hold'
 export type ContentMediaType = 'image' | 'video'
 export type Priority = 'low' | 'normal' | 'high'
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export interface Profile {
   id: string
@@ -68,6 +69,17 @@ export interface ContentCardMedia {
   media_type: ContentMediaType
   sort_order: number
   created_at: string
+}
+
+export interface ContentCardDraft {
+  id: string
+  user_id: string
+  card_id: string
+  title: string
+  snapshot: Json
+  source_card_updated_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface ContentCard {
@@ -254,6 +266,20 @@ export type Database = {
           id?: string; created_at?: string
         }
         Update: Partial<Omit<ContentCardMedia, 'id' | 'created_at'>>
+      }
+      content_card_drafts: {
+        Row: ContentCardDraft
+        Insert: {
+          id?: string
+          user_id: string
+          card_id: string
+          title?: string
+          snapshot: Json
+          source_card_updated_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<ContentCardDraft>
       }
       scripts: {
         Row: Script
