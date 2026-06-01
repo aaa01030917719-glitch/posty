@@ -42,15 +42,27 @@ import {
   type RichTextEditorHandle,
   type RichTextEditorMediaItem,
 } from '@/components/content/RichTextEditor'
+import { ContentDraftModal } from '@/components/content/ContentDraftModal'
+import {
+  createContentDraftSnapshot,
+  getContentDraftSnapshotMediaIds,
+  getContentDraftTitle,
+  isContentDraftOlderThanCard,
+  parseContentDraftSnapshot,
+  type ContentDraftMediaSnapshotItem,
+  type ContentDraftSnapshot,
+} from '@/components/content/contentDrafts'
 import { Modal } from '@/components/ui/Modal'
 import type {
   ChecklistItem,
   ContentActivityAction,
   ContentCard,
+  ContentCardDraft,
   ContentCardMedia,
   ContentMediaType,
   ContentProjectSummary,
   ContentShareLink,
+  Json,
   Script,
 } from '@/lib/types'
 
@@ -122,6 +134,31 @@ const UNSAVED_LEAVE_MESSAGE =
 const CONTINUE_WRITING_LABEL = '\uACC4\uC18D \uC791\uC131'
 const LEAVE_WITHOUT_SAVE_LABEL =
   '\uC800\uC7A5\uD558\uC9C0 \uC54A\uACE0 \uB098\uAC00\uAE30'
+const DRAFT_LOAD_MODAL_TITLE = '\uC784\uC2DC\uC800\uC7A5 \uBD88\uB7EC\uC624\uAE30'
+const DRAFT_LOAD_WARNING_PRIMARY =
+  '\uD604\uC7AC \uC791\uC131 \uC911\uC778 \uB0B4\uC6A9\uC774 \uC0AC\uB77C\uC9D1\uB2C8\uB2E4'
+const DRAFT_LOAD_WARNING_SECONDARY =
+  '\uC784\uC2DC\uC800\uC7A5\uBCF8\uC744 \uBD88\uB7EC\uC624\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?'
+const DRAFT_OLD_WARNING_MESSAGE =
+  '\uD604\uC7AC \uC800\uC7A5\uB41C \uAE00\uBCF4\uB2E4 \uC774\uC804 \uBC84\uC804\uC77C \uC218 \uC788\uC2B5\uB2C8\uB2E4'
+const DRAFT_DELETE_MODAL_TITLE = '\uC784\uC2DC\uC800\uC7A5 \uC0AD\uC81C'
+const DRAFT_DELETE_WARNING_MESSAGE =
+  '\uC120\uD0DD\uD55C \uC784\uC2DC\uC800\uC7A5\uBCF8\uC744 \uC0AD\uC81C\uD558\uC2DC\uACA0\uC2B5\uB2C8\uAE4C?'
+const DRAFT_SAVE_SUCCESS_MESSAGE =
+  '\uC784\uC2DC\uC800\uC7A5\uBCF8\uC774 \uCD94\uAC00\uB418\uC5C8\uC2B5\uB2C8\uB2E4'
+const DRAFT_LOAD_SUCCESS_MESSAGE =
+  '\uC784\uC2DC\uC800\uC7A5\uBCF8\uC744 \uBD88\uB7EC\uC654\uC2B5\uB2C8\uB2E4. \uC800\uC7A5 \uC804\uAE4C\uC9C0 \uC6D0\uBCF8\uC5D0\uB294 \uBC18\uC601\uB418\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4'
+const DRAFT_DELETE_SUCCESS_MESSAGE =
+  '\uC784\uC2DC\uC800\uC7A5\uBCF8\uC744 \uC0AD\uC81C\uD588\uC2B5\uB2C8\uB2E4'
+const DRAFT_LIST_ERROR_MESSAGE =
+  '\uC784\uC2DC\uC800\uC7A5 \uBAA9\uB85D\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4'
+const DRAFT_SAVE_ERROR_MESSAGE =
+  '\uC784\uC2DC\uC800\uC7A5\uBCF8\uC744 \uC800\uC7A5\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4'
+const DRAFT_LOAD_ERROR_MESSAGE =
+  '\uC784\uC2DC\uC800\uC7A5\uBCF8\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4'
+const DRAFT_DELETE_ERROR_MESSAGE =
+  '\uC784\uC2DC\uC800\uC7A5\uBCF8\uC744 \uC0AD\uC81C\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4'
+const DRAFT_UNTITLED_LABEL = '\uC81C\uBAA9 \uC5C6\uC74C'
 const DEFAULT_PANEL_TITLE = '대본'
 const EDITOR_PLACEHOLDER = '원고를 작성해보세요...'
 const EMPTY_SECTION_MESSAGE = '아직 입력된 내용이 없습니다.'
@@ -1456,6 +1493,16 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
   const [shareModalOpen, setShareModalOpen] = useState(false)
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
+  const [draftModalOpen, setDraftModalOpen] = useState(false)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [draftRows, setDraftRows] = useState<ContentCardDraft[]>([])
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draftSaving, setDraftSaving] = useState(false)
+  const [draftDeletingId, setDraftDeletingId] = useState<string | null>(null)
+  const [draftFeedback, setDraftFeedback] = useState<string | null>(null)
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [pendingDraftLoad, setPendingDraftLoad] = useState<ContentCardDraft | null>(null)
+  const [pendingDraftDelete, setPendingDraftDelete] = useState<ContentCardDraft | null>(null)
   const [mediaUploading, setMediaUploading] = useState(false)
   const [mediaDeletingIds, setMediaDeletingIds] = useState<string[]>([])
   const [bodyLinkPopoverOpen, setBodyLinkPopoverOpen] = useState(false)
@@ -2392,6 +2439,252 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     setBodyDraft(nextValue)
   }
 
+  const getCurrentDraftTitle = () =>
+    getContentDraftTitle(titleDraft || card?.title || DRAFT_UNTITLED_LABEL)
+
+  const loadContentDraftRows = async () => {
+    if (isPreview || !card || card.is_deleted) return
+
+    setDraftLoading(true)
+    setDraftError(null)
+
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('content_card_drafts')
+        .select('*')
+        .eq('card_id', card.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+
+      setDraftRows((data ?? []) as ContentCardDraft[])
+    } catch (error) {
+      console.error('Failed to load content card drafts', error)
+      setDraftError(DRAFT_LIST_ERROR_MESSAGE)
+    } finally {
+      setDraftLoading(false)
+    }
+  }
+
+  const handleOpenDraftModal = () => {
+    if (isPreview || !card || card.is_deleted) return
+
+    syncBodyDraftFromEditor()
+    setDraftTitle(getCurrentDraftTitle())
+    setDraftFeedback(null)
+    setDraftError(null)
+    setDraftModalOpen(true)
+    void loadContentDraftRows()
+  }
+
+  const handleCloseDraftModal = () => {
+    setDraftModalOpen(false)
+    setPendingDraftLoad(null)
+    setPendingDraftDelete(null)
+  }
+
+  const handleSaveContentDraft = async () => {
+    if (isPreview || !card || card.is_deleted || draftSaving) return
+
+    const nextBodyDraft = bodyEditorRef.current
+      ? serializeEditorToMarkdown(bodyEditorRef.current)
+      : bodyDraft
+    lastEditorMarkdownRef.current = nextBodyDraft
+    setBodyDraft(nextBodyDraft)
+    setDraftSaving(true)
+    setDraftFeedback(null)
+    setDraftError(null)
+
+    try {
+      const supabase = createClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        throw userError ?? new Error('Missing authenticated user')
+      }
+
+      const nextChecklist = serializeChecklistDrafts(checklistDrafts)
+      const nextPanelTitle = panelTitle.trim() || DEFAULT_PANEL_TITLE
+      const snapshot = createContentDraftSnapshot({
+        card,
+        script: scriptRecord,
+        title: titleDraft,
+        projectId: selectedProjectId || null,
+        scheduledAt: toIsoFromScheduledFields(scheduledDateDraft, scheduledTimeDraft),
+        memo: nextBodyDraft,
+        editorMemo: memoDraft,
+        checklist: nextChecklist,
+        shareSections: card.share_sections ?? [],
+        scriptBody: serializeSceneDrafts(sceneDrafts),
+        caption: captionDraft.trim() ? captionDraft : null,
+        hashtags: hashtagsDraft.trim() ? hashtagsDraft : null,
+        thumbnailText: thumbnailDraft.trim() ? thumbnailDraft : null,
+        panelTitle: nextPanelTitle,
+        mediaItems,
+      })
+      const nextDraftTitle = getContentDraftTitle(draftTitle || titleDraft)
+      const { data, error } = await supabase
+        .from('content_card_drafts')
+        .insert({
+          user_id: user.id,
+          card_id: card.id,
+          title: nextDraftTitle,
+          snapshot: snapshot as unknown as Json,
+          source_card_updated_at: card.updated_at,
+        })
+        .select('*')
+        .single()
+
+      if (error) throw error
+
+      setDraftRows((prev) =>
+        [data as ContentCardDraft, ...prev].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+      )
+      setDraftTitle(getCurrentDraftTitle())
+      setDraftFeedback(DRAFT_SAVE_SUCCESS_MESSAGE)
+    } catch (error) {
+      console.error('Failed to save content card draft', error)
+      setDraftError(DRAFT_SAVE_ERROR_MESSAGE)
+    } finally {
+      setDraftSaving(false)
+    }
+  }
+
+  const createFallbackMediaItem = (item: ContentDraftMediaSnapshotItem): MediaItem => ({
+    id: item.id,
+    user_id: card?.user_id ?? '',
+    card_id: card?.id ?? cardId,
+    storage_path: item.storage_path,
+    file_name: item.file_name,
+    mime_type: item.mime_type,
+    media_type: item.media_type,
+    sort_order: item.sort_order,
+    created_at: '1970-01-01T00:00:00.000Z',
+    signedUrl: null,
+  })
+
+  const restoreDraftMediaItems = async (snapshot: ContentDraftSnapshot) => {
+    const mediaIds = getContentDraftSnapshotMediaIds(snapshot)
+
+    if (!card || mediaIds.length === 0) return []
+
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('content_card_media')
+      .select('*')
+      .eq('card_id', card.id)
+      .in('id', mediaIds)
+
+    if (error) {
+      console.warn('Failed to restore draft media rows', error)
+      return sortMediaItems(snapshot.media.items.map(createFallbackMediaItem))
+    }
+
+    const signedItems = await createSignedMediaItems(
+      supabase,
+      ((data ?? []) as ContentCardMedia[]).filter((item) => mediaIds.includes(item.id))
+    )
+    const signedIds = new Set(signedItems.map((item) => item.id))
+    const fallbackItems = snapshot.media.items
+      .filter((item) => !signedIds.has(item.id))
+      .map(createFallbackMediaItem)
+
+    return sortMediaItems([...signedItems, ...fallbackItems])
+  }
+
+  const handleRequestLoadDraft = (draft: ContentCardDraft) => {
+    setDraftError(null)
+    setPendingDraftLoad(draft)
+  }
+
+  const handleConfirmLoadDraft = async () => {
+    if (!pendingDraftLoad) return
+
+    const draftToLoad = pendingDraftLoad
+    const parsed = parseContentDraftSnapshot(draftToLoad.snapshot)
+
+    if (!parsed.ok) {
+      setDraftError(parsed.message || DRAFT_LOAD_ERROR_MESSAGE)
+      setPendingDraftLoad(null)
+      return
+    }
+
+    try {
+      const nextMediaItems = await restoreDraftMediaItems(parsed.snapshot)
+      const nextScheduled = splitScheduledFields(
+        parsed.snapshot.card.scheduled_at ?? parsed.snapshot.card.published_at
+      )
+      const nextPanelTitle = parsed.snapshot.script.panel_title?.trim() || DEFAULT_PANEL_TITLE
+      const nextScriptForScenes = {
+        ...(scriptRecord ?? SAMPLE_SCRIPT),
+        body: parsed.snapshot.script.body,
+      } as Script
+
+      setTitleDraft(parsed.snapshot.card.title)
+      setScheduledDateDraft(nextScheduled.date)
+      setScheduledTimeDraft(nextScheduled.time)
+      setBodyDraft(parsed.snapshot.card.memo)
+      lastEditorMarkdownRef.current = parsed.snapshot.card.memo
+      setCaptionDraft(parsed.snapshot.script.caption ?? '')
+      setHashtagsDraft(parsed.snapshot.script.hashtags ?? '')
+      setThumbnailDraft(parsed.snapshot.script.thumbnail_text ?? '')
+      setMemoDraft(parsed.snapshot.card.editor_memo)
+      setPanelTitle(nextPanelTitle)
+      setSceneDrafts(createEditableSceneDrafts(nextScriptForScenes))
+      setChecklistDrafts(normalizeChecklistDrafts(parsed.snapshot.card.checklist))
+      setSelectedProjectId(parsed.snapshot.card.project_id ?? '')
+      setMediaItems(nextMediaItems)
+      setSavedDirtyKey(`draft-loaded-${draftToLoad.id}-${Date.now()}`)
+      setDraftFeedback(DRAFT_LOAD_SUCCESS_MESSAGE)
+      setDraftError(null)
+      setPendingDraftLoad(null)
+    } catch (error) {
+      console.error('Failed to load content card draft', error)
+      setDraftError(DRAFT_LOAD_ERROR_MESSAGE)
+      setPendingDraftLoad(null)
+    }
+  }
+
+  const handleRequestDeleteDraft = (draft: ContentCardDraft) => {
+    setDraftError(null)
+    setPendingDraftDelete(draft)
+  }
+
+  const handleConfirmDeleteDraft = async () => {
+    if (!pendingDraftDelete || draftDeletingId) return
+
+    const draftToDelete = pendingDraftDelete
+
+    setDraftDeletingId(draftToDelete.id)
+    setDraftFeedback(null)
+    setDraftError(null)
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('content_card_drafts')
+        .delete()
+        .eq('id', draftToDelete.id)
+
+      if (error) throw error
+
+      setDraftRows((prev) => prev.filter((draft) => draft.id !== draftToDelete.id))
+      setDraftFeedback(DRAFT_DELETE_SUCCESS_MESSAGE)
+      setPendingDraftDelete(null)
+    } catch (error) {
+      console.error('Failed to delete content card draft', error)
+      setDraftError(DRAFT_DELETE_ERROR_MESSAGE)
+    } finally {
+      setDraftDeletingId(null)
+    }
+  }
+
   const storeBodyEditorSelection = () => {
     const editor = bodyEditorRef.current
     const selection = window.getSelection()
@@ -2832,6 +3125,82 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     }, 1000)
   }
 
+  const renderDraftLoadModal = () => {
+    const isOlderDraft = pendingDraftLoad
+      ? isContentDraftOlderThanCard(pendingDraftLoad, card?.updated_at)
+      : false
+
+    return (
+      <Modal
+        isOpen={Boolean(pendingDraftLoad)}
+        onClose={() => setPendingDraftLoad(null)}
+        title={DRAFT_LOAD_MODAL_TITLE}
+        size="sm"
+      >
+        <div className="space-y-5">
+          <div className="space-y-2 text-sm leading-6 text-[var(--color-text-body)]">
+            <p>{DRAFT_LOAD_WARNING_PRIMARY}</p>
+            <p>{DRAFT_LOAD_WARNING_SECONDARY}</p>
+            {isOlderDraft && (
+              <p className="text-sm text-gray-500">
+                {DRAFT_OLD_WARNING_MESSAGE}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setPendingDraftLoad(null)}
+              className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)]"
+            >
+              {CONTINUE_WRITING_LABEL}
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmLoadDraft}
+              className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[var(--color-accent)] px-3 text-xs font-semibold text-[var(--color-on-accent)] transition-colors hover:bg-[var(--color-accent-hover)]"
+            >
+              불러오기
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
+
+  const renderDraftDeleteModal = () => (
+    <Modal
+      isOpen={Boolean(pendingDraftDelete)}
+      onClose={() => setPendingDraftDelete(null)}
+      title={DRAFT_DELETE_MODAL_TITLE}
+      size="sm"
+    >
+      <div className="space-y-5">
+        <p className="text-sm leading-6 text-[var(--color-text-body)]">
+          {DRAFT_DELETE_WARNING_MESSAGE}
+        </p>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setPendingDraftDelete(null)}
+            disabled={Boolean(draftDeletingId)}
+            className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleConfirmDeleteDraft}
+            disabled={Boolean(draftDeletingId)}
+            className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[var(--color-danger)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[color-mix(in_srgb,var(--color-danger)_86%,black)] disabled:cursor-not-allowed disabled:bg-[var(--color-border-strong)]"
+          >
+            삭제
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+
   const renderUnsavedLeaveModal = () => (
     <Modal
       isOpen={leaveModalOpen}
@@ -2854,7 +3223,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           <button
             type="button"
             onClick={handleLeaveWithoutSave}
-            className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[var(--color-danger)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[color-mix(in_srgb,var(--color-danger)_86%,black)]"
+            className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[#FF385C] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#E73352]"
           >
             {LEAVE_WITHOUT_SAVE_LABEL}
           </button>
@@ -3509,8 +3878,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
               <button
                 type="button"
-                onClick={() => handlePersist('writing')}
-                disabled={isPreview || saveState === 'saving' || deleting}
+                onClick={handleOpenDraftModal}
+                disabled={isPreview || saveState === 'saving' || deleting || draftSaving}
                 className="inline-flex h-7 shrink-0 items-center whitespace-nowrap rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] sm:px-3"
               >
                 임시저장
@@ -3876,6 +4245,23 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           </aside>
         )}
       </div>
+      <ContentDraftModal
+        isOpen={draftModalOpen}
+        onClose={handleCloseDraftModal}
+        title={draftTitle}
+        onTitleChange={setDraftTitle}
+        drafts={draftRows}
+        loading={draftLoading}
+        saving={draftSaving}
+        deletingId={draftDeletingId}
+        feedback={draftFeedback}
+        error={draftError}
+        onSave={handleSaveContentDraft}
+        onLoad={handleRequestLoadDraft}
+        onDelete={handleRequestDeleteDraft}
+      />
+      {renderDraftLoadModal()}
+      {renderDraftDeleteModal()}
       {renderShareModal()}
       {renderUnsavedLeaveModal()}
     </>,
