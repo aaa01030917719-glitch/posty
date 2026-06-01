@@ -115,6 +115,13 @@ const MEDIA_DELETE_ERROR =
   '\uBBF8\uB514\uC5B4\uB97C \uC0AD\uC81C\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.'
 const MEDIA_STORAGE_DELETE_WARNING =
   '\uCCA8\uBD80 \uBAA9\uB85D\uC5D0\uC11C\uB294 \uC81C\uAC70\uD588\uC9C0\uB9CC \uC800\uC7A5\uC18C \uD30C\uC77C \uC815\uB9AC\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.'
+const UNSAVED_LEAVE_MODAL_TITLE =
+  '\uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uBCC0\uACBD\uC0AC\uD56D'
+const UNSAVED_LEAVE_MESSAGE =
+  '\uC791\uC131\uB41C \uAE00\uC744 \uC800\uC7A5\uD558\uC9C0 \uC54A\uACE0 \uB098\uAC00\uACA0\uC2B5\uB2C8\uAE4C?'
+const CONTINUE_WRITING_LABEL = '\uACC4\uC18D \uC791\uC131'
+const LEAVE_WITHOUT_SAVE_LABEL =
+  '\uC800\uC7A5\uD558\uC9C0 \uC54A\uACE0 \uB098\uAC00\uAE30'
 const DEFAULT_PANEL_TITLE = '대본'
 const EDITOR_PLACEHOLDER = '원고를 작성해보세요...'
 const EMPTY_SECTION_MESSAGE = '아직 입력된 내용이 없습니다.'
@@ -466,6 +473,81 @@ function serializeChecklistDrafts(checklistDrafts: ChecklistDraft[]) {
       checked: item.checked,
     }))
     .filter((item) => item.text.length > 0)
+}
+
+function createContentEditorDirtyKey({
+  title,
+  scheduledDate,
+  scheduledTime,
+  body,
+  caption,
+  hashtags,
+  thumbnail,
+  memo,
+  panelTitle,
+  sceneDrafts,
+  checklistDrafts,
+  selectedProjectId,
+  mediaItems,
+}: {
+  title: string
+  scheduledDate: string
+  scheduledTime: string
+  body: string
+  caption: string
+  hashtags: string
+  thumbnail: string
+  memo: string
+  panelTitle: string
+  sceneDrafts: SceneDraft[]
+  checklistDrafts: ChecklistDraft[]
+  selectedProjectId: string
+  mediaItems: MediaItem[]
+}) {
+  return JSON.stringify({
+    title,
+    scheduledDate,
+    scheduledTime,
+    body,
+    caption,
+    hashtags,
+    thumbnail,
+    memo,
+    panelTitle,
+    scenes: serializeSceneDrafts(sceneDrafts),
+    checklist: serializeChecklistDrafts(checklistDrafts),
+    selectedProjectId,
+    media: mediaItems
+      .map((item) => ({
+        id: item.id,
+        storagePath: item.storage_path,
+        mediaType: item.media_type,
+        sortOrder: item.sort_order,
+      }))
+      .sort((first, second) => first.id.localeCompare(second.id)),
+  })
+}
+
+function getInternalNavigationHref(anchor: HTMLAnchorElement) {
+  const rawHref = anchor.getAttribute('href')
+
+  if (!rawHref || rawHref.startsWith('#')) return null
+  if (anchor.target && anchor.target !== '_self') return null
+  if (anchor.hasAttribute('download')) return null
+  if (rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) return null
+
+  try {
+    const url = new URL(anchor.href, window.location.href)
+
+    if (url.origin !== window.location.origin) return null
+
+    const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`
+    const nextHref = `${url.pathname}${url.search}${url.hash}`
+
+    return nextHref === currentHref ? null : nextHref
+  } catch {
+    return null
+  }
 }
 
 function renumberSceneDrafts(sceneDrafts: SceneDraft[]) {
@@ -1336,6 +1418,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const bodyLinkUrlInputRef = useRef<HTMLInputElement | null>(null)
   const lastEditorMarkdownRef = useRef('')
   const lastEditorMediaKeyRef = useRef('')
+  const hasUnsavedChangesRef = useRef(false)
+  const allowNavigationRef = useRef(false)
   const [card, setCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
   const [panelOpen, setPanelOpen] = useState(true)
@@ -1377,6 +1461,9 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [bodyLinkPopoverOpen, setBodyLinkPopoverOpen] = useState(false)
   const [bodyLinkUrlDraft, setBodyLinkUrlDraft] = useState('')
   const [bodyLinkError, setBodyLinkError] = useState<string | null>(null)
+  const [savedDirtyKey, setSavedDirtyKey] = useState<string | null>(null)
+  const [leaveModalOpen, setLeaveModalOpen] = useState(false)
+  const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null)
 
   const isPreview = PREVIEW_IDS.has(cardId)
 
@@ -1418,6 +1505,81 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     () => mediaItems.filter(isAttachmentContentMedia),
     [mediaItems]
   )
+  const currentDirtyKey = useMemo(
+    () =>
+      createContentEditorDirtyKey({
+        title: titleDraft,
+        scheduledDate: scheduledDateDraft,
+        scheduledTime: scheduledTimeDraft,
+        body: bodyDraft,
+        caption: captionDraft,
+        hashtags: hashtagsDraft,
+        thumbnail: thumbnailDraft,
+        memo: memoDraft,
+        panelTitle,
+        sceneDrafts,
+        checklistDrafts,
+        selectedProjectId,
+        mediaItems,
+      }),
+    [
+      titleDraft,
+      scheduledDateDraft,
+      scheduledTimeDraft,
+      bodyDraft,
+      captionDraft,
+      hashtagsDraft,
+      thumbnailDraft,
+      memoDraft,
+      panelTitle,
+      sceneDrafts,
+      checklistDrafts,
+      selectedProjectId,
+      mediaItems,
+    ]
+  )
+  const hasUnsavedChanges = savedDirtyKey !== null && currentDirtyKey !== savedDirtyKey
+
+  useEffect(() => {
+    hasUnsavedChangesRef.current = hasUnsavedChanges
+  }, [hasUnsavedChanges])
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChangesRef.current || allowNavigationRef.current) return
+
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
+
+  useEffect(() => {
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (!hasUnsavedChangesRef.current || allowNavigationRef.current) return
+      if (event.defaultPrevented || event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+
+      const target = event.target
+      if (!(target instanceof Element)) return
+
+      const anchor = target.closest('a[href]')
+      if (!(anchor instanceof HTMLAnchorElement)) return
+
+      const nextHref = getInternalNavigationHref(anchor)
+      if (!nextHref) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      setPendingNavigationHref(nextHref)
+      setLeaveModalOpen(true)
+    }
+
+    document.addEventListener('click', handleDocumentClick, true)
+    return () => document.removeEventListener('click', handleDocumentClick, true)
+  }, [])
 
   useEffect(() => {
     if (saveState !== 'saved') return
@@ -1467,12 +1629,20 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   useEffect(() => {
     let cancelled = false
 
-    const applyState = (nextCard: ContentCard | null, nextScript: Script | null) => {
+    const applyState = (
+      nextCard: ContentCard | null,
+      nextScript: Script | null,
+      nextMediaItems: MediaItem[]
+    ) => {
       if (cancelled) return
 
       const nextScheduled = splitScheduledFields(
         nextCard?.scheduled_at ?? nextCard?.published_at ?? null
       )
+      const nextPanelTitle = nextScript?.panel_title?.trim() || DEFAULT_PANEL_TITLE
+      const nextSceneDrafts = createEditableSceneDrafts(nextScript)
+      const nextChecklistDrafts = normalizeChecklistDrafts(nextCard?.checklist)
+      const nextSelectedProjectId = nextCard?.project_id ?? ''
 
       setCard(nextCard)
       setScriptRecord(nextScript)
@@ -1484,10 +1654,27 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setHashtagsDraft(nextScript?.hashtags ?? '')
       setThumbnailDraft(nextScript?.thumbnail_text ?? '')
       setMemoDraft(nextCard?.editor_memo ?? '')
-      setPanelTitle(nextScript?.panel_title?.trim() || DEFAULT_PANEL_TITLE)
-      setSceneDrafts(createEditableSceneDrafts(nextScript))
-      setChecklistDrafts(normalizeChecklistDrafts(nextCard?.checklist))
-      setSelectedProjectId(nextCard?.project_id ?? '')
+      setPanelTitle(nextPanelTitle)
+      setSceneDrafts(nextSceneDrafts)
+      setChecklistDrafts(nextChecklistDrafts)
+      setSelectedProjectId(nextSelectedProjectId)
+      setSavedDirtyKey(
+        createContentEditorDirtyKey({
+          title: nextCard?.title ?? '',
+          scheduledDate: nextScheduled.date,
+          scheduledTime: nextScheduled.time,
+          body: nextCard?.memo ?? '',
+          caption: nextScript?.caption ?? '',
+          hashtags: nextScript?.hashtags ?? '',
+          thumbnail: nextScript?.thumbnail_text ?? '',
+          memo: nextCard?.editor_memo ?? '',
+          panelTitle: nextPanelTitle,
+          sceneDrafts: nextSceneDrafts,
+          checklistDrafts: nextChecklistDrafts,
+          selectedProjectId: nextSelectedProjectId,
+          mediaItems: nextMediaItems,
+        })
+      )
       setSaveState('idle')
       setSaveFeedbackLabel(null)
       setLoading(false)
@@ -1502,7 +1689,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         setExpandedCampaignIds([])
         setShareLink(null)
         setMediaItems([])
-        applyState(SAMPLE_CARD, SAMPLE_SCRIPT)
+        applyState(SAMPLE_CARD, SAMPLE_SCRIPT, [])
         return
       }
 
@@ -1582,7 +1769,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setExpandedCampaignIds(nextExpandedIds)
       setShareLink((shareLinkData as ContentShareLink | null) ?? null)
       setMediaItems(nextMediaItems)
-      applyState(nextCard, (scriptData as Script | null) ?? null)
+      applyState(nextCard, (scriptData as Script | null) ?? null, nextMediaItems)
     }
 
     fetchDetail()
@@ -1750,25 +1937,64 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
       setCard(nextCard)
       setScriptRecord(nextScript)
+      const nextPanelTitleState = nextScript.panel_title?.trim() || DEFAULT_PANEL_TITLE
+      const nextSceneDrafts = createEditableSceneDrafts(nextScript)
+      const nextChecklistDrafts = normalizeChecklistDrafts(nextCard.checklist)
+      const nextSelectedProjectId = nextCard.project_id ?? ''
+      const nextBodyDraft = nextCard.memo ?? ''
+      const nextCaptionDraft = nextScript.caption ?? ''
+      const nextHashtagsDraft = nextScript.hashtags ?? ''
+      const nextThumbnailDraft = nextScript.thumbnail_text ?? ''
+      const nextMemoDraft = nextCard.editor_memo ?? ''
+
       setTitleDraft(nextCard.title)
       setScheduledDateDraft(nextScheduled.date)
       setScheduledTimeDraft(nextScheduled.time)
-      setBodyDraft(nextCard.memo ?? '')
-      setCaptionDraft(nextScript.caption ?? '')
-      setHashtagsDraft(nextScript.hashtags ?? '')
-      setThumbnailDraft(nextScript.thumbnail_text ?? '')
-      setMemoDraft(nextCard.editor_memo ?? '')
-      setPanelTitle(nextScript.panel_title?.trim() || DEFAULT_PANEL_TITLE)
-      setSceneDrafts(createEditableSceneDrafts(nextScript))
-      setChecklistDrafts(normalizeChecklistDrafts(nextCard.checklist))
-      setSelectedProjectId(nextCard.project_id ?? '')
+      setBodyDraft(nextBodyDraft)
+      setCaptionDraft(nextCaptionDraft)
+      setHashtagsDraft(nextHashtagsDraft)
+      setThumbnailDraft(nextThumbnailDraft)
+      setMemoDraft(nextMemoDraft)
+      setPanelTitle(nextPanelTitleState)
+      setSceneDrafts(nextSceneDrafts)
+      setChecklistDrafts(nextChecklistDrafts)
+      setSelectedProjectId(nextSelectedProjectId)
+      setSavedDirtyKey(
+        createContentEditorDirtyKey({
+          title: nextCard.title,
+          scheduledDate: nextScheduled.date,
+          scheduledTime: nextScheduled.time,
+          body: nextBodyDraft,
+          caption: nextCaptionDraft,
+          hashtags: nextHashtagsDraft,
+          thumbnail: nextThumbnailDraft,
+          memo: nextMemoDraft,
+          panelTitle: nextPanelTitleState,
+          sceneDrafts: nextSceneDrafts,
+          checklistDrafts: nextChecklistDrafts,
+          selectedProjectId: nextSelectedProjectId,
+          mediaItems,
+        })
+      )
       writePanelState(nextCard.id, expandedSections)
       setSaveFeedbackLabel(
         nextStatus === 'writing' ? '임시저장되었습니다' : '저장되었습니다'
       )
       setSaveState('saved')
-      await new Promise((resolve) => window.setTimeout(resolve, 250))
-      router.push('/content')
+      if (nextStatus === 'writing') {
+        await new Promise((resolve) => window.setTimeout(resolve, 250))
+        allowNavigationRef.current = true
+        router.push('/content')
+        window.setTimeout(() => {
+          allowNavigationRef.current = false
+        }, 1000)
+      } else if (cardId !== nextCard.id) {
+        allowNavigationRef.current = true
+        router.replace(`/content/${nextCard.id}`, { scroll: false })
+        window.setTimeout(() => {
+          allowNavigationRef.current = false
+        }, 1000)
+      }
     } catch (error) {
       console.error('Failed to save content card', error)
       setSaveState('error')
@@ -2585,6 +2811,57 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       </div>
     )
   }
+
+  const handleContinueWriting = () => {
+    setLeaveModalOpen(false)
+    setPendingNavigationHref(null)
+  }
+
+  const handleLeaveWithoutSave = () => {
+    const nextHref = pendingNavigationHref
+
+    setLeaveModalOpen(false)
+    setPendingNavigationHref(null)
+
+    if (!nextHref) return
+
+    allowNavigationRef.current = true
+    router.push(nextHref)
+    window.setTimeout(() => {
+      allowNavigationRef.current = false
+    }, 1000)
+  }
+
+  const renderUnsavedLeaveModal = () => (
+    <Modal
+      isOpen={leaveModalOpen}
+      onClose={handleContinueWriting}
+      title={UNSAVED_LEAVE_MODAL_TITLE}
+      size="sm"
+    >
+      <div className="space-y-5">
+        <p className="text-sm leading-6 text-[var(--color-text-body)]">
+          {UNSAVED_LEAVE_MESSAGE}
+        </p>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={handleContinueWriting}
+            className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[var(--color-border-default)] px-3 text-xs font-semibold text-[var(--color-text-body)] transition-colors hover:bg-[var(--color-bg-subtle)]"
+          >
+            {CONTINUE_WRITING_LABEL}
+          </button>
+          <button
+            type="button"
+            onClick={handleLeaveWithoutSave}
+            className="inline-flex h-9 items-center justify-center rounded-[6px] bg-[var(--color-danger)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[color-mix(in_srgb,var(--color-danger)_86%,black)]"
+          >
+            {LEAVE_WITHOUT_SAVE_LABEL}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
 
   const renderShareModal = () => {
     if (!card || card.is_deleted) return null
@@ -3600,6 +3877,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         )}
       </div>
       {renderShareModal()}
+      {renderUnsavedLeaveModal()}
     </>,
     'flex h-full min-h-[640px]'
   )
