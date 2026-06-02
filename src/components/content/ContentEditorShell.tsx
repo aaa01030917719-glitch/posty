@@ -1464,6 +1464,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [scheduledTimeDraft, setScheduledTimeDraft] = useState('')
   const [bodyDraft, setBodyDraft] = useState('')
   const [bodyDocDraft, setBodyDocDraft] = useState<Json | null>(null)
+  const [tiptapEditorRevision, setTiptapEditorRevision] = useState(0)
   const [captionDraft, setCaptionDraft] = useState('')
   const [hashtagsDraft, setHashtagsDraft] = useState('')
   const [thumbnailDraft, setThumbnailDraft] = useState('')
@@ -2555,11 +2556,19 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const handleSaveContentDraft = async () => {
     if (isPreview || !card || card.is_deleted || draftSaving) return
 
-    const nextBodyDraft = bodyEditorRef.current
-      ? serializeEditorToMarkdown(bodyEditorRef.current)
-      : bodyDraft
+    const nextBodyDoc = isTiptapEditorEnabled
+      ? (createTiptapDocEnvelope(getTiptapDocForEditor(bodyDocDraft, bodyDraft)) as unknown as Json)
+      : null
+    const nextBodyDraft = isTiptapEditorEnabled
+      ? getPlainTextFromTiptapDoc(getTiptapDocForEditor(nextBodyDoc, bodyDraft))
+      : bodyEditorRef.current
+        ? serializeEditorToMarkdown(bodyEditorRef.current)
+        : bodyDraft
     lastEditorMarkdownRef.current = nextBodyDraft
     setBodyDraft(nextBodyDraft)
+    if (isTiptapEditorEnabled) {
+      setBodyDocDraft(nextBodyDoc)
+    }
     setDraftSaving(true)
     setDraftFeedback(null)
     setDraftError(null)
@@ -2592,6 +2601,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         hashtags: hashtagsDraft.trim() ? hashtagsDraft : null,
         thumbnailText: thumbnailDraft.trim() ? thumbnailDraft : null,
         panelTitle: nextPanelTitle,
+        memoDoc: nextBodyDoc,
         mediaItems,
       })
       const nextDraftTitle = getContentDraftTitle(draftTitle || titleDraft)
@@ -2689,6 +2699,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const nextScheduled = splitScheduledFields(
         parsed.snapshot.card.scheduled_at ?? parsed.snapshot.card.published_at
       )
+      const nextBodyDoc = isTiptapEditorEnabled
+        ? (createTiptapDocEnvelope(
+            getTiptapDocForEditor(parsed.snapshot.card.memo_doc, parsed.snapshot.card.memo)
+          ) as unknown as Json)
+        : null
+      const nextBodyDraft = isTiptapEditorEnabled
+        ? getPlainTextFromTiptapDoc(getTiptapDocForEditor(nextBodyDoc, parsed.snapshot.card.memo))
+        : parsed.snapshot.card.memo
       const nextPanelTitle = parsed.snapshot.script.panel_title?.trim() || DEFAULT_PANEL_TITLE
       const nextScriptForScenes = {
         ...(scriptRecord ?? SAMPLE_SCRIPT),
@@ -2698,8 +2716,12 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setTitleDraft(parsed.snapshot.card.title)
       setScheduledDateDraft(nextScheduled.date)
       setScheduledTimeDraft(nextScheduled.time)
-      setBodyDraft(parsed.snapshot.card.memo)
-      lastEditorMarkdownRef.current = parsed.snapshot.card.memo
+      setBodyDraft(nextBodyDraft)
+      setBodyDocDraft(nextBodyDoc)
+      if (isTiptapEditorEnabled) {
+        setTiptapEditorRevision((prev) => prev + 1)
+      }
+      lastEditorMarkdownRef.current = nextBodyDraft
       setCaptionDraft(parsed.snapshot.script.caption ?? '')
       setHashtagsDraft(parsed.snapshot.script.hashtags ?? '')
       setThumbnailDraft(parsed.snapshot.script.thumbnail_text ?? '')
@@ -4272,7 +4294,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 Tiptap 실험 모드: 이 콘텐츠에서만 신규 에디터 저장 동작을 확인합니다.
               </div>
               <PostyTiptapEditor
-                key={card.id}
+                key={`${card.id}:${tiptapEditorRevision}`}
                 value={bodyTiptapDoc}
                 onChange={(nextEnvelope, plainText) => {
                   setBodyDocDraft(nextEnvelope as unknown as Json)

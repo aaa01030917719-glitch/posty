@@ -2,6 +2,10 @@ import {
   isAttachmentContentMedia,
   isInlineContentMedia,
 } from '@/lib/content-media-purpose'
+import {
+  isTiptapDocEnvelope,
+  type TiptapEditorDocEnvelope,
+} from '@/lib/content-editor-doc'
 import type {
   ChecklistItem,
   ContentCard,
@@ -15,7 +19,8 @@ import type {
   ShareSection,
 } from '@/lib/types'
 
-export const CONTENT_DRAFT_SNAPSHOT_VERSION = 1
+export const CONTENT_DRAFT_SNAPSHOT_VERSION = 2
+export const CONTENT_DRAFT_LEGACY_SNAPSHOT_VERSION = 1
 
 export type ContentDraftMediaPurpose = 'attachment' | 'inline'
 
@@ -31,7 +36,7 @@ export type ContentDraftMediaSnapshotItem = {
 }
 
 export type ContentDraftSnapshot = {
-  schema_version: 1
+  schema_version: typeof CONTENT_DRAFT_LEGACY_SNAPSHOT_VERSION | typeof CONTENT_DRAFT_SNAPSHOT_VERSION
   card: {
     title: string
     project_id: string | null
@@ -41,6 +46,7 @@ export type ContentDraftSnapshot = {
     scheduled_at: string | null
     published_at: string | null
     memo: string
+    memo_doc?: TiptapEditorDocEnvelope | null
     editor_memo: string
     reference_url: string | null
     checklist: ChecklistItem[]
@@ -78,6 +84,7 @@ type CreateContentDraftSnapshotInput = {
   hashtags: string | null
   thumbnailText: string | null
   panelTitle: string | null
+  memoDoc?: Json | null
   mediaItems: ContentCardMedia[]
 }
 
@@ -86,6 +93,71 @@ const MEDIA_TOKEN_PATTERN =
 
 function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter(Boolean)))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function getInlineMediaIdsFromTiptapNode(value: unknown): string[] {
+  if (!isRecord(value)) return []
+
+  const ids: string[] = []
+  const attrs = isRecord(value.attrs) ? value.attrs : {}
+
+  if (value.type === 'postyInlineMedia' && typeof attrs.mediaId === 'string') {
+    ids.push(attrs.mediaId)
+  }
+
+  if (Array.isArray(value.content)) {
+    value.content.forEach((child) => {
+      ids.push(...getInlineMediaIdsFromTiptapNode(child))
+    })
+  }
+
+  return ids
+}
+
+function isInlineMediaSize(value: unknown) {
+  return (
+    value === 'original' ||
+    value === 'small' ||
+    value === 'medium' ||
+    value === 'large' ||
+    value === 'full'
+  )
+}
+
+function sanitizeTiptapNodeForDraft(value: unknown): unknown {
+  if (!isRecord(value)) return value
+
+  const nextNode: Record<string, unknown> = { ...value }
+
+  if (value.type === 'postyInlineMedia') {
+    const attrs = isRecord(value.attrs) ? value.attrs : {}
+    nextNode.attrs = {
+      mediaId: typeof attrs.mediaId === 'string' ? attrs.mediaId : '',
+      size: isInlineMediaSize(attrs.size) ? attrs.size : 'medium',
+      alt: typeof attrs.alt === 'string' ? attrs.alt : '',
+    }
+  }
+
+  if (Array.isArray(value.content)) {
+    nextNode.content = value.content.map(sanitizeTiptapNodeForDraft)
+  }
+
+  return nextNode
+}
+
+function sanitizeTiptapDocEnvelopeForDraft(
+  value: Json | null | undefined
+): TiptapEditorDocEnvelope | null {
+  if (!isTiptapDocEnvelope(value)) return null
+
+  return {
+    ...value,
+    doc: sanitizeTiptapNodeForDraft(value.doc) as TiptapEditorDocEnvelope['doc'],
+  }
 }
 
 export function getContentDraftTitle(value: string | null | undefined) {
@@ -117,16 +189,21 @@ export function createContentDraftSnapshot({
   hashtags,
   thumbnailText,
   panelTitle,
+  memoDoc,
   mediaItems,
 }: CreateContentDraftSnapshotInput): ContentDraftSnapshot {
+  const sanitizedMemoDoc = sanitizeTiptapDocEnvelopeForDraft(memoDoc)
   const attachmentIds = mediaItems.filter(isAttachmentContentMedia).map((item) => item.id)
   const inlineIds = uniqueStrings([
     ...getInlineMediaIdsFromMarkdown(memo),
+    ...(sanitizedMemoDoc ? getInlineMediaIdsFromTiptapNode(sanitizedMemoDoc.doc) : []),
     ...mediaItems.filter(isInlineContentMedia).map((item) => item.id),
   ])
 
   return {
-    schema_version: CONTENT_DRAFT_SNAPSHOT_VERSION,
+    schema_version: sanitizedMemoDoc
+      ? CONTENT_DRAFT_SNAPSHOT_VERSION
+      : CONTENT_DRAFT_LEGACY_SNAPSHOT_VERSION,
     card: {
       title: getContentDraftTitle(title),
       project_id: projectId,
@@ -136,6 +213,7 @@ export function createContentDraftSnapshot({
       scheduled_at: scheduledAt,
       published_at: card.published_at,
       memo,
+      ...(sanitizedMemoDoc ? { memo_doc: sanitizedMemoDoc } : {}),
       editor_memo: editorMemo,
       reference_url: card.reference_url,
       checklist,
@@ -166,10 +244,6 @@ export function createContentDraftSnapshot({
       })),
     },
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function asString(value: unknown, fallback = '') {
@@ -296,7 +370,10 @@ export function parseContentDraftSnapshot(
     return { ok: false, message: '임시저장 데이터 형식이 올바르지 않습니다.' }
   }
 
-  if (value.schema_version !== CONTENT_DRAFT_SNAPSHOT_VERSION) {
+  if (
+    value.schema_version !== CONTENT_DRAFT_LEGACY_SNAPSHOT_VERSION &&
+    value.schema_version !== CONTENT_DRAFT_SNAPSHOT_VERSION
+  ) {
     return { ok: false, message: '지원하지 않는 임시저장 버전입니다.' }
   }
 
@@ -305,7 +382,10 @@ export function parseContentDraftSnapshot(
   const media = isRecord(value.media) ? value.media : {}
 
   const snapshot: ContentDraftSnapshot = {
-    schema_version: CONTENT_DRAFT_SNAPSHOT_VERSION,
+    schema_version:
+      value.schema_version === CONTENT_DRAFT_SNAPSHOT_VERSION
+        ? CONTENT_DRAFT_SNAPSHOT_VERSION
+        : CONTENT_DRAFT_LEGACY_SNAPSHOT_VERSION,
     card: {
       title: getContentDraftTitle(asString(card.title)),
       project_id: asNullableString(card.project_id),
@@ -315,6 +395,7 @@ export function parseContentDraftSnapshot(
       scheduled_at: asNullableString(card.scheduled_at),
       published_at: asNullableString(card.published_at),
       memo: asString(card.memo),
+      memo_doc: sanitizeTiptapDocEnvelopeForDraft(card.memo_doc as Json | null | undefined),
       editor_memo: asString(card.editor_memo),
       reference_url: asNullableString(card.reference_url),
       checklist: asChecklist(card.checklist),
@@ -346,6 +427,7 @@ export function getContentDraftSnapshotMediaIds(snapshot: ContentDraftSnapshot) 
     ...snapshot.media.inline_ids,
     ...snapshot.media.items.map((item) => item.id),
     ...getInlineMediaIdsFromMarkdown(snapshot.card.memo),
+    ...(snapshot.card.memo_doc ? getInlineMediaIdsFromTiptapNode(snapshot.card.memo_doc.doc) : []),
   ])
 }
 
