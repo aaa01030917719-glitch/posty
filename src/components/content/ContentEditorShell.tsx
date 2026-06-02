@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   useEffect,
   useMemo,
@@ -52,6 +52,7 @@ import {
   type RichTextEditorHandle,
   type RichTextEditorMediaItem,
 } from '@/components/content/RichTextEditor'
+import { PostyTiptapEditor } from '@/components/content/tiptap/PostyTiptapEditor'
 import { ContentDraftModal } from '@/components/content/ContentDraftModal'
 import {
   createContentDraftSnapshot,
@@ -63,6 +64,11 @@ import {
   type ContentDraftSnapshot,
 } from '@/components/content/contentDrafts'
 import { Modal } from '@/components/ui/Modal'
+import {
+  createTiptapDocEnvelope,
+  getPlainTextFromTiptapDoc,
+  getTiptapDocForEditor,
+} from '@/lib/content-editor-doc'
 import type {
   ChecklistItem,
   ContentActivityAction,
@@ -527,6 +533,7 @@ function createContentEditorDirtyKey({
   scheduledDate,
   scheduledTime,
   body,
+  bodyDoc,
   caption,
   hashtags,
   thumbnail,
@@ -541,6 +548,7 @@ function createContentEditorDirtyKey({
   scheduledDate: string
   scheduledTime: string
   body: string
+  bodyDoc?: Json | null
   caption: string
   hashtags: string
   thumbnail: string
@@ -556,6 +564,7 @@ function createContentEditorDirtyKey({
     scheduledDate,
     scheduledTime,
     body,
+    bodyDoc,
     caption,
     hashtags,
     thumbnail,
@@ -1432,6 +1441,7 @@ function writePanelState(cardId: string, value: Record<EditorSection, boolean>) 
 
 export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const bodyEditorRef = useRef<HTMLDivElement | null>(null)
   const bodyEditorApiRef = useRef<RichTextEditorHandle | null>(null)
@@ -1452,6 +1462,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [scheduledDateDraft, setScheduledDateDraft] = useState('')
   const [scheduledTimeDraft, setScheduledTimeDraft] = useState('')
   const [bodyDraft, setBodyDraft] = useState('')
+  const [bodyDocDraft, setBodyDocDraft] = useState<Json | null>(null)
   const [captionDraft, setCaptionDraft] = useState('')
   const [hashtagsDraft, setHashtagsDraft] = useState('')
   const [thumbnailDraft, setThumbnailDraft] = useState('')
@@ -1498,6 +1509,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null)
 
   const isPreview = PREVIEW_IDS.has(cardId)
+  const tiptapOptInRequested =
+    process.env.NODE_ENV === 'development' &&
+    searchParams.get('editor') === 'tiptap' &&
+    !isPreview
+  const isTiptapEditorEnabled = tiptapOptInRequested && Boolean(card?.id)
 
   const sidebarCardsByProject = useMemo(() => {
     return sidebarCards.reduce<Record<string, SidebarContentCard[]>>((acc, sidebarCard) => {
@@ -1544,6 +1560,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         scheduledDate: scheduledDateDraft,
         scheduledTime: scheduledTimeDraft,
         body: bodyDraft,
+        bodyDoc: isTiptapEditorEnabled ? bodyDocDraft : null,
         caption: captionDraft,
         hashtags: hashtagsDraft,
         thumbnail: thumbnailDraft,
@@ -1559,6 +1576,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       scheduledDateDraft,
       scheduledTimeDraft,
       bodyDraft,
+      bodyDocDraft,
       captionDraft,
       hashtagsDraft,
       thumbnailDraft,
@@ -1568,9 +1586,14 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       checklistDrafts,
       selectedProjectId,
       mediaItems,
+      isTiptapEditorEnabled,
     ]
   )
   const hasUnsavedChanges = savedDirtyKey !== null && currentDirtyKey !== savedDirtyKey
+  const bodyTiptapDoc = useMemo(
+    () => getTiptapDocForEditor(bodyDocDraft, bodyDraft),
+    [bodyDocDraft, bodyDraft]
+  )
 
   useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges
@@ -1675,6 +1698,12 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const nextSceneDrafts = createEditableSceneDrafts(nextScript)
       const nextChecklistDrafts = normalizeChecklistDrafts(nextCard?.checklist)
       const nextSelectedProjectId = nextCard?.project_id ?? ''
+      const shouldUseTiptap = tiptapOptInRequested && Boolean(nextCard?.id)
+      const nextBodyDoc = shouldUseTiptap
+        ? (createTiptapDocEnvelope(
+            getTiptapDocForEditor(nextCard?.memo_doc, nextCard?.memo)
+          ) as unknown as Json)
+        : null
 
       setCard(nextCard)
       setScriptRecord(nextScript)
@@ -1682,6 +1711,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setScheduledDateDraft(nextScheduled.date)
       setScheduledTimeDraft(nextScheduled.time)
       setBodyDraft(nextCard?.memo ?? '')
+      setBodyDocDraft(nextBodyDoc)
       setCaptionDraft(nextScript?.caption ?? '')
       setHashtagsDraft(nextScript?.hashtags ?? '')
       setThumbnailDraft(nextScript?.thumbnail_text ?? '')
@@ -1696,6 +1726,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           scheduledDate: nextScheduled.date,
           scheduledTime: nextScheduled.time,
           body: nextCard?.memo ?? '',
+          bodyDoc: shouldUseTiptap ? nextBodyDoc : null,
           caption: nextScript?.caption ?? '',
           hashtags: nextScript?.hashtags ?? '',
           thumbnail: nextScript?.thumbnail_text ?? '',
@@ -1809,7 +1840,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [cardId, isPreview])
+  }, [cardId, isPreview, tiptapOptInRequested])
 
   const channelBadgeLabel = card ? getChannelBadgeLabel(card) : null
 
@@ -1863,17 +1894,35 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const nextSceneBody = serializeSceneDrafts(sceneDrafts)
       const nextChecklist = serializeChecklistDrafts(checklistDrafts)
       const nextPanelTitle = panelTitle.trim() || DEFAULT_PANEL_TITLE
-      const payload = {
+      const nextBodyDoc = isTiptapEditorEnabled
+        ? createTiptapDocEnvelope(getTiptapDocForEditor(bodyDocDraft, bodyDraft))
+        : null
+      const nextBodyMemo = isTiptapEditorEnabled
+        ? getPlainTextFromTiptapDoc(nextBodyDoc?.doc)
+        : bodyDraft
+      const payload: {
+        title: string
+        status: 'writing' | 'published'
+        scheduled_at: string | null
+        memo: string | null
+        memo_doc?: Json | null
+        editor_memo: string | null
+        checklist: ChecklistItem[]
+        project_id: string | null
+      } = {
         /*
         title: titleDraft.trim() || '새 콘텐츠',
         */
         title: titleDraft.trim() || 'Untitled content',
         status: nextStatus,
         scheduled_at: toIsoFromScheduledFields(scheduledDateDraft, scheduledTimeDraft),
-        memo: bodyDraft.trim() ? bodyDraft : null,
+        memo: nextBodyMemo.trim() ? nextBodyMemo : null,
         editor_memo: memoDraft.trim() ? memoDraft : null,
         checklist: nextChecklist,
         project_id: selectedProjectId || null,
+      }
+      if (isTiptapEditorEnabled) {
+        payload.memo_doc = nextBodyDoc as unknown as Json
       }
 
       const { data, error } = await supabase
@@ -1974,6 +2023,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       const nextChecklistDrafts = normalizeChecklistDrafts(nextCard.checklist)
       const nextSelectedProjectId = nextCard.project_id ?? ''
       const nextBodyDraft = nextCard.memo ?? ''
+      const nextBodyDocDraft = isTiptapEditorEnabled
+        ? (createTiptapDocEnvelope(
+            getTiptapDocForEditor(nextCard.memo_doc, nextCard.memo)
+          ) as unknown as Json)
+        : null
       const nextCaptionDraft = nextScript.caption ?? ''
       const nextHashtagsDraft = nextScript.hashtags ?? ''
       const nextThumbnailDraft = nextScript.thumbnail_text ?? ''
@@ -1983,6 +2037,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setScheduledDateDraft(nextScheduled.date)
       setScheduledTimeDraft(nextScheduled.time)
       setBodyDraft(nextBodyDraft)
+      setBodyDocDraft(nextBodyDocDraft)
       setCaptionDraft(nextCaptionDraft)
       setHashtagsDraft(nextHashtagsDraft)
       setThumbnailDraft(nextThumbnailDraft)
@@ -1997,6 +2052,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           scheduledDate: nextScheduled.date,
           scheduledTime: nextScheduled.time,
           body: nextBodyDraft,
+          bodyDoc: isTiptapEditorEnabled ? nextBodyDocDraft : null,
           caption: nextCaptionDraft,
           hashtags: nextHashtagsDraft,
           thumbnail: nextThumbnailDraft,
@@ -3786,6 +3842,23 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     </div>
   )
 
+  const bodyEditorHeader = (
+    <div className="mb-2 flex w-full items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
+      <span className="min-w-0 truncate font-medium">
+        {'\uCF58\uD150\uCE20 \uB0B4\uC6A9\uC774 \uB4E4\uC5B4\uAC11\uB2C8\uB2E4'}
+      </span>
+      <span className="shrink-0 font-medium">
+        {'\uC791\uC131\uC77C '}{createdDateLabel}{' '}
+        <span
+          title={`\uB9C8\uC9C0\uB9C9 \uC218\uC815 ${updatedDateLabel}`}
+          className="cursor-help"
+        >
+          i
+        </span>
+      </span>
+    </div>
+  )
+
   if (loading) {
     return renderContentLayout(
       <div className="flex min-h-[360px] flex-1 items-center justify-center">
@@ -3898,7 +3971,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     <>
       <div className="flex h-full min-h-[620px] w-full flex-col bg-[var(--color-bg-surface)] xl:min-h-[640px] xl:flex-row">
         <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
-          <div className="topbar flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] px-4 py-3 sm:px-5">
+          <div className="topbar sticky top-0 z-40 flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 sm:px-5">
             <div className="breadcrumb flex min-w-0 flex-1 basis-[220px] items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
               <Link href="/content" className="transition-colors hover:text-[var(--color-text-body)]">
                 콘텐츠
@@ -4181,32 +4254,36 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             {renderMediaAttachmentSection()}
           </div>
 
-          <RichTextEditor
-            ref={bodyEditorApiRef}
-            value={bodyDraft}
-            onChange={setBodyDraft}
-            mediaItems={mediaItems}
-            disabled={isPreview}
-            placeholder={EDITOR_PLACEHOLDER}
-            onUploadMedia={(files) => uploadMediaFiles(files, 'inline')}
-            uploadDisabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
-            bodyHeader={
-              <div className="mb-2 flex w-full items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
-                <span className="min-w-0 truncate font-medium">
-                  {'\uCF58\uD150\uCE20 \uB0B4\uC6A9\uC774 \uB4E4\uC5B4\uAC11\uB2C8\uB2E4'}
-                </span>
-                <span className="shrink-0 font-medium">
-                  {'\uC791\uC131\uC77C '}{createdDateLabel}{' '}
-                  <span
-                    title={`\uB9C8\uC9C0\uB9C9 \uC218\uC815 ${updatedDateLabel}`}
-                    className="cursor-help"
-                  >
-                    i
-                  </span>
-                </span>
+          {isTiptapEditorEnabled ? (
+            <div className="flex flex-col gap-3">
+              <div className="rounded-[8px] border border-[#f9a8d4] bg-[#fdf2f8] px-3 py-2 text-xs font-medium text-[#be185d]">
+                Tiptap 실험 모드: 이 콘텐츠에서만 신규 에디터 저장 동작을 확인합니다.
               </div>
-            }
-          />
+              <PostyTiptapEditor
+                key={card.id}
+                value={bodyTiptapDoc}
+                onChange={(nextEnvelope, plainText) => {
+                  setBodyDocDraft(nextEnvelope as unknown as Json)
+                  setBodyDraft(plainText)
+                }}
+                disabled={isPreview}
+                placeholder={EDITOR_PLACEHOLDER}
+                bodyHeader={bodyEditorHeader}
+              />
+            </div>
+          ) : (
+            <RichTextEditor
+              ref={bodyEditorApiRef}
+              value={bodyDraft}
+              onChange={setBodyDraft}
+              mediaItems={mediaItems}
+              disabled={isPreview}
+              placeholder={EDITOR_PLACEHOLDER}
+              onUploadMedia={(files) => uploadMediaFiles(files, 'inline')}
+              uploadDisabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
+              bodyHeader={bodyEditorHeader}
+            />
+          )}
         </div>
 
         {panelOpen && (
