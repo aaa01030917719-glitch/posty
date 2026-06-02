@@ -94,10 +94,12 @@ export interface ContentCard {
   scheduled_at: string | null
   published_at: string | null
   memo: string | null
+  memo_doc?: Json | null
   editor_memo: string | null
   reference_url: string | null
   checklist: ChecklistItem[]
   share_sections: ShareSection[]
+  share_body_doc?: Json | null
   idea_id: string | null
   project_id: string | null
   is_deleted: boolean
@@ -110,6 +112,11 @@ export interface ContentCard {
   project?: ContentProjectSummary | null
   scripts?: ContentScriptSummary[]
   media?: ContentCardMedia[]
+}
+
+export type ContentCardRow = ContentCard & {
+  memo_doc: Json | null
+  share_body_doc: Json | null
 }
 
 export interface Script {
@@ -238,17 +245,19 @@ export type Database = {
         Update: Partial<Omit<ContentProject, 'id'>>
       }
       content_cards: {
-        Row: ContentCard
+        Row: ContentCardRow
         Insert: Omit<
-          ContentCard,
+          ContentCardRow,
           | 'id'
           | 'created_at'
           | 'updated_at'
           | 'channel'
           | 'tags'
           | 'project'
+          | 'memo_doc'
           | 'editor_memo'
           | 'share_sections'
+          | 'share_body_doc'
           | 'is_deleted'
           | 'deleted_at'
           | 'deleted_reason'
@@ -256,10 +265,12 @@ export type Database = {
           id?: string
           created_at?: string
           updated_at?: string
+          memo_doc?: Json | null
           editor_memo?: string | null
           share_sections?: ShareSection[]
+          share_body_doc?: Json | null
         }
-        Update: Partial<Omit<ContentCard, 'id' | 'channel' | 'tags' | 'project'>>
+        Update: Partial<Omit<ContentCardRow, 'id' | 'channel' | 'tags' | 'project'>>
       }
       content_card_media: {
         Row: ContentCardMedia
