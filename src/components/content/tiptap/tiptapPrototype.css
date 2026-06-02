@@ -1,0 +1,80 @@
+.tiptap-prototype-editor {
+  overflow-x: auto;
+}
+
+.tiptap-prototype-editor .ProseMirror {
+  min-width: 0;
+}
+
+.tiptap-prototype-editor .ProseMirror .tableWrapper {
+  margin: 12px 0;
+  overflow-x: auto;
+}
+
+.tiptap-prototype-editor .ProseMirror table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  min-width: 520px;
+  margin: 12px 0;
+}
+
+.tiptap-prototype-editor .ProseMirror th,
+.tiptap-prototype-editor .ProseMirror td {
+  min-width: 100px;
+  border: 1px solid #d1d5db;
+  padding: 8px;
+  vertical-align: top;
+}
+
+.tiptap-prototype-editor .ProseMirror th {
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.tiptap-prototype-editor .ProseMirror .selectedCell {
+  background: #e5e7eb;
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.tiptap-prototype-editor .ProseMirror p {
+  margin: 0.5rem 0;
+}
+
+.tiptap-prototype-editor .ProseMirror ul {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+  list-style-type: disc;
+}
+
+.tiptap-prototype-editor .ProseMirror ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+  list-style-type: decimal;
+}
+
+.tiptap-prototype-editor .ProseMirror ul ul {
+  list-style-type: circle;
+}
+
+.tiptap-prototype-editor .ProseMirror ol ol {
+  list-style-type: lower-alpha;
+}
+
+.tiptap-prototype-editor .ProseMirror li {
+  display: list-item;
+  margin: 0.25rem 0;
+}
+
+.tiptap-prototype-editor .ProseMirror li::marker {
+  color: #3f3f3f;
+}
+
+.tiptap-prototype-editor .ProseMirror img.posty-tiptap-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px 0;
+  border-radius: 8px;
+}
