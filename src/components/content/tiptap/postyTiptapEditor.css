@@ -70,3 +70,27 @@
 .posty-tiptap-editor .ProseMirror li::marker {
   color: #3f3f3f;
 }
+
+.posty-tiptap-editor .ProseMirror .posty-inline-media {
+  display: block;
+  width: 100%;
+}
+
+.posty-tiptap-editor .ProseMirror .posty-inline-media__frame {
+  position: relative;
+}
+
+.posty-tiptap-editor .ProseMirror .posty-inline-media.is-selected img,
+.posty-tiptap-editor .ProseMirror .posty-inline-media:hover img {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.posty-tiptap-editor .ProseMirror .posty-inline-media__controls {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 20;
+  max-width: calc(100vw - 40px);
+  transition: opacity 120ms ease;
+}

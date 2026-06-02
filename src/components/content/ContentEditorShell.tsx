@@ -28,6 +28,7 @@ import { clsx } from 'clsx'
 import { CHANNEL_COLORS, STATUS_LABELS } from '@/lib/constants'
 import {
   isAttachmentContentMedia,
+  isInlineContentMedia,
   type ContentMediaPurpose,
 } from '@/lib/content-media-purpose'
 import {
@@ -1551,6 +1552,17 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   )
   const attachmentMediaItems = useMemo(
     () => mediaItems.filter(isAttachmentContentMedia),
+    [mediaItems]
+  )
+  const tiptapInlineMediaItems = useMemo(
+    () =>
+      mediaItems
+        .filter(isInlineContentMedia)
+        .map((item) => ({
+          id: item.id,
+          signedUrl: item.signedUrl,
+          fileName: item.file_name?.trim() || MEDIA_UNTITLED_FILE_LABEL,
+        })),
     [mediaItems]
   )
   const currentDirtyKey = useMemo(
@@ -4269,6 +4281,17 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 disabled={isPreview}
                 placeholder={EDITOR_PLACEHOLDER}
                 bodyHeader={bodyEditorHeader}
+                inlineMediaItems={tiptapInlineMediaItems}
+                onUploadInlineImages={async (files) => {
+                  const uploadedItems = await uploadMediaFiles(files, 'inline')
+
+                  return uploadedItems.map((item) => ({
+                    id: item.id,
+                    signedUrl: item.signedUrl,
+                    fileName: item.file_name?.trim() || MEDIA_UNTITLED_FILE_LABEL,
+                  }))
+                }}
+                uploadDisabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
               />
             </div>
           ) : (

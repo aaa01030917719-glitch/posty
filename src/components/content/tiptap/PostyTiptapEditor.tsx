@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import type { JSONContent } from '@tiptap/react'
 import {
@@ -10,6 +10,7 @@ import {
 } from '@/lib/content-editor-doc'
 import { createPostyTiptapExtensions } from './postyTiptapExtensions'
 import { PostyTiptapToolbar } from './PostyTiptapToolbar'
+import type { PostyInlineMediaItem } from './postyInlineMediaExtension'
 import './postyTiptapEditor.css'
 
 type PostyTiptapEditorProps = {
@@ -18,6 +19,9 @@ type PostyTiptapEditorProps = {
   placeholder?: string
   onChange: (envelope: TiptapEditorDocEnvelope, plainText: string) => void
   bodyHeader?: ReactNode
+  inlineMediaItems?: PostyInlineMediaItem[]
+  onUploadInlineImages?: (files: File[]) => Promise<PostyInlineMediaItem[]>
+  uploadDisabled?: boolean
 }
 
 export function PostyTiptapEditor({
@@ -26,8 +30,27 @@ export function PostyTiptapEditor({
   placeholder,
   onChange,
   bodyHeader,
+  inlineMediaItems = [],
+  onUploadInlineImages,
+  uploadDisabled = false,
 }: PostyTiptapEditorProps) {
-  const extensions = useMemo(() => createPostyTiptapExtensions(), [])
+  const inlineMediaItemsRef = useRef<PostyInlineMediaItem[]>(inlineMediaItems)
+  const uploadInlineImagesHandlerRef = useRef<(files: File[], position?: number) => void>(
+    () => undefined
+  )
+  const [inlineImageUploading, setInlineImageUploading] = useState(false)
+  const extensions = useMemo(
+    () =>
+      createPostyTiptapExtensions({
+        getInlineMediaItem: (mediaId) =>
+          inlineMediaItemsRef.current.find((item) => item.id === mediaId) ?? null,
+      }),
+    []
+  )
+
+  useEffect(() => {
+    inlineMediaItemsRef.current = inlineMediaItems
+  }, [inlineMediaItems])
 
   const editor = useEditor({
     extensions,
@@ -39,6 +62,26 @@ export function PostyTiptapEditor({
         class:
           'prose prose-sm max-w-none min-h-[360px] rounded-[8px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 text-[var(--color-text-primary)] outline-none',
         'data-placeholder': placeholder ?? '',
+      },
+      handlePaste: (view, event) => {
+        const files = Array.from(event.clipboardData?.files ?? [])
+
+        if (!files.some((file) => file.type.startsWith('image/'))) return false
+
+        event.preventDefault()
+        uploadInlineImagesHandlerRef.current(files, view.state.selection.from)
+        return true
+      },
+      handleDrop: (view, event) => {
+        const files = Array.from(event.dataTransfer?.files ?? [])
+
+        if (!files.some((file) => file.type.startsWith('image/'))) return false
+
+        event.preventDefault()
+        const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos
+
+        uploadInlineImagesHandlerRef.current(files, position ?? view.state.selection.from)
+        return true
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
@@ -52,6 +95,52 @@ export function PostyTiptapEditor({
     editor.setEditable(!disabled)
   }, [disabled, editor])
 
+  const uploadInlineImages = async (files: File[], position?: number) => {
+    if (!editor || disabled || uploadDisabled || inlineImageUploading || !onUploadInlineImages) {
+      return
+    }
+
+    setInlineImageUploading(true)
+
+    try {
+      const uploadedItems = await onUploadInlineImages(files)
+
+      if (uploadedItems.length === 0) return
+
+      inlineMediaItemsRef.current = [
+        ...inlineMediaItemsRef.current.filter(
+          (item) => !uploadedItems.some((uploadedItem) => uploadedItem.id === item.id)
+        ),
+        ...uploadedItems,
+      ]
+
+      let nextPosition = position
+
+      uploadedItems.forEach((item) => {
+        const chain = editor.chain().focus()
+
+        if (typeof nextPosition === 'number') {
+          chain.setTextSelection(nextPosition)
+        }
+
+        chain
+          .setPostyInlineMedia({
+            mediaId: item.id,
+            size: 'medium',
+            alt: item.fileName,
+          })
+          .run()
+
+        nextPosition = editor.state.selection.to
+      })
+    } finally {
+      setInlineImageUploading(false)
+    }
+  }
+  uploadInlineImagesHandlerRef.current = (files, position) => {
+    void uploadInlineImages(files, position)
+  }
+
   if (!editor) {
     return (
       <div className="rounded-[8px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-5 text-sm text-[var(--color-text-muted)]">
@@ -63,7 +152,13 @@ export function PostyTiptapEditor({
   return (
     <div className="flex flex-col gap-3">
       {bodyHeader}
-      <PostyTiptapToolbar editor={editor} disabled={disabled} />
+      <PostyTiptapToolbar
+        editor={editor}
+        disabled={disabled}
+        imageUploadDisabled={uploadDisabled || !onUploadInlineImages}
+        imageUploading={inlineImageUploading}
+        onUploadImages={(files) => uploadInlineImages(files)}
+      />
 
       <section className="posty-tiptap-editor rounded-[8px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-4">
         <EditorContent editor={editor} />

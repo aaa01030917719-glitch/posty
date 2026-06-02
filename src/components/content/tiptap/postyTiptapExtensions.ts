@@ -1,6 +1,10 @@
 import { TableKit } from '@tiptap/extension-table'
 import { TextStyleKit } from '@tiptap/extension-text-style'
 import StarterKit from '@tiptap/starter-kit'
+import {
+  PostyInlineMedia,
+  type PostyInlineMediaItem,
+} from './postyInlineMediaExtension'
 
 export const POSTY_TIPTAP_FONT_SIZE_PRESETS = ['30px', '24px', '20px', '16px', '14px'] as const
 
@@ -12,7 +16,11 @@ export const POSTY_TIPTAP_COLOR_PRESETS = [
   '#2f6f66',
 ] as const
 
-export function createPostyTiptapExtensions() {
+export function createPostyTiptapExtensions({
+  getInlineMediaItem,
+}: {
+  getInlineMediaItem?: (mediaId: string) => PostyInlineMediaItem | null
+} = {}) {
   return [
     StarterKit.configure({
       link: {
@@ -25,6 +33,9 @@ export function createPostyTiptapExtensions() {
       },
     }),
     TextStyleKit,
+    PostyInlineMedia.configure({
+      getMediaItem: getInlineMediaItem ?? (() => null),
+    }),
     TableKit.configure({
       table: {
         resizable: false,

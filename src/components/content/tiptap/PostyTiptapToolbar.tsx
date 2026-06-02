@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type MouseEvent, type ReactNode } from 'react'
+import { useRef, useState, type ChangeEvent, type MouseEvent, type ReactNode } from 'react'
 import type { Editor } from '@tiptap/react'
 import {
   Bold,
@@ -25,6 +25,9 @@ import { PostyTiptapTableMenu } from './PostyTiptapTableMenu'
 type PostyTiptapToolbarProps = {
   editor: Editor
   disabled?: boolean
+  imageUploadDisabled?: boolean
+  imageUploading?: boolean
+  onUploadImages?: (files: File[]) => void
 }
 
 type OpenPopover = 'size' | 'color' | 'link' | 'table' | null
@@ -123,7 +126,14 @@ function Divider() {
   return <span className="mx-1 h-5 w-px shrink-0 bg-[var(--color-border-soft)]" />
 }
 
-export function PostyTiptapToolbar({ editor, disabled = false }: PostyTiptapToolbarProps) {
+export function PostyTiptapToolbar({
+  editor,
+  disabled = false,
+  imageUploadDisabled = false,
+  imageUploading = false,
+  onUploadImages,
+}: PostyTiptapToolbarProps) {
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null)
   const [linkSelectionRange, setLinkSelectionRange] = useState<SavedSelectionRange>(null)
 
@@ -149,6 +159,17 @@ export function PostyTiptapToolbar({ editor, disabled = false }: PostyTiptapTool
 
   const keepEditorSelection = (event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
+  }
+
+  const handleImageInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const files = Array.from(input.files ?? [])
+
+    if (files.length > 0) {
+      onUploadImages?.(files)
+    }
+
+    input.value = ''
   }
 
   return (
@@ -268,10 +289,23 @@ export function PostyTiptapToolbar({ editor, disabled = false }: PostyTiptapTool
           }}
         />
         <ToolbarButton
-          disabled
+          disabled={disabled || imageUploadDisabled || imageUploading}
           icon={ImagePlus}
-          label="본문 이미지 삽입은 다음 단계에서 연결합니다"
-          onPress={() => undefined}
+          label={imageUploading ? '본문 이미지 업로드 중' : '본문 이미지 삽입'}
+          onPress={() => {
+            closePopover()
+            imageInputRef.current?.click()
+          }}
+        />
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={disabled || imageUploadDisabled || imageUploading}
+          onChange={handleImageInputChange}
+          className="sr-only"
+          aria-label="본문 이미지 파일 선택"
         />
         <div className="relative shrink-0">
           <ToolbarButton
