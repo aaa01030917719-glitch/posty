@@ -1,0 +1,248 @@
+import type { CSSProperties, ReactNode } from 'react'
+import type { JSONContent } from '@tiptap/react'
+import './postyTiptapReadOnlyRenderer.css'
+
+export type PostyTiptapReadOnlyMediaItem = {
+  signedUrl: string | null
+  fileName: string
+}
+
+export type PostyTiptapReadOnlyMediaMap = Record<string, PostyTiptapReadOnlyMediaItem>
+
+type PostyTiptapReadOnlyRendererProps = {
+  doc: JSONContent
+  inlineMediaById?: PostyTiptapReadOnlyMediaMap
+}
+
+const FONT_SIZE_ALLOWLIST = new Set([
+  '40px',
+  '36px',
+  '32px',
+  '30px',
+  '28px',
+  '24px',
+  '20px',
+  '18px',
+  '16px',
+  '14px',
+])
+const COLOR_ALLOWLIST = new Map(
+  [
+    '#222222',
+    '#3F3F3F',
+    '#6A6A6A',
+    '#980000',
+    '#FF0000',
+    '#FF9900',
+    '#EAB308',
+    '#22C55E',
+    '#38BDF8',
+    '#4A86E8',
+    '#0000FF',
+    '#9900FF',
+    '#EC4899',
+  ].map((color) => [color.toUpperCase(), color])
+)
+
+const INLINE_MEDIA_SIZE_CLASS: Record<string, string> = {
+  original: 'posty-tiptap-readonly-media--original',
+  small: 'posty-tiptap-readonly-media--small',
+  medium: 'posty-tiptap-readonly-media--medium',
+  large: 'posty-tiptap-readonly-media--large',
+  full: 'posty-tiptap-readonly-media--full',
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function getStringAttr(attrs: Record<string, unknown> | undefined, key: string) {
+  const value = attrs?.[key]
+  return typeof value === 'string' ? value : ''
+}
+
+function getSafeHref(value: unknown) {
+  if (typeof value !== 'string') return null
+
+  const href = value.trim()
+  if (!href) return null
+
+  if (href.startsWith('/') || href.startsWith('#')) return href
+
+  try {
+    const parsed = new URL(href)
+    return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol) ? href : null
+  } catch {
+    return null
+  }
+}
+
+function getSafeTextStyle(attrs: Record<string, unknown> | undefined): CSSProperties | undefined {
+  const style: CSSProperties = {}
+  const rawColor = getStringAttr(attrs, 'color')
+  const rawFontSize = getStringAttr(attrs, 'fontSize')
+  const normalizedColor = rawColor.toUpperCase()
+  const allowedColor = COLOR_ALLOWLIST.get(normalizedColor)
+
+  if (allowedColor) {
+    style.color = allowedColor
+  }
+
+  if (FONT_SIZE_ALLOWLIST.has(rawFontSize)) {
+    style.fontSize = rawFontSize
+  }
+
+  return Object.keys(style).length > 0 ? style : undefined
+}
+
+function renderMarkedText(node: JSONContent, key: string) {
+  let content: ReactNode = node.text ?? ''
+
+  node.marks?.forEach((mark, index) => {
+    const markKey = `${key}-mark-${index}`
+
+    if (mark.type === 'bold') {
+      content = <strong key={markKey}>{content}</strong>
+      return
+    }
+
+    if (mark.type === 'italic') {
+      content = <em key={markKey}>{content}</em>
+      return
+    }
+
+    if (mark.type === 'strike') {
+      content = <s key={markKey}>{content}</s>
+      return
+    }
+
+    if (mark.type === 'link') {
+      const href = getSafeHref(mark.attrs?.href)
+
+      if (href) {
+        content = (
+          <a key={markKey} href={href} target="_blank" rel="noreferrer noopener">
+            {content}
+          </a>
+        )
+      }
+      return
+    }
+
+    if (mark.type === 'textStyle') {
+      const style = getSafeTextStyle(mark.attrs)
+
+      if (style) {
+        content = (
+          <span key={markKey} style={style}>
+            {content}
+          </span>
+        )
+      }
+    }
+  })
+
+  return content
+}
+
+function renderChildren(
+  nodes: JSONContent[] | undefined,
+  inlineMediaById: PostyTiptapReadOnlyMediaMap,
+  keyPrefix: string
+) {
+  return (nodes ?? []).map((child, index) =>
+    renderNode(child, inlineMediaById, `${keyPrefix}-${index}`)
+  )
+}
+
+function renderInlineMedia(
+  node: JSONContent,
+  inlineMediaById: PostyTiptapReadOnlyMediaMap,
+  key: string
+) {
+  const attrs = isRecord(node.attrs) ? node.attrs : {}
+  const mediaId = getStringAttr(attrs, 'mediaId')
+  const size = getStringAttr(attrs, 'size') || 'medium'
+  const alt = getStringAttr(attrs, 'alt')
+  const media = mediaId ? inlineMediaById[mediaId] : null
+  const sizeClass = INLINE_MEDIA_SIZE_CLASS[size] ?? INLINE_MEDIA_SIZE_CLASS.medium
+  const altText = alt || media?.fileName || 'inline image'
+
+  if (!media?.signedUrl) {
+    return (
+      <div key={key} className="posty-tiptap-readonly-media-fallback">
+        이미지를 불러올 수 없습니다
+      </div>
+    )
+  }
+
+  return (
+    <figure key={key} className={`posty-tiptap-readonly-media ${sizeClass}`}>
+      <img src={media.signedUrl} alt={altText} />
+      {alt ? <figcaption>{alt}</figcaption> : null}
+    </figure>
+  )
+}
+
+function renderNode(
+  node: JSONContent,
+  inlineMediaById: PostyTiptapReadOnlyMediaMap,
+  key: string
+): ReactNode {
+  switch (node.type) {
+    case 'doc':
+      return renderChildren(node.content, inlineMediaById, key)
+    case 'paragraph':
+      return <p key={key}>{renderChildren(node.content, inlineMediaById, key)}</p>
+    case 'heading': {
+      const attrs = isRecord(node.attrs) ? node.attrs : {}
+      const level = attrs.level === 1 || attrs.level === 2 || attrs.level === 3 ? attrs.level : 2
+      const children = renderChildren(node.content, inlineMediaById, key)
+
+      if (level === 1) return <h1 key={key}>{children}</h1>
+      if (level === 3) return <h3 key={key}>{children}</h3>
+      return <h2 key={key}>{children}</h2>
+    }
+    case 'text':
+      return <span key={key}>{renderMarkedText(node, key)}</span>
+    case 'bulletList':
+      return <ul key={key}>{renderChildren(node.content, inlineMediaById, key)}</ul>
+    case 'orderedList':
+      return <ol key={key}>{renderChildren(node.content, inlineMediaById, key)}</ol>
+    case 'listItem':
+      return <li key={key}>{renderChildren(node.content, inlineMediaById, key)}</li>
+    case 'horizontalRule':
+      return <hr key={key} />
+    case 'table':
+      return (
+        <div key={key} className="posty-tiptap-readonly-table-wrap">
+          <table>
+            <tbody>{renderChildren(node.content, inlineMediaById, key)}</tbody>
+          </table>
+        </div>
+      )
+    case 'tableRow':
+      return <tr key={key}>{renderChildren(node.content, inlineMediaById, key)}</tr>
+    case 'tableHeader':
+      return <th key={key}>{renderChildren(node.content, inlineMediaById, key)}</th>
+    case 'tableCell':
+      return <td key={key}>{renderChildren(node.content, inlineMediaById, key)}</td>
+    case 'postyInlineMedia':
+      return renderInlineMedia(node, inlineMediaById, key)
+    case 'hardBreak':
+      return <br key={key} />
+    default:
+      return renderChildren(node.content, inlineMediaById, key)
+  }
+}
+
+export function PostyTiptapReadOnlyRenderer({
+  doc,
+  inlineMediaById = {},
+}: PostyTiptapReadOnlyRendererProps) {
+  return (
+    <div className="posty-tiptap-readonly">
+      {renderNode(doc, inlineMediaById, 'posty-tiptap-readonly-root')}
+    </div>
+  )
+}

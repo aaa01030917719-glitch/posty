@@ -3,22 +3,29 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import { ContentMediaDownloadLink } from '@/components/content/ContentMediaDownloadLink'
 import { SharedMediaCarousel, type SharedMediaCarouselItem } from '@/components/content/SharedMediaCarousel'
-import { isAttachmentContentMedia } from '@/lib/content-media-purpose'
+import {
+  PostyTiptapReadOnlyRenderer,
+  type PostyTiptapReadOnlyMediaMap,
+} from '@/components/content/tiptap/PostyTiptapReadOnlyRenderer'
+import { isAttachmentContentMedia, isInlineContentMedia } from '@/lib/content-media-purpose'
 import {
   formatContentMediaFileSize,
   getContentMediaTypeLabel,
 } from '@/lib/content-media-files'
+import { isTiptapDocEnvelope } from '@/lib/content-editor-doc'
 import { FormattedText, type FormattedTextMediaItem } from '@/lib/text-format'
-import type { ChecklistItem, ContentMediaType, Database, ShareSection } from '@/lib/types'
+import type { ChecklistItem, ContentMediaType, Database, Json, ShareSection } from '@/lib/types'
 
 type SharePageProps = {
   params: Promise<{ token: string }>
+  searchParams?: Promise<{ renderer?: string | string[] }>
 }
 
 type SharedCard = {
   id: string
   title: string
   memo: string | null
+  memo_doc?: Json | null
   checklist: ChecklistItem[] | null
   is_deleted: boolean
   share_sections: ShareSection[] | null
@@ -345,6 +352,7 @@ async function fetchShareLinkWithCard(
           id,
           title,
           memo,
+          memo_doc,
           checklist,
           is_deleted,
           share_sections
@@ -491,8 +499,10 @@ function SharedAttachmentFileList({ items }: { items: SharedMediaItem[] }) {
   )
 }
 
-export default async function ShareContentPage({ params }: SharePageProps) {
+export default async function ShareContentPage({ params, searchParams }: SharePageProps) {
   const { token } = await params
+  const renderer = (await searchParams)?.renderer
+  const requestedRenderer = Array.isArray(renderer) ? renderer[0] : renderer
   const supabase = createServiceClient()
 
   if (!supabase || !token) {
@@ -509,6 +519,11 @@ export default async function ShareContentPage({ params }: SharePageProps) {
   const shareSections = normalizeShareSections(card.share_sections)
   const shareTitle = card.title.trim() || '제목 없는 공유 자료'
   const bodyContent = card.memo?.trim() ?? ''
+  const tiptapMemoDoc = isTiptapDocEnvelope(card.memo_doc) ? card.memo_doc : null
+  const shouldUseTiptapRenderer =
+    process.env.NODE_ENV === 'development' &&
+    requestedRenderer === 'tiptap' &&
+    Boolean(tiptapMemoDoc)
   const [
     { data: mediaRows, error: mediaError },
     script,
@@ -533,7 +548,17 @@ export default async function ShareContentPage({ params }: SharePageProps) {
   const attachmentMediaIds = new Set(
     fetchedMediaRows.filter(isAttachmentContentMedia).map((row) => row.id)
   )
+  const inlineMediaIds = new Set(fetchedMediaRows.filter(isInlineContentMedia).map((row) => row.id))
   const attachmentMediaItems = mediaItems.filter((item) => attachmentMediaIds.has(item.id))
+  const inlineMediaById = mediaItems
+    .filter((item) => inlineMediaIds.has(item.id))
+    .reduce<PostyTiptapReadOnlyMediaMap>((map, item) => {
+      map[item.id] = {
+        signedUrl: item.signedUrl,
+        fileName: item.fileName?.trim() || 'inline image',
+      }
+      return map
+    }, {})
   const embeddableMediaItems: FormattedTextMediaItem[] = mediaItems
     .filter(isEmbeddableMediaItem)
     .map((item) => ({
@@ -559,9 +584,10 @@ export default async function ShareContentPage({ params }: SharePageProps) {
   const thumbnailContent = normalizeText(script?.thumbnail_text)
   const checklistItems = normalizeChecklist(card.checklist)
   const hasScriptContent = scriptScenes.length > 0 || Boolean(plainScriptBody)
+  const hasBodySection = shouldUseTiptapRenderer || Boolean(bodyContent)
   const hasPublicContent =
     attachmentMediaItems.length > 0 ||
-    Boolean(bodyContent) ||
+    hasBodySection ||
     hasScriptContent ||
     Boolean(captionContent) ||
     Boolean(hashtagsContent) ||
@@ -618,13 +644,27 @@ export default async function ShareContentPage({ params }: SharePageProps) {
           <div className="space-y-5">
             <SharedAttachmentFileList items={fileAttachmentItems} />
 
-            {bodyContent ? (
+            {hasBodySection ? (
               <SharedContentSection id={SHARE_SECTION_IDS.body} label="원고">
-                <FormattedText
-                  text={bodyContent}
-                  mediaItems={embeddableMediaItems}
-                  className="text-sm leading-7 text-[var(--color-text-body)]"
-                />
+                {shouldUseTiptapRenderer ? (
+                  <>
+                    <p className="mb-3 text-xs font-medium text-[var(--color-text-muted)]">
+                      Tiptap 읽기 전용 renderer 실험 모드
+                    </p>
+                    {tiptapMemoDoc ? (
+                      <PostyTiptapReadOnlyRenderer
+                        doc={tiptapMemoDoc.doc}
+                        inlineMediaById={inlineMediaById}
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <FormattedText
+                    text={bodyContent}
+                    mediaItems={embeddableMediaItems}
+                    className="text-sm leading-7 text-[var(--color-text-body)]"
+                  />
+                )}
               </SharedContentSection>
             ) : null}
 
