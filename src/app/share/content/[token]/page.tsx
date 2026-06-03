@@ -667,9 +667,6 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
               >
                 {shouldRenderShareBodyDoc || shouldRenderMemoDoc ? (
                   <>
-                    <p className="mb-3 text-xs font-medium text-[var(--color-text-muted)]">
-                      Tiptap 읽기 전용 renderer 실험 모드
-                    </p>
                     {shouldRenderShareBodyDoc && tiptapShareBodyDoc ? (
                       <PostyTiptapReadOnlyRenderer
                         doc={tiptapShareBodyDoc.doc}
