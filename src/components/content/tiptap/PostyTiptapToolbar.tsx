@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { POSTY_TIPTAP_FONT_SIZE_PRESETS } from './postyTiptapExtensions'
+import { normalizeSelectedListBlocks } from './normalizeSelectedListBlocks'
 import { PostyTiptapLinkPopover } from './PostyTiptapLinkPopover'
 import { PostyTiptapTableMenu } from './PostyTiptapTableMenu'
 
@@ -40,13 +41,13 @@ const POSTY_TIPTAP_COLOR_PRESETS = [
   '#980000',
   '#FF0000',
   '#FF9900',
-  '#FFFF00',
-  '#00FF00',
-  '#00FFFF',
+  '#EAB308',
+  '#22C55E',
+  '#38BDF8',
   '#4A86E8',
   '#0000FF',
   '#9900FF',
-  '#FF00FF',
+  '#EC4899',
 ] as const
 
 function ToolbarButton({
@@ -257,6 +258,7 @@ export function PostyTiptapToolbar({
           label="말머리"
           onPress={() => {
             closePopover()
+            normalizeSelectedListBlocks(editor)
             editor.chain().focus().toggleBulletList().run()
           }}
         />
@@ -267,6 +269,7 @@ export function PostyTiptapToolbar({
           label="번호목록"
           onPress={() => {
             closePopover()
+            normalizeSelectedListBlocks(editor)
             editor.chain().focus().toggleOrderedList().run()
           }}
         />
@@ -327,7 +330,7 @@ export function PostyTiptapToolbar({
         </div>
         <Divider />
         <ToolbarButton
-          disabled={disabled || !editor.can().chain().focus().undo().run()}
+          disabled={disabled || !editor.can().chain().undo().run()}
           icon={Undo2}
           label="되돌리기 Ctrl+Z"
           onPress={() => {
@@ -336,7 +339,7 @@ export function PostyTiptapToolbar({
           }}
         />
         <ToolbarButton
-          disabled={disabled || !editor.can().chain().focus().redo().run()}
+          disabled={disabled || !editor.can().chain().redo().run()}
           icon={Redo2}
           label="다시 실행 Ctrl+Y"
           onPress={() => {

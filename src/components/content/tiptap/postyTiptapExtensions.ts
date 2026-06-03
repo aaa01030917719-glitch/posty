@@ -6,14 +6,33 @@ import {
   type PostyInlineMediaItem,
 } from './postyInlineMediaExtension'
 
-export const POSTY_TIPTAP_FONT_SIZE_PRESETS = ['30px', '24px', '20px', '16px', '14px'] as const
+export const POSTY_TIPTAP_FONT_SIZE_PRESETS = [
+  '40px',
+  '36px',
+  '32px',
+  '30px',
+  '28px',
+  '24px',
+  '20px',
+  '18px',
+  '16px',
+  '14px',
+] as const
 
 export const POSTY_TIPTAP_COLOR_PRESETS = [
   '#222222',
-  '#3f3f3f',
-  '#6a6a6a',
-  '#2563eb',
-  '#2f6f66',
+  '#3F3F3F',
+  '#6A6A6A',
+  '#980000',
+  '#FF0000',
+  '#FF9900',
+  '#EAB308',
+  '#22C55E',
+  '#38BDF8',
+  '#4A86E8',
+  '#0000FF',
+  '#9900FF',
+  '#EC4899',
 ] as const
 
 export function createPostyTiptapExtensions({

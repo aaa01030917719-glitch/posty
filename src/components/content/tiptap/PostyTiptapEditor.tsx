@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import type { JSONContent } from '@tiptap/react'
+import { Fragment, Slice } from '@tiptap/pm/model'
 import {
   createTiptapDocEnvelope,
   getPlainTextFromTiptapDoc,
@@ -66,10 +67,28 @@ export function PostyTiptapEditor({
       handlePaste: (view, event) => {
         const files = Array.from(event.clipboardData?.files ?? [])
 
-        if (!files.some((file) => file.type.startsWith('image/'))) return false
+        if (files.some((file) => file.type.startsWith('image/'))) {
+          event.preventDefault()
+          uploadInlineImagesHandlerRef.current(files, view.state.selection.from)
+          return true
+        }
+
+        const html = event.clipboardData?.getData('text/html') ?? ''
+        const plainText = event.clipboardData?.getData('text/plain') ?? ''
+
+        if (html || !plainText.includes('\n')) return false
 
         event.preventDefault()
-        uploadInlineImagesHandlerRef.current(files, view.state.selection.from)
+        const lines = plainText.replace(/\r\n?/g, '\n').split('\n')
+        const paragraphs = lines.map((line) =>
+          line
+            ? view.state.schema.nodes.paragraph.create(null, view.state.schema.text(line))
+            : view.state.schema.nodes.paragraph.create()
+        )
+
+        view.dispatch(
+          view.state.tr.replaceSelection(new Slice(Fragment.fromArray(paragraphs), 0, 0))
+        )
         return true
       },
       handleDrop: (view, event) => {
