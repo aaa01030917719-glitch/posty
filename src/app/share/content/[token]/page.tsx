@@ -29,6 +29,7 @@ type SharedCard = {
   checklist: ChecklistItem[] | null
   is_deleted: boolean
   share_sections: ShareSection[] | null
+  share_body_doc?: Json | null
 }
 
 type ShareLinkWithCard = {
@@ -355,7 +356,8 @@ async function fetchShareLinkWithCard(
           memo_doc,
           checklist,
           is_deleted,
-          share_sections
+          share_sections,
+          share_body_doc
         )
       `
     )
@@ -519,11 +521,25 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
   const shareSections = normalizeShareSections(card.share_sections)
   const shareTitle = card.title.trim() || '제목 없는 공유 자료'
   const bodyContent = card.memo?.trim() ?? ''
+  const tiptapShareBodyDoc = isTiptapDocEnvelope(card.share_body_doc) ? card.share_body_doc : null
   const tiptapMemoDoc = isTiptapDocEnvelope(card.memo_doc) ? card.memo_doc : null
-  const shouldUseTiptapRenderer =
+  const shouldRenderShareBodyDoc =
     process.env.NODE_ENV === 'development' &&
     requestedRenderer === 'tiptap' &&
+    Boolean(tiptapShareBodyDoc)
+  const shouldRenderShareSections = !shouldRenderShareBodyDoc && shareSections.length > 0
+  const shouldRenderMemoDoc =
+    process.env.NODE_ENV === 'development' &&
+    requestedRenderer === 'tiptap' &&
+    !shouldRenderShareBodyDoc &&
+    !shouldRenderShareSections &&
     Boolean(tiptapMemoDoc)
+  const shouldRenderMemoLegacy =
+    !shouldRenderShareBodyDoc &&
+    !shouldRenderShareSections &&
+    !shouldRenderMemoDoc &&
+    Boolean(bodyContent)
+  const visibleShareSections = shouldRenderShareSections ? shareSections : []
   const [
     { data: mediaRows, error: mediaError },
     script,
@@ -584,7 +600,8 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
   const thumbnailContent = normalizeText(script?.thumbnail_text)
   const checklistItems = normalizeChecklist(card.checklist)
   const hasScriptContent = scriptScenes.length > 0 || Boolean(plainScriptBody)
-  const hasBodySection = shouldUseTiptapRenderer || Boolean(bodyContent)
+  const hasBodySection =
+    shouldRenderShareBodyDoc || shouldRenderMemoDoc || shouldRenderMemoLegacy
   const hasPublicContent =
     attachmentMediaItems.length > 0 ||
     hasBodySection ||
@@ -593,9 +610,9 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
     Boolean(hashtagsContent) ||
     Boolean(thumbnailContent) ||
     checklistItems.length > 0 ||
-    shareSections.length > 0
+    visibleShareSections.length > 0
   const anchorLinks = [
-    ...(bodyContent ? [{ id: SHARE_SECTION_IDS.body, label: '원고' }] : []),
+    ...(hasBodySection ? [{ id: SHARE_SECTION_IDS.body, label: '원고' }] : []),
     ...(hasScriptContent ? [{ id: SHARE_SECTION_IDS.script, label: '대본' }] : []),
     ...(captionContent ? [{ id: SHARE_SECTION_IDS.caption, label: '캡션' }] : []),
     ...(hashtagsContent ? [{ id: SHARE_SECTION_IDS.hashtags, label: '해시태그' }] : []),
@@ -603,7 +620,7 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
     ...(checklistItems.length > 0
       ? [{ id: SHARE_SECTION_IDS.checklist, label: '체크리스트' }]
       : []),
-    ...shareSections
+    ...visibleShareSections
       .map((section, index) => ({
         id: getCustomShareSectionAnchorId(index),
         label: section.title.trim(),
@@ -645,13 +662,21 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
             <SharedAttachmentFileList items={fileAttachmentItems} />
 
             {hasBodySection ? (
-              <SharedContentSection id={SHARE_SECTION_IDS.body} label="원고">
-                {shouldUseTiptapRenderer ? (
+              <SharedContentSection
+                id={SHARE_SECTION_IDS.body}
+                label={shouldRenderShareBodyDoc || shouldRenderMemoDoc ? undefined : '원고'}
+              >
+                {shouldRenderShareBodyDoc || shouldRenderMemoDoc ? (
                   <>
                     <p className="mb-3 text-xs font-medium text-[var(--color-text-muted)]">
                       Tiptap 읽기 전용 renderer 실험 모드
                     </p>
-                    {tiptapMemoDoc ? (
+                    {shouldRenderShareBodyDoc && tiptapShareBodyDoc ? (
+                      <PostyTiptapReadOnlyRenderer
+                        doc={tiptapShareBodyDoc.doc}
+                        inlineMediaById={inlineMediaById}
+                      />
+                    ) : shouldRenderMemoDoc && tiptapMemoDoc ? (
                       <PostyTiptapReadOnlyRenderer
                         doc={tiptapMemoDoc.doc}
                         inlineMediaById={inlineMediaById}
@@ -747,7 +772,7 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
               </SharedContentSection>
             ) : null}
 
-            {shareSections.map((section, index) => (
+            {visibleShareSections.map((section, index) => (
               <SharedContentSection key={section.id} id={getCustomShareSectionAnchorId(index)}>
                 {section.title.trim() ? (
                   <h2 className="text-[15px] font-bold text-[var(--color-text-primary)]">
