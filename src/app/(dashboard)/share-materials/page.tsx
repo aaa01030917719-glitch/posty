@@ -193,8 +193,7 @@ export default function ShareMaterialsPage() {
   )
   const selectedSections: ShareSectionDraft[] = []
   const activeShareUrl = selectedMaterial ? getShareUrl(selectedMaterial.token) : ''
-  const isTiptapOptIn =
-    process.env.NODE_ENV === 'development' && searchParams.get('editor') === 'tiptap'
+  const isTiptapOptIn = searchParams.get('editor') !== 'legacy'
   const selectedTiptapDoc = selectedCard
     ? getTiptapDocFromEnvelope(selectedBodyDocDraft as unknown as Json) ??
       resolveShareBodyEditorDoc({
