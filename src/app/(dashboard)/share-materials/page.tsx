@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Copy, ExternalLink, FileText, Plus, Save, Share2, Trash2, Upload } from 'lucide-react'
 import { clsx } from 'clsx'
 import { createContentCard } from '@/components/content/createContentCard'
@@ -9,6 +9,7 @@ import {
   RichTextEditor,
   type RichTextEditorMediaItem,
 } from '@/components/content/RichTextEditor'
+import { PostyTiptapEditor } from '@/components/content/tiptap/PostyTiptapEditor'
 import { MarkdownToolbar, type MarkdownToolbarAction } from '@/components/content/MarkdownToolbar'
 import { ContentMediaDownloadLink } from '@/components/content/ContentMediaDownloadLink'
 import {
@@ -20,18 +21,25 @@ import {
 } from '@/components/content/contentMedia'
 import { Button } from '@/components/ui/Button'
 import { Toast } from '@/components/ui/Toast'
-import { isAttachmentContentMedia } from '@/lib/content-media-purpose'
+import { isAttachmentContentMedia, isInlineContentMedia } from '@/lib/content-media-purpose'
 import {
   formatContentMediaFileSize,
   getContentMediaTypeLabel,
 } from '@/lib/content-media-files'
+import {
+  createTiptapDocEnvelope,
+  getTiptapDocFromEnvelope,
+  resolveShareBodyEditorDoc,
+  type TiptapEditorDocEnvelope,
+} from '@/lib/content-editor-doc'
 import { createClient } from '@/lib/supabase/client'
-import type { ContentCardMedia, ContentShareLink, Database, ShareSection } from '@/lib/types'
+import type { ContentCardMedia, ContentShareLink, Database, Json, ShareSection } from '@/lib/types'
 
 type ShareMaterialCard = {
   id: string
   title: string
   share_sections: ShareSection[] | null
+  share_body_doc?: Json | null
   is_deleted: boolean
   updated_at: string
 }
@@ -143,11 +151,13 @@ function getShareUrl(token: string) {
 
 export default function ShareMaterialsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const sectionTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
   const [materials, setMaterials] = useState<ShareMaterialLink[]>([])
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null)
   const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({})
   const [bodyDrafts, setBodyDrafts] = useState<Record<string, string>>({})
+  const [bodyDocDrafts, setBodyDocDrafts] = useState<Record<string, TiptapEditorDocEnvelope>>({})
   const [mediaItemsByCardId, setMediaItemsByCardId] = useState<
     Record<string, RichTextEditorMediaItem[]>
   >({})
@@ -166,13 +176,32 @@ export default function ShareMaterialsPage() {
   const selectedCard = selectedMaterial?.card ?? null
   const selectedTitleDraft = selectedCard ? titleDrafts[selectedCard.id] ?? selectedCard.title : ''
   const selectedBodyDraft = selectedCard ? bodyDrafts[selectedCard.id] ?? '' : ''
+  const selectedBodyDocDraft = selectedCard ? bodyDocDrafts[selectedCard.id] ?? null : null
   const selectedMediaItems = selectedCard ? mediaItemsByCardId[selectedCard.id] ?? [] : []
   const selectedAttachmentItems = useMemo(
     () => selectedMediaItems.filter(isAttachmentContentMedia),
     [selectedMediaItems]
   )
+  const selectedInlineMediaItems = useMemo(
+    () =>
+      selectedMediaItems.filter(isInlineContentMedia).map((item) => ({
+        id: item.id,
+        signedUrl: item.signedUrl,
+        fileName: item.file_name?.trim() || '?대?吏',
+      })),
+    [selectedMediaItems]
+  )
   const selectedSections: ShareSectionDraft[] = []
   const activeShareUrl = selectedMaterial ? getShareUrl(selectedMaterial.token) : ''
+  const isTiptapOptIn =
+    process.env.NODE_ENV === 'development' && searchParams.get('editor') === 'tiptap'
+  const selectedTiptapDoc = selectedCard
+    ? getTiptapDocFromEnvelope(selectedBodyDocDraft as unknown as Json) ??
+      resolveShareBodyEditorDoc({
+        shareBodyDoc: selectedCard.share_body_doc,
+        shareSections: selectedCard.share_sections,
+      })
+    : resolveShareBodyEditorDoc({ shareBodyDoc: null, shareSections: null })
 
   useEffect(() => {
     if (!toastMessage) return
@@ -200,6 +229,7 @@ export default function ShareMaterialsPage() {
               id,
               title,
               share_sections,
+              share_body_doc,
               is_deleted,
               updated_at
             )
@@ -235,6 +265,19 @@ export default function ShareMaterialsPage() {
         nextMaterials.reduce<Record<string, string>>((acc, material) => {
           if (material.card) {
             acc[material.card.id] = material.card.title
+          }
+          return acc
+        }, {})
+      )
+      setBodyDocDrafts(
+        nextMaterials.reduce<Record<string, TiptapEditorDocEnvelope>>((acc, material) => {
+          if (material.card) {
+            acc[material.card.id] = createTiptapDocEnvelope(
+              resolveShareBodyEditorDoc({
+                shareBodyDoc: material.card.share_body_doc,
+                shareSections: material.card.share_sections,
+              })
+            )
           }
           return acc
         }, {})
@@ -326,6 +369,7 @@ export default function ShareMaterialsPage() {
               id,
               title,
               share_sections,
+              share_body_doc,
               is_deleted,
               updated_at
             )
@@ -347,6 +391,15 @@ export default function ShareMaterialsPage() {
           ...prev,
           [nextMaterial.card!.id]: mergeShareSectionsForEditor(
             nextMaterial.card!.share_sections
+          ),
+        }))
+        setBodyDocDrafts((prev) => ({
+          ...prev,
+          [nextMaterial.card!.id]: createTiptapDocEnvelope(
+            resolveShareBodyEditorDoc({
+              shareBodyDoc: nextMaterial.card!.share_body_doc,
+              shareSections: nextMaterial.card!.share_sections,
+            })
           ),
         }))
       }
@@ -526,18 +579,28 @@ export default function ShareMaterialsPage() {
 
     try {
       const supabase = createClient()
+      const nextBodyDoc = createTiptapDocEnvelope(
+        getTiptapDocFromEnvelope(selectedBodyDocDraft as unknown as Json) ??
+          resolveShareBodyEditorDoc({
+            shareBodyDoc: selectedCard.share_body_doc,
+            shareSections: selectedCard.share_sections,
+          })
+      )
       const nextSections = serializeUnifiedShareBody(selectedBodyDraft)
       const nextTitle = selectedTitleDraft.trim() || UNTITLED_MATERIAL_TITLE
       const payload: ContentCardUpdate = {
         title: nextTitle,
         share_sections: nextSections,
       }
+      if (isTiptapOptIn) {
+        payload.share_body_doc = nextBodyDoc as unknown as Json
+      }
 
       const { data, error } = await supabase
         .from('content_cards')
         .update(payload)
         .eq('id', selectedCard.id)
-        .select('id, title, share_sections, is_deleted, updated_at')
+        .select('id, title, share_sections, share_body_doc, is_deleted, updated_at')
         .single()
 
       if (error) throw error
@@ -555,6 +618,15 @@ export default function ShareMaterialsPage() {
       setTitleDrafts((prev) => ({
         ...prev,
         [nextCard.id]: nextCard.title,
+      }))
+      setBodyDocDrafts((prev) => ({
+        ...prev,
+        [nextCard.id]: createTiptapDocEnvelope(
+          resolveShareBodyEditorDoc({
+            shareBodyDoc: nextCard.share_body_doc,
+            shareSections: nextCard.share_sections,
+          })
+        ),
       }))
       setToastMessage('공유 자료가 저장되었습니다.')
     } catch (error) {
@@ -861,6 +933,31 @@ export default function ShareMaterialsPage() {
                   </section>
 
                   <div className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
+                    {isTiptapOptIn ? (
+                      <PostyTiptapEditor
+                        key={selectedCard.id}
+                        value={selectedTiptapDoc}
+                        onChange={(nextEnvelope, plainText) => {
+                          setBodyDocDrafts((prev) => ({
+                            ...prev,
+                            [selectedCard.id]: nextEnvelope,
+                          }))
+                          updateBodyDraft(plainText)
+                        }}
+                        inlineMediaItems={selectedInlineMediaItems}
+                        onUploadInlineImages={async (files) => {
+                          const uploadedItems = await uploadShareMaterialMedia(files)
+
+                          return uploadedItems.map((item) => ({
+                            id: item.id,
+                            signedUrl: item.signedUrl,
+                            fileName: item.file_name?.trim() || '?대?吏',
+                          }))
+                        }}
+                        uploadDisabled={mediaUploading || !selectedCard}
+                        placeholder={'怨듭쑀???댁슜??泥섏쓬遺???앷퉴吏 ?댁뼱???묒꽦?대낫?몄슂...'}
+                      />
+                    ) : (
                     <RichTextEditor
                       value={selectedBodyDraft}
                       onChange={updateBodyDraft}
@@ -873,6 +970,7 @@ export default function ShareMaterialsPage() {
                       bodyClassName="editor-body-wrap flex min-h-0 flex-1 flex-col px-4 py-3 sm:px-6"
                       editorClassName="min-h-[460px]"
                     />
+                    )}
                   </div>
 
                   <div className="flex flex-wrap justify-end border-t border-[var(--color-border-soft)] pt-4">

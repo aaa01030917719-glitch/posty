@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/react'
-import type { Json } from '@/lib/types'
+import type { Json, ShareSection } from '@/lib/types'
 
 export const TIPTAP_EDITOR_SCHEMA_VERSION = 1
 export const TIPTAP_EDITOR_FORMAT = 'tiptap-json'
@@ -69,6 +69,36 @@ export function getTiptapDocForEditor(
   legacyMemo: string | null | undefined
 ): JSONContent {
   return getTiptapDocFromEnvelope(memoDoc) ?? createTiptapDocFromLegacyMemo(legacyMemo)
+}
+
+function mergeShareSectionsForTiptapFallback(shareSections: ShareSection[] | null | undefined) {
+  if (!Array.isArray(shareSections)) return ''
+
+  return shareSections
+    .map((section) => {
+      const title = typeof section.title === 'string' ? section.title.trim() : ''
+      const body = typeof section.body === 'string' ? section.body.trim() : ''
+
+      if (title && body) return `${title}\n${body}`
+      if (title) return title
+
+      return body
+    })
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+export function resolveShareBodyEditorDoc({
+  shareBodyDoc,
+  shareSections,
+}: {
+  shareBodyDoc: Json | null | undefined
+  shareSections: ShareSection[] | null | undefined
+}): JSONContent {
+  return (
+    getTiptapDocFromEnvelope(shareBodyDoc) ??
+    createTiptapDocFromLegacyMemo(mergeShareSectionsForTiptapFallback(shareSections))
+  )
 }
 
 function collectPlainText(node: JSONContent, lines: string[]) {
