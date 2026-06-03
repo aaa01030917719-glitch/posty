@@ -524,7 +524,6 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
   const tiptapShareBodyDoc = isTiptapDocEnvelope(card.share_body_doc) ? card.share_body_doc : null
   const tiptapMemoDoc = isTiptapDocEnvelope(card.memo_doc) ? card.memo_doc : null
   const shouldRenderShareBodyDoc =
-    process.env.NODE_ENV === 'development' &&
     requestedRenderer === 'tiptap' &&
     Boolean(tiptapShareBodyDoc)
   const shouldRenderShareSections = !shouldRenderShareBodyDoc && shareSections.length > 0
