@@ -60,7 +60,7 @@ export function PostyTiptapEditor({
     editorProps: {
       attributes: {
         class:
-          'prose prose-sm max-w-none min-h-[360px] rounded-[8px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 text-[var(--color-text-primary)] outline-none',
+          'prose prose-sm max-w-none min-h-[360px] px-0 py-3 text-[var(--color-text-primary)] outline-none',
         'data-placeholder': placeholder ?? '',
       },
       handlePaste: (view, event) => {
@@ -150,7 +150,7 @@ export function PostyTiptapEditor({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       {bodyHeader}
       <PostyTiptapToolbar
         editor={editor}
@@ -160,7 +160,7 @@ export function PostyTiptapEditor({
         onUploadImages={(files) => uploadInlineImages(files)}
       />
 
-      <section className="posty-tiptap-editor rounded-[8px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] p-4">
+      <section className="posty-tiptap-editor min-w-0 px-4 pb-4 sm:px-6 lg:px-11">
         <EditorContent editor={editor} />
       </section>
     </div>

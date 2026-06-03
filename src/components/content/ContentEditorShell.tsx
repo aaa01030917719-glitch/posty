@@ -3864,10 +3864,10 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   }
 
   const renderContentLayout = (children: ReactNode, contentClassName?: string) => (
-    <div className="flex min-h-[calc(100vh-96px)] w-full justify-center bg-[#F3F4F6] p-3 sm:p-4 md:p-6">
+    <div className="flex h-full min-h-0 w-full items-start justify-center overflow-y-auto bg-[#F3F4F6] p-3 sm:p-4 md:p-6">
       <section
         className={clsx(
-          'w-full max-w-[1280px] min-w-0 overflow-hidden rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]',
+          'min-h-full w-full max-w-[1280px] min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]',
           contentClassName
         )}
       >
@@ -4003,7 +4003,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
   return renderContentLayout(
     <>
-      <div className="flex h-full min-h-[620px] w-full flex-col bg-[var(--color-bg-surface)] xl:min-h-[640px] xl:flex-row">
+      <div className="flex min-h-[620px] w-full flex-col bg-[var(--color-bg-surface)] xl:min-h-[640px] xl:flex-row">
         <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
           <div className="topbar sticky top-0 z-40 flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 sm:px-5">
             <div className="breadcrumb flex min-w-0 flex-1 basis-[220px] items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
@@ -4332,7 +4332,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         </div>
 
         {panelOpen && (
-          <aside className="right-panel flex w-full shrink-0 flex-col overflow-hidden border-t border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:h-full xl:w-[400px] xl:border-l xl:border-t-0">
+          <aside className="right-panel flex w-full shrink-0 flex-col overflow-hidden border-t border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] xl:w-[400px] xl:self-stretch xl:border-l xl:border-t-0">
             <div className="rp-head flex items-center gap-[5px] border-b border-[var(--color-border-soft)] px-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate px-1 text-[13px] font-semibold text-[var(--color-text-primary)]">
@@ -4425,6 +4425,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       {renderShareModal()}
       {renderUnsavedLeaveModal()}
     </>,
-    'flex h-full min-h-[640px]'
+    'flex min-h-[640px]'
   )
 }

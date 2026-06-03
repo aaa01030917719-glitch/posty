@@ -67,6 +67,14 @@
   margin: 0.25rem 0;
 }
 
+.posty-tiptap-editor .ProseMirror li > p {
+  margin: 0;
+}
+
+.posty-tiptap-editor .ProseMirror li > p + p {
+  margin-top: 0.35rem;
+}
+
 .posty-tiptap-editor .ProseMirror li::marker {
   color: #3f3f3f;
 }
