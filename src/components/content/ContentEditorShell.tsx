@@ -1511,10 +1511,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null)
 
   const isPreview = PREVIEW_IDS.has(cardId)
-  const tiptapOptInRequested =
-    process.env.NODE_ENV === 'development' &&
-    searchParams.get('editor') === 'tiptap' &&
-    !isPreview
+  const tiptapOptInRequested = searchParams.get('editor') !== 'legacy' && !isPreview
   const isTiptapEditorEnabled = tiptapOptInRequested && Boolean(card?.id)
 
   const sidebarCardsByProject = useMemo(() => {
