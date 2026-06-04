@@ -1,7 +1,7 @@
 # Instagram Auto DM OAuth Setup
 
-This feasibility spike connects one Instagram Professional account to Posty.
-It does not receive webhooks or send messages.
+This integration connects one Instagram Professional account to Posty and
+accepts signed comment webhook notifications. It does not send messages.
 
 ## Meta Developer App
 
@@ -31,6 +31,7 @@ Configure these as server-only variables in Vercel. Do not use a
 - `INSTAGRAM_OAUTH_REDIRECT_URI`
 - `INSTAGRAM_OAUTH_STATE_SECRET`
 - `INSTAGRAM_TOKEN_ENCRYPTION_KEY`
+- `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`
 
 `INSTAGRAM_TOKEN_ENCRYPTION_KEY` must be a base64-encoded 32-byte key.
 PowerShell example:
@@ -52,6 +53,9 @@ $bytes = [byte[]]::new(32)
 Keep the generated values separate and store them only in the server
 environment configuration.
 
+Use a separate, sufficiently long random value for
+`INSTAGRAM_WEBHOOK_VERIFY_TOKEN`. Never commit the actual verify token.
+
 ## Security Model
 
 - OAuth state is HMAC-signed, expires after ten minutes, and must match an
@@ -71,16 +75,18 @@ environment configuration.
 - Start: `GET /api/meta/instagram/oauth/start`
 - Callback: `GET /api/meta/instagram/oauth/callback`
 - Safe connection status: `GET /api/auto-dm/connection`
+- Webhook verification and events: `GET/POST /api/meta/instagram/webhook`
 
-The callback is the only new unauthenticated proxy exception. The start and
-connection-status routes still validate the current Supabase user.
+The OAuth callback and Instagram webhook are the only Instagram-specific
+unauthenticated proxy exceptions. The OAuth start and connection-status routes
+still validate the current Supabase user.
 
 When configuration is missing, `/auto-dm` shows a configuration-required state
 and the connection button remains disabled.
 
 ## Deployment Checklist
 
-1. Add the five server environment variables to the intended Vercel
+1. Add the six server environment variables to the intended Vercel
    environments.
 2. Verify the redirect URI matches the Meta app configuration exactly.
 3. Confirm the auto-DM SQL schema has been applied before testing OAuth.
@@ -89,6 +95,28 @@ and the connection button remains disabled.
 6. Verify connected account metadata appears without exposing ciphertext.
 7. Confirm App Review and business verification requirements before production.
 
-The next phase is a separate webhook feasibility spike for Instagram comments
-and messages. This OAuth spike does not register webhook subscriptions or call
-messaging APIs.
+## Webhook Setup
+
+Register this callback URL in the Meta Dashboard after OAuth configuration is
+ready:
+
+`https://project-zzg5e.vercel.app/api/meta/instagram/webhook`
+
+Use `INSTAGRAM_WEBHOOK_VERIFY_TOKEN` as the verify token. POST requests are
+validated with the existing `INSTAGRAM_APP_SECRET` and the raw request body
+before payload parsing or database access.
+
+Planned webhook subscriptions:
+
+- `comments`
+- `messages`
+- Messaging postback-related fields if required after the Quick Reply
+  feasibility test
+
+The comment payload parser currently accepts the documented comments and
+live-comments change shape, including object or array values. Actual payload
+variants and subscriptions must be verified after connecting a Meta app.
+
+This phase does not register the callback in Meta Dashboard, call Meta APIs,
+send messages, or test real webhook delivery. Complete OAuth connection first,
+then run a separate webhook feasibility test with configured test accounts.

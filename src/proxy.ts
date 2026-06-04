@@ -5,8 +5,9 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublicSharePage = pathname.startsWith('/share/content/')
   const isInstagramOauthCallback = pathname === '/api/meta/instagram/oauth/callback'
+  const isInstagramWebhook = pathname === '/api/meta/instagram/webhook'
 
-  if (isPublicSharePage || isInstagramOauthCallback) {
+  if (isPublicSharePage || isInstagramOauthCallback || isInstagramWebhook) {
     return NextResponse.next({ request })
   }
 
