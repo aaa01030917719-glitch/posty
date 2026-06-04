@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { History, LoaderCircle, MessageCircle, Plus } from 'lucide-react'
+import { History, LoaderCircle, MessageCircle } from 'lucide-react'
 import { clsx } from 'clsx'
+import { AutoDmRulesTab } from '@/components/auto-dm/AutoDmRulesTab'
 import { Button } from '@/components/ui/Button'
 
 const TABS = [
@@ -36,11 +37,6 @@ const INSTAGRAM_QUERY_MESSAGES: Record<string, string> = {
 }
 
 const EMPTY_CONTENT = {
-  rules: {
-    icon: MessageCircle,
-    title: '등록된 자동 DM 규칙이 없습니다',
-    description: 'Instagram 계정을 연결한 뒤 영상별 키워드와 공유자료를 등록할 수 있습니다',
-  },
   history: {
     icon: History,
     title: '발송 이력이 없습니다',
@@ -54,8 +50,6 @@ export default function AutoDmPage() {
   const [isConnectionLoading, setIsConnectionLoading] = useState(true)
   const [connectionLoadFailed, setConnectionLoadFailed] = useState(false)
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null)
-  const emptyContent = EMPTY_CONTENT[activeTab]
-  const EmptyIcon = emptyContent.icon
 
   useEffect(() => {
     const instagramStatus = new URLSearchParams(window.location.search).get('instagram')
@@ -227,25 +221,20 @@ export default function AutoDmPage() {
           className="pt-4"
         >
           {activeTab === 'rules' ? (
-            <div className="mb-4 flex justify-end">
-              <Button type="button" size="sm" disabled className="w-full sm:w-auto">
-                <Plus size={14} />
-                새 자동 DM 만들기
-              </Button>
+            <AutoDmRulesTab canCreate={connection.connected && !connectionLoadFailed} />
+          ) : (
+            <div className="flex min-h-56 flex-col items-center justify-center border-y border-[var(--color-border-soft)] px-4 py-12 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-bg-subtle)] text-[var(--color-text-muted-soft)]">
+                <History size={18} />
+              </span>
+              <h2 className="mt-3 text-sm font-semibold text-[var(--color-text-primary)]">
+                {EMPTY_CONTENT.history.title}
+              </h2>
+              <p className="mt-1 max-w-md text-xs leading-5 text-[var(--color-text-muted)]">
+                {EMPTY_CONTENT.history.description}
+              </p>
             </div>
-          ) : null}
-
-          <div className="flex min-h-56 flex-col items-center justify-center border-y border-[var(--color-border-soft)] px-4 py-12 text-center">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-bg-subtle)] text-[var(--color-text-muted-soft)]">
-              <EmptyIcon size={18} />
-            </span>
-            <h2 className="mt-3 text-sm font-semibold text-[var(--color-text-primary)]">
-              {emptyContent.title}
-            </h2>
-            <p className="mt-1 max-w-md text-xs leading-5 text-[var(--color-text-muted)]">
-              {emptyContent.description}
-            </p>
-          </div>
+          )}
         </div>
       </section>
 
