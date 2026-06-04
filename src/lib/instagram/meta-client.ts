@@ -43,6 +43,16 @@ type CommentReplyResponse = {
   id?: string
 }
 
+type InstagramUserProfileResponse = {
+  username?: string
+  is_user_follow_business?: boolean
+}
+
+type TextMessageResponse = {
+  message_id?: string
+  recipient_id?: string
+}
+
 export class InstagramMetaError extends Error {
   constructor(message: string) {
     super(message)
@@ -101,6 +111,18 @@ async function postInstagramJson<T>(path: string, accessToken: string, body: unk
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+  })
+}
+
+async function getInstagramJson<T>(path: string, accessToken: string, params?: Record<string, string>) {
+  const url = new URL(`/${INSTAGRAM_GRAPH_API_VERSION}${path}`, INSTAGRAM_GRAPH_ENDPOINT)
+
+  for (const [key, value] of Object.entries(params ?? {})) {
+    url.searchParams.set(key, value)
+  }
+
+  return fetchInstagramJson<T>(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
   })
 }
 
@@ -231,5 +253,50 @@ export async function replyToInstagramComment(input: {
 
   return {
     replyId: data.id,
+  }
+}
+
+export async function getInstagramUserProfile(input: {
+  instagramScopedId: string
+  accessToken: string
+}) {
+  const data = await getInstagramJson<InstagramUserProfileResponse>(
+    `/${encodeURIComponent(input.instagramScopedId)}`,
+    input.accessToken,
+    { fields: 'username,is_user_follow_business' }
+  )
+
+  if (typeof data.is_user_follow_business !== 'boolean') {
+    throw new InstagramMetaError('Instagram user profile response is incomplete')
+  }
+
+  return {
+    username: data.username ?? null,
+    isUserFollowingBusiness: data.is_user_follow_business,
+  }
+}
+
+export async function sendInstagramTextMessage(input: {
+  instagramProfessionalAccountId: string
+  recipientInstagramScopedId: string
+  messageText: string
+  accessToken: string
+}) {
+  const data = await postInstagramJson<TextMessageResponse>(
+    `/${encodeURIComponent(input.instagramProfessionalAccountId)}/messages`,
+    input.accessToken,
+    {
+      recipient: { id: input.recipientInstagramScopedId },
+      message: { text: input.messageText },
+    }
+  )
+
+  if (!data.message_id) {
+    throw new InstagramMetaError('Instagram text message response is incomplete')
+  }
+
+  return {
+    messageId: data.message_id,
+    recipientId: data.recipient_id ?? null,
   }
 }

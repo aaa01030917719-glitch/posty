@@ -12,9 +12,32 @@ export type InstagramCommentNotification = {
   mediaType: string | null
 }
 
+export type InstagramMessagingNotification = {
+  instagramProfessionalAccountId: string
+  senderInstagramScopedId: string
+  recipientInstagramProfessionalAccountId: string
+  messageId: string
+  messageText: string
+  quickReplyPayload: string | null
+  timestamp: string | null
+}
+
 export type CommentNormalizationResult =
   | { notification: InstagramCommentNotification }
   | { skipped: 'unsupported_payload' | 'missing_required_fields' }
+
+export type MessagingNormalizationResult =
+  | { notification: InstagramMessagingNotification }
+  | {
+      skipped:
+        | 'unsupported_payload'
+        | 'missing_required_fields'
+        | 'ignored_echo'
+        | 'ignored_self'
+        | 'ignored_deleted'
+        | 'ignored_unsupported'
+        | 'ignored_empty_text'
+    }
 
 function safeEqual(left: string, right: string) {
   const leftBuffer = Buffer.from(left)
@@ -114,6 +137,86 @@ export function normalizeInstagramCommentNotifications(payload: unknown) {
           },
         })
       }
+    }
+  }
+
+  return results.length > 0
+    ? results
+    : [{ skipped: 'unsupported_payload' }]
+}
+
+export function normalizeInstagramMessagingNotifications(payload: unknown) {
+  const results: MessagingNormalizationResult[] = []
+  const root = asRecord(payload)
+  const entries = asArray(root?.entry)
+
+  if (root?.object !== 'instagram' || entries.length === 0) {
+    return [{ skipped: 'unsupported_payload' }] as MessagingNormalizationResult[]
+  }
+
+  for (const rawEntry of entries) {
+    const entry = asRecord(rawEntry)
+    const professionalAccountId = stringValue(entry?.id)
+    const messagingItems = asArray(entry?.messaging)
+
+    for (const rawItem of messagingItems) {
+      const item = asRecord(rawItem)
+      const sender = asRecord(item?.sender)
+      const recipient = asRecord(item?.recipient)
+      const message = asRecord(item?.message)
+      const quickReply = asRecord(message?.quick_reply)
+
+      if (!message) {
+        results.push({ skipped: 'unsupported_payload' })
+        continue
+      }
+
+      if (message.is_echo === true) {
+        results.push({ skipped: 'ignored_echo' })
+        continue
+      }
+
+      if (message.is_self === true) {
+        results.push({ skipped: 'ignored_self' })
+        continue
+      }
+
+      if (message.is_deleted === true) {
+        results.push({ skipped: 'ignored_deleted' })
+        continue
+      }
+
+      if (message.is_unsupported === true) {
+        results.push({ skipped: 'ignored_unsupported' })
+        continue
+      }
+
+      const senderId = stringValue(sender?.id)
+      const recipientId = stringValue(recipient?.id)
+      const messageId = stringValue(message?.mid)
+      const messageText = stringValue(message?.text)?.trim() ?? ''
+
+      if (!messageText) {
+        results.push({ skipped: 'ignored_empty_text' })
+        continue
+      }
+
+      if (!professionalAccountId || !senderId || !recipientId || !messageId) {
+        results.push({ skipped: 'missing_required_fields' })
+        continue
+      }
+
+      results.push({
+        notification: {
+          instagramProfessionalAccountId: professionalAccountId,
+          senderInstagramScopedId: senderId,
+          recipientInstagramProfessionalAccountId: recipientId,
+          messageId,
+          messageText,
+          quickReplyPayload: stringValue(quickReply?.payload),
+          timestamp: stringValue(item?.timestamp),
+        },
+      })
     }
   }
 

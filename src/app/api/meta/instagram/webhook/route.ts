@@ -4,8 +4,10 @@ import {
   isInstagramAutoDmSendEnabled,
   processInitialPrivateReplyAndPublicCommentReply,
 } from '@/lib/instagram/auto-dm-delivery'
+import { processFollowConfirmationMessage } from '@/lib/instagram/auto-dm-follow-delivery'
 import {
   normalizeInstagramCommentNotifications,
+  normalizeInstagramMessagingNotifications,
   parseWebhookPayload,
   verifyWebhookSignature,
   verifyWebhookToken,
@@ -76,6 +78,16 @@ export async function POST(request: NextRequest) {
       if (result.status === 'matched') {
         after(async () => {
           await processInitialPrivateReplyAndPublicCommentReply(result.eventId)
+        })
+      }
+    }
+
+    const messagingNotifications = normalizeInstagramMessagingNotifications(payload)
+
+    for (const result of messagingNotifications) {
+      if ('notification' in result) {
+        after(async () => {
+          await processFollowConfirmationMessage(result.notification)
         })
       }
     }
