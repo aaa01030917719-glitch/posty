@@ -147,6 +147,89 @@ export interface ContentShareLink {
   disabled_at: string | null
 }
 
+export type InstagramAutoDmLifecycleStatus =
+  | 'comment_received'
+  | 'keyword_matched'
+  | 'waiting_for_user_reply'
+  | 'follow_check_pending'
+  | 'waiting_for_follow'
+  | 'material_sent'
+  | 'failed'
+  | 'duplicate_skipped'
+
+export type InstagramAutoDmInitialReplyStatus = 'pending' | 'sent' | 'failed'
+export type InstagramAutoDmPublicReplyStatus = 'not_attempted' | 'pending' | 'sent' | 'failed'
+export type InstagramAutoDmFollowStatus =
+  | 'unknown'
+  | 'pending'
+  | 'following'
+  | 'not_following'
+  | 'check_failed'
+export type InstagramAutoDmDeliveryStatus = 'not_ready' | 'pending' | 'sent' | 'failed'
+
+export interface InstagramConnection {
+  id: string
+  user_id: string
+  instagram_professional_account_id: string
+  instagram_username: string
+  token_expires_at: string | null
+  connected_at: string
+  created_at: string
+  updated_at: string
+}
+
+export interface InstagramAutoDmRule {
+  id: string
+  user_id: string
+  instagram_connection_id: string
+  share_link_id: string | null
+  title: string
+  media_id: string
+  media_type: string
+  media_permalink: string | null
+  media_preview_url: string | null
+  keyword: string
+  initial_private_reply_message: string
+  public_comment_reply_message: string
+  follow_required_message: string
+  /** Server delivery code replaces the required {link} placeholder with the active public share URL. */
+  material_delivery_message: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface InstagramAutoDmEvent {
+  id: string
+  user_id: string
+  instagram_connection_id: string | null
+  rule_id: string | null
+  comment_id: string
+  media_id: string
+  commenter_instagram_scoped_id: string
+  commenter_username: string | null
+  comment_text: string
+  lifecycle_status: InstagramAutoDmLifecycleStatus
+  initial_reply_status: InstagramAutoDmInitialReplyStatus
+  public_reply_status: InstagramAutoDmPublicReplyStatus
+  follow_status: InstagramAutoDmFollowStatus
+  delivery_status: InstagramAutoDmDeliveryStatus
+  initial_private_reply_message_id: string | null
+  public_comment_reply_id: string | null
+  material_delivery_message_id: string | null
+  initial_private_reply_sent_at: string | null
+  public_comment_reply_sent_at: string | null
+  user_replied_at: string | null
+  follow_checked_at: string | null
+  material_sent_at: string | null
+  failure_stage: string | null
+  failure_code: string | null
+  failure_reason: string | null
+  attempt_count: number
+  created_at: string
+  updated_at: string
+}
+
 export type ContentActivityAction =
   | 'draft_saved'
   | 'completed'
@@ -306,6 +389,74 @@ export type Database = {
           id?: string; created_at?: string; disabled_at?: string | null
         }
         Update: Partial<Omit<ContentShareLink, 'id' | 'created_at'>>
+      }
+      instagram_connections: {
+        Row: InstagramConnection
+        Insert: Omit<InstagramConnection, 'id' | 'connected_at' | 'created_at' | 'updated_at'> & {
+          id?: string
+          connected_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<InstagramConnection, 'id' | 'user_id' | 'created_at'>>
+      }
+      instagram_auto_dm_rules: {
+        Row: InstagramAutoDmRule
+        Insert: Omit<InstagramAutoDmRule, 'id' | 'enabled' | 'created_at' | 'updated_at'> & {
+          id?: string
+          enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<InstagramAutoDmRule, 'id' | 'user_id' | 'created_at'>>
+      }
+      instagram_auto_dm_events: {
+        Row: InstagramAutoDmEvent
+        Insert: Omit<
+          InstagramAutoDmEvent,
+          | 'id'
+          | 'lifecycle_status'
+          | 'initial_reply_status'
+          | 'public_reply_status'
+          | 'follow_status'
+          | 'delivery_status'
+          | 'initial_private_reply_message_id'
+          | 'public_comment_reply_id'
+          | 'material_delivery_message_id'
+          | 'initial_private_reply_sent_at'
+          | 'public_comment_reply_sent_at'
+          | 'user_replied_at'
+          | 'follow_checked_at'
+          | 'material_sent_at'
+          | 'failure_stage'
+          | 'failure_code'
+          | 'failure_reason'
+          | 'attempt_count'
+          | 'created_at'
+          | 'updated_at'
+        > & {
+          id?: string
+          lifecycle_status?: InstagramAutoDmLifecycleStatus
+          initial_reply_status?: InstagramAutoDmInitialReplyStatus
+          public_reply_status?: InstagramAutoDmPublicReplyStatus
+          follow_status?: InstagramAutoDmFollowStatus
+          delivery_status?: InstagramAutoDmDeliveryStatus
+          initial_private_reply_message_id?: string | null
+          public_comment_reply_id?: string | null
+          material_delivery_message_id?: string | null
+          initial_private_reply_sent_at?: string | null
+          public_comment_reply_sent_at?: string | null
+          user_replied_at?: string | null
+          follow_checked_at?: string | null
+          material_sent_at?: string | null
+          failure_stage?: string | null
+          failure_code?: string | null
+          failure_reason?: string | null
+          attempt_count?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<InstagramAutoDmEvent, 'id' | 'user_id' | 'created_at'>>
       }
       content_activity_logs: {
         Row: ContentActivityLog
