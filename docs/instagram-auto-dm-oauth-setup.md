@@ -32,6 +32,7 @@ Configure these as server-only variables in Vercel. Do not use a
 - `INSTAGRAM_OAUTH_STATE_SECRET`
 - `INSTAGRAM_TOKEN_ENCRYPTION_KEY`
 - `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`
+- `INSTAGRAM_AUTO_DM_SEND_ENABLED`
 
 `INSTAGRAM_TOKEN_ENCRYPTION_KEY` must be a base64-encoded 32-byte key.
 PowerShell example:
@@ -56,6 +57,12 @@ environment configuration.
 Use a separate, sufficiently long random value for
 `INSTAGRAM_WEBHOOK_VERIFY_TOKEN`. Never commit the actual verify token.
 
+`INSTAGRAM_AUTO_DM_SEND_ENABLED` controls outbound comment automation delivery.
+Only the exact string `true` enables Private Reply and public comment reply
+requests. Keep it unset or any value other than `true` until OAuth, webhook
+payloads, and a single test rule have been verified against a real Meta test
+account.
+
 ## Security Model
 
 - OAuth state is HMAC-signed, expires after ten minutes, and must match an
@@ -69,6 +76,8 @@ Use a separate, sufficiently long random value for
   `instagram_connection_secrets.access_token_ciphertext`.
 - The secrets table is accessed only with the server-side service role.
 - Invalid or expired OAuth state never writes to the database.
+- Outbound delivery code must not log access tokens, app secrets, raw webhook
+  payloads, or raw Meta error bodies.
 
 ## OAuth Routes
 
@@ -86,7 +95,7 @@ and the connection button remains disabled.
 
 ## Deployment Checklist
 
-1. Add the six server environment variables to the intended Vercel
+1. Add the server environment variables to the intended Vercel
    environments.
 2. Verify the redirect URI matches the Meta app configuration exactly.
 3. Confirm the auto-DM SQL schema has been applied before testing OAuth.
@@ -117,6 +126,36 @@ The comment payload parser currently accepts the documented comments and
 live-comments change shape, including object or array values. Actual payload
 variants and subscriptions must be verified after connecting a Meta app.
 
-This phase does not register the callback in Meta Dashboard, call Meta APIs,
-send messages, or test real webhook delivery. Complete OAuth connection first,
-then run a separate webhook feasibility test with configured test accounts.
+The webhook ingress phase did not register the callback in Meta Dashboard, call
+Meta APIs, send messages, or test real webhook delivery. Complete OAuth
+connection first, then run a separate webhook feasibility test with configured
+test accounts.
+
+## Outbound Delivery Safety
+
+Keyword-matched comment events are inserted with `initial_reply_status =
+pending`. When `INSTAGRAM_AUTO_DM_SEND_ENABLED` is exactly `true`, the webhook
+route schedules outbound delivery after the HTTP response with Next.js
+`after()`. When the flag is absent or any other value, the webhook only stores
+the event and does not call Meta.
+
+The first outbound step sends an Instagram Private Reply with:
+
+- `POST https://graph.instagram.com/v23.0/{ig_user_id}/messages`
+- `recipient.comment_id` set to the original Instagram comment ID
+- `message.text` set to the rule's initial Private Reply message
+
+Private Reply is limited to one message per comment and must be sent within
+Meta's allowed window. Do not manually retry uncertain network outcomes without
+operator review.
+
+Only after the Private Reply succeeds, the delivery processor attempts the
+public comment reply with:
+
+- `POST https://graph.instagram.com/v23.0/{ig_comment_id}/replies`
+- `message` set to the rule's public reply message
+
+If the Private Reply fails, the public reply is not attempted. If the public
+reply fails, the event remains in `waiting_for_user_reply` because the initial
+DM was already sent. Message-inbox webhook handling, follow checks, material
+link delivery, and Quick Reply support are still future phases.

@@ -1,5 +1,9 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { after, NextResponse, type NextRequest } from 'next/server'
 import { processInstagramComment } from '@/lib/instagram/auto-dm-processor'
+import {
+  isInstagramAutoDmSendEnabled,
+  processInitialPrivateReplyAndPublicCommentReply,
+} from '@/lib/instagram/auto-dm-delivery'
 import {
   normalizeInstagramCommentNotifications,
   parseWebhookPayload,
@@ -65,6 +69,16 @@ export async function POST(request: NextRequest) {
 
   if (processResults.some((result) => result.status === 'failed')) {
     return NextResponse.json({ received: false }, { status: 500 })
+  }
+
+  if (isInstagramAutoDmSendEnabled()) {
+    for (const result of processResults) {
+      if (result.status === 'matched') {
+        after(async () => {
+          await processInitialPrivateReplyAndPublicCommentReply(result.eventId)
+        })
+      }
+    }
   }
 
   return NextResponse.json({ received: true })

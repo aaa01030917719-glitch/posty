@@ -3,6 +3,7 @@ import 'server-only'
 const INSTAGRAM_AUTHORIZE_ENDPOINT = 'https://www.instagram.com/oauth/authorize'
 const INSTAGRAM_TOKEN_ENDPOINT = 'https://api.instagram.com/oauth/access_token'
 const INSTAGRAM_GRAPH_ENDPOINT = 'https://graph.instagram.com'
+const INSTAGRAM_GRAPH_API_VERSION = 'v23.0'
 const FETCH_TIMEOUT_MS = 10_000
 
 export const INSTAGRAM_OAUTH_SCOPES = [
@@ -31,6 +32,15 @@ type InstagramAccountResponse = {
   id?: string
   user_id?: string
   username?: string
+}
+
+type PrivateReplyResponse = {
+  message_id?: string
+  recipient_id?: string
+}
+
+type CommentReplyResponse = {
+  id?: string
 }
 
 export class InstagramMetaError extends Error {
@@ -79,6 +89,19 @@ async function fetchInstagramJson<T>(url: string, init?: RequestInit) {
   }
 
   return response.json() as Promise<T>
+}
+
+async function postInstagramJson<T>(path: string, accessToken: string, body: unknown) {
+  const url = new URL(`/${INSTAGRAM_GRAPH_API_VERSION}${path}`, INSTAGRAM_GRAPH_ENDPOINT)
+
+  return fetchInstagramJson<T>(url.toString(), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
 }
 
 export function createInstagramAuthorizeUrl(state: string) {
@@ -163,5 +186,50 @@ export async function getInstagramProfessionalAccount(accessToken: string) {
   return {
     accountId,
     username: data.username,
+  }
+}
+
+export async function sendInstagramPrivateReply(input: {
+  instagramProfessionalAccountId: string
+  commentId: string
+  messageText: string
+  accessToken: string
+}) {
+  const data = await postInstagramJson<PrivateReplyResponse>(
+    `/${encodeURIComponent(input.instagramProfessionalAccountId)}/messages`,
+    input.accessToken,
+    {
+      recipient: { comment_id: input.commentId },
+      message: { text: input.messageText },
+    }
+  )
+
+  if (!data.message_id) {
+    throw new InstagramMetaError('Instagram private reply response is incomplete')
+  }
+
+  return {
+    messageId: data.message_id,
+    recipientId: data.recipient_id ?? null,
+  }
+}
+
+export async function replyToInstagramComment(input: {
+  commentId: string
+  messageText: string
+  accessToken: string
+}) {
+  const data = await postInstagramJson<CommentReplyResponse>(
+    `/${encodeURIComponent(input.commentId)}/replies`,
+    input.accessToken,
+    { message: input.messageText }
+  )
+
+  if (!data.id) {
+    throw new InstagramMetaError('Instagram public comment reply response is incomplete')
+  }
+
+  return {
+    replyId: data.id,
   }
 }
