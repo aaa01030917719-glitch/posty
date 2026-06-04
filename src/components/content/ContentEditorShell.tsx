@@ -1542,7 +1542,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/content/${shareLink.token}`
     : null
   const createdDateLabel = card ? formatDate(card.created_at) : ''
-  const updatedDateLabel = card ? formatDate(card.updated_at, true) : ''
   const selectedUploadTimeValue = normalizeUploadTimeValue(scheduledTimeDraft)
   const mediaRenderKey = useMemo(
     () => mediaItems.map((item) => `${item.id}:${item.signedUrl ?? ''}`).join('|'),
@@ -3873,23 +3872,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
     </div>
   )
 
-  const bodyEditorHeader = (
-    <div className="mb-2 flex w-full items-center justify-between gap-3 text-[11px] text-[var(--color-text-muted)]">
-      <span className="min-w-0 truncate font-medium">
-        {'\uCF58\uD150\uCE20 \uB0B4\uC6A9\uC774 \uB4E4\uC5B4\uAC11\uB2C8\uB2E4'}
-      </span>
-      <span className="shrink-0 font-medium">
-        {'\uC791\uC131\uC77C '}{createdDateLabel}{' '}
-        <span
-          title={`\uB9C8\uC9C0\uB9C9 \uC218\uC815 ${updatedDateLabel}`}
-          className="cursor-help"
-        >
-          i
-        </span>
-      </span>
-    </div>
-  )
-
   if (loading) {
     return renderContentLayout(
       <div className="flex min-h-[360px] flex-1 items-center justify-center">
@@ -4199,14 +4181,31 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               </div>
             </div>
 
-            <div className="mb-2 w-full">
+            <div className="mb-2 flex w-full min-w-0 items-center gap-2">
               <input
                 type="text"
                 value={titleDraft}
                 onChange={(event) => setTitleDraft(event.target.value)}
-                className="w-full border-0 bg-transparent p-0 text-[22px] font-bold leading-[1.2] tracking-[-0.03em] text-[var(--color-text-primary)] outline-none"
+                className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[22px] font-bold leading-[1.2] tracking-[-0.03em] text-[var(--color-text-primary)] outline-none"
                 placeholder="콘텐츠 제목"
               />
+              <div className="group relative shrink-0">
+                <button
+                  type="button"
+                  aria-describedby="content-created-date-tooltip"
+                  aria-label={'\uC791\uC131\uC77C \uC815\uBCF4'}
+                  className="flex h-6 w-6 items-center justify-center rounded-full border border-[var(--color-border-default)] text-[11px] font-semibold text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-text-muted)] hover:text-[var(--color-text-body)] focus-visible:outline-none focus-visible:[box-shadow:var(--focus-ring)]"
+                >
+                  ?
+                </button>
+                <span
+                  id="content-created-date-tooltip"
+                  role="tooltip"
+                  className="pointer-events-none absolute right-0 top-full z-50 mt-2 hidden whitespace-nowrap rounded-[6px] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-text-muted)] shadow-md group-hover:block group-focus-within:block"
+                >
+                  {'\uC791\uC131\uC77C '}{createdDateLabel}
+                </span>
+              </div>
             </div>
 
             {isPreview && (
@@ -4296,7 +4295,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                 }}
                 disabled={isPreview}
                 placeholder={EDITOR_PLACEHOLDER}
-                bodyHeader={bodyEditorHeader}
                 inlineMediaItems={tiptapInlineMediaItems}
                 onUploadInlineImages={async (files) => {
                   const uploadedItems = await uploadMediaFiles(files, 'inline')
@@ -4320,7 +4318,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               placeholder={EDITOR_PLACEHOLDER}
               onUploadMedia={(files) => uploadMediaFiles(files, 'inline')}
               uploadDisabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
-              bodyHeader={bodyEditorHeader}
             />
           )}
         </div>
