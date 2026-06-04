@@ -12,6 +12,7 @@ import {
   History,
   BarChart2,
   LogOut,
+  MessageCircle,
   Trash2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: '/content', label: '\uCF58\uD150\uCE20', icon: LayoutGrid },
   { href: '/ideas', label: '\uC544\uC774\uB514\uC5B4', icon: Lightbulb },
   { href: '/share-materials', label: '\uACF5\uC720 \uC790\uB8CC', icon: Share2 },
+  { href: '/auto-dm', label: '\uC790\uB3D9 DM', icon: MessageCircle },
   { href: '/timeline', label: '\uD0C0\uC784\uB77C\uC778', icon: History },
   { href: '/trash', label: '\uD734\uC9C0\uD1B5', icon: Trash2 },
   { href: '/scripts', label: '\uC2A4\uD06C\uB9BD\uD2B8', icon: FileText },
