@@ -4287,9 +4287,6 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
 
           {isTiptapEditorEnabled ? (
             <div className="flex flex-col gap-3">
-              <div className="rounded-[8px] border border-[#f9a8d4] bg-[#fdf2f8] px-3 py-2 text-xs font-medium text-[#be185d]">
-                Tiptap 실험 모드: 이 콘텐츠에서만 신규 에디터 저장 동작을 확인합니다.
-              </div>
               <PostyTiptapEditor
                 key={`${card.id}:${tiptapEditorRevision}`}
                 value={bodyTiptapDoc}
