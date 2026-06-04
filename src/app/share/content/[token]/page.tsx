@@ -611,7 +611,6 @@ export default async function ShareContentPage({ params, searchParams }: SharePa
     checklistItems.length > 0 ||
     visibleShareSections.length > 0
   const anchorLinks = [
-    ...(hasBodySection ? [{ id: SHARE_SECTION_IDS.body, label: '원고' }] : []),
     ...(hasScriptContent ? [{ id: SHARE_SECTION_IDS.script, label: '대본' }] : []),
     ...(captionContent ? [{ id: SHARE_SECTION_IDS.caption, label: '캡션' }] : []),
     ...(hashtagsContent ? [{ id: SHARE_SECTION_IDS.hashtags, label: '해시태그' }] : []),
