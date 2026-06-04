@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { History, MessageCircle, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { History, LoaderCircle, MessageCircle, Plus } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
 
@@ -11,6 +11,29 @@ const TABS = [
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
+
+type InstagramConnectionStatus = {
+  configured: boolean
+  connected: boolean
+  instagramUsername: string | null
+  tokenExpiresAt: string | null
+  connectedAt: string | null
+}
+
+const EMPTY_CONNECTION_STATUS: InstagramConnectionStatus = {
+  configured: false,
+  connected: false,
+  instagramUsername: null,
+  tokenExpiresAt: null,
+  connectedAt: null,
+}
+
+const INSTAGRAM_QUERY_MESSAGES: Record<string, string> = {
+  connected: 'Instagram 계정이 연결되었습니다',
+  configuration_required: 'Instagram 연동 환경설정이 필요합니다',
+  invalid_state: '연결 요청이 만료되었거나 유효하지 않습니다. 다시 시도해주세요',
+  connection_failed: 'Instagram 계정을 연결하지 못했습니다. 잠시 후 다시 시도해주세요',
+}
 
 const EMPTY_CONTENT = {
   rules: {
@@ -27,8 +50,85 @@ const EMPTY_CONTENT = {
 
 export default function AutoDmPage() {
   const [activeTab, setActiveTab] = useState<TabId>('rules')
+  const [connection, setConnection] = useState(EMPTY_CONNECTION_STATUS)
+  const [isConnectionLoading, setIsConnectionLoading] = useState(true)
+  const [connectionLoadFailed, setConnectionLoadFailed] = useState(false)
+  const [connectionNotice, setConnectionNotice] = useState<string | null>(null)
   const emptyContent = EMPTY_CONTENT[activeTab]
   const EmptyIcon = emptyContent.icon
+
+  useEffect(() => {
+    const instagramStatus = new URLSearchParams(window.location.search).get('instagram')
+    setConnectionNotice(instagramStatus ? INSTAGRAM_QUERY_MESSAGES[instagramStatus] ?? null : null)
+
+    let cancelled = false
+
+    async function loadConnection() {
+      try {
+        const response = await fetch('/api/auto-dm/connection')
+        const data = (await response.json()) as Partial<InstagramConnectionStatus>
+
+        if (!response.ok) {
+          throw new Error('Connection status request failed')
+        }
+
+        if (!cancelled) {
+          setConnection({
+            configured: data.configured === true,
+            connected: data.connected === true,
+            instagramUsername:
+              typeof data.instagramUsername === 'string' ? data.instagramUsername : null,
+            tokenExpiresAt:
+              typeof data.tokenExpiresAt === 'string' ? data.tokenExpiresAt : null,
+            connectedAt:
+              typeof data.connectedAt === 'string' ? data.connectedAt : null,
+          })
+        }
+      } catch {
+        if (!cancelled) {
+          setConnectionLoadFailed(true)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsConnectionLoading(false)
+        }
+      }
+    }
+
+    void loadConnection()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const connectionBadge = isConnectionLoading
+    ? '확인 중'
+    : connectionLoadFailed
+      ? '확인 필요'
+      : !connection.configured
+      ? '설정 필요'
+      : connection.connected
+        ? '연결됨'
+        : '연결되지 않음'
+  const connectionTitle = connectionLoadFailed
+    ? 'Instagram 연결 상태를 확인할 수 없습니다'
+    : !connection.configured
+    ? 'Instagram 연동 설정이 필요합니다'
+    : connection.connected
+      ? `@${connection.instagramUsername ?? 'Instagram'} 계정이 연결되었습니다`
+      : 'Instagram 계정을 연결해주세요'
+  const connectionDescription = connectionLoadFailed
+    ? '잠시 후 새로고침해 다시 확인해주세요'
+    : !connection.configured
+    ? '서버 환경설정을 완료하면 Instagram 계정을 연결할 수 있습니다'
+    : connection.connected
+      ? `연결일 ${formatDateTime(connection.connectedAt)} · 토큰 만료 ${formatDateTime(connection.tokenExpiresAt)}`
+      : '자동 DM을 사용하려면 Instagram 프로페셔널 계정 연결이 필요합니다'
+
+  function startInstagramConnection() {
+    window.location.assign('/api/meta/instagram/oauth/start')
+  }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
@@ -41,29 +141,45 @@ export default function AutoDmPage() {
         </p>
       </section>
 
+      {connectionNotice ? (
+        <p className="rounded-[var(--radius-md)] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-3 py-2 text-xs text-[var(--color-text-secondary)]">
+          {connectionNotice}
+        </p>
+      ) : null}
+
       <section className="flex flex-col gap-4 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-start gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)]">
-            <MessageCircle size={18} />
+            {isConnectionLoading ? <LoaderCircle className="animate-spin" size={18} /> : <MessageCircle size={18} />}
           </span>
           <div className="min-w-0">
             <span className="inline-flex rounded-full border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-text-muted)]">
-              연결되지 않음
+              {connectionBadge}
             </span>
             <h2 className="mt-2 text-sm font-semibold text-[var(--color-text-primary)]">
-              Instagram 계정을 연결해주세요
+              {connectionTitle}
             </h2>
             <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
-              자동 DM을 사용하려면 Instagram 프로페셔널 계정 연결이 필요합니다
+              {connectionDescription}
             </p>
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
-          <Button type="button" size="sm" disabled className="w-full sm:w-auto">
+          <Button
+            type="button"
+            size="sm"
+            disabled={isConnectionLoading || connectionLoadFailed || !connection.configured}
+            onClick={startInstagramConnection}
+            className="w-full sm:w-auto"
+          >
             <MessageCircle size={14} />
-            Instagram 연결하기
+            {connection.connected ? '다시 연결하기' : 'Instagram 연결하기'}
           </Button>
-          <span className="text-[11px] text-[var(--color-text-muted-soft)]">연동 기능 준비 중</span>
+          {!connection.configured && !isConnectionLoading ? (
+            <span className="text-[11px] text-[var(--color-text-muted-soft)]">
+              Instagram 연동 환경설정이 필요합니다
+            </span>
+          ) : null}
         </div>
       </section>
 
@@ -143,4 +259,16 @@ export default function AutoDmPage() {
       </section>
     </div>
   )
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return '확인되지 않음'
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return '확인되지 않음'
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    dateStyle: 'medium',
+  }).format(date)
 }

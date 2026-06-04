@@ -4,8 +4,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublicSharePage = pathname.startsWith('/share/content/')
+  const isInstagramOauthCallback = pathname === '/api/meta/instagram/oauth/callback'
 
-  if (isPublicSharePage) {
+  if (isPublicSharePage || isInstagramOauthCallback) {
     return NextResponse.next({ request })
   }
 
