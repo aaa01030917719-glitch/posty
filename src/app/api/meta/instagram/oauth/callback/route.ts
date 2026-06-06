@@ -4,6 +4,7 @@ import {
   exchangeForLongLivedToken,
   getInstagramProfessionalAccount,
   hasInstagramOAuthConfiguration,
+  subscribeInstagramAccountToWebhooks,
 } from '@/lib/instagram/meta-client'
 import { statesMatch, verifyInstagramOAuthState } from '@/lib/instagram/oauth-state'
 import { encryptInstagramAccessToken } from '@/lib/instagram/token-crypto'
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest) {
     const shortLivedToken = await exchangeCodeForShortLivedToken(code)
     const longLivedToken = await exchangeForLongLivedToken(shortLivedToken)
     const account = await getInstagramProfessionalAccount(longLivedToken.accessToken)
+    await subscribeInstagramAccountToWebhooks(longLivedToken.accessToken)
     const encryptedToken = encryptInstagramAccessToken(longLivedToken.accessToken)
     const admin = createAdminClient()
     const now = new Date().toISOString()

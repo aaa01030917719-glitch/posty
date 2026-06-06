@@ -64,6 +64,11 @@ requests. Keep it unset or any value other than `true` until OAuth, webhook
 payloads, and a single test rule have been verified against a real Meta test
 account.
 
+Keep `INSTAGRAM_AUTO_DM_SEND_ENABLED=false` while verifying OAuth and webhook
+payload receipt. Only switch it to `true` after the connected account receives
+real `comments` and `messages` webhook payloads and the payload shapes have
+been reviewed.
+
 `POSTY_PUBLIC_BASE_URL` is used only by server-side DM delivery to build public
 share material links. Configure it to the canonical app origin, for example
 `https://project-zzg5e.vercel.app`, without a trailing slash. Do not derive DM
@@ -127,6 +132,18 @@ Planned webhook subscriptions:
 - `messages`
 - Messaging postback-related fields if required after the Quick Reply
   feasibility test
+
+These app-level fields must be selected in the Meta Dashboard. After OAuth
+completes, Posty also subscribes the connected Instagram Professional account
+itself by calling:
+
+- `POST https://graph.instagram.com/v25.0/me/subscribed_apps`
+- `subscribed_fields=comments,messages`
+
+Existing connected accounts that were linked before this account-level
+subscription step was added should be reconnected from `/auto-dm` with the
+reconnect action. Reconnecting runs the OAuth callback again and applies the
+account-level webhook subscription before the connection metadata is saved.
 
 The comment payload parser currently accepts the documented comments and
 live-comments change shape, including object or array values. Actual payload

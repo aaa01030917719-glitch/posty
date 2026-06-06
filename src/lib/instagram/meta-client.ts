@@ -4,7 +4,9 @@ const INSTAGRAM_AUTHORIZE_ENDPOINT = 'https://www.instagram.com/oauth/authorize'
 const INSTAGRAM_TOKEN_ENDPOINT = 'https://api.instagram.com/oauth/access_token'
 const INSTAGRAM_GRAPH_ENDPOINT = 'https://graph.instagram.com'
 const INSTAGRAM_GRAPH_API_VERSION = 'v23.0'
+const INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION = 'v25.0'
 const FETCH_TIMEOUT_MS = 10_000
+const INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS = ['comments', 'messages'] as const
 
 export const INSTAGRAM_OAUTH_SCOPES = [
   'instagram_business_basic',
@@ -32,6 +34,10 @@ type InstagramAccountResponse = {
   id?: string
   user_id?: string
   username?: string
+}
+
+type InstagramWebhookSubscriptionResponse = {
+  success?: boolean
 }
 
 type PrivateReplyResponse = {
@@ -204,6 +210,24 @@ export async function getInstagramProfessionalAccount(accessToken: string) {
   return {
     accountId,
     username: data.username,
+  }
+}
+
+export async function subscribeInstagramAccountToWebhooks(accessToken: string) {
+  const url = new URL(
+    `/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/me/subscribed_apps`,
+    INSTAGRAM_GRAPH_ENDPOINT
+  )
+
+  url.searchParams.set('subscribed_fields', INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS.join(','))
+
+  const data = await fetchInstagramJson<InstagramWebhookSubscriptionResponse>(url.toString(), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+
+  if (data.success !== true) {
+    throw new InstagramMetaError('Instagram webhook subscription response is incomplete')
   }
 }
 
