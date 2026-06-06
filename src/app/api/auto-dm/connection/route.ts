@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server'
-import { hasInstagramOAuthConfiguration } from '@/lib/instagram/meta-client'
+import {
+  getInstagramAccountWebhookSubscriptions,
+  hasInstagramOAuthConfiguration,
+} from '@/lib/instagram/meta-client'
+import { decryptInstagramAccessToken } from '@/lib/instagram/token-crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 
@@ -24,6 +28,8 @@ export async function GET() {
       instagramUsername: null,
       tokenExpiresAt: null,
       connectedAt: null,
+      webhookSubscribed: false,
+      subscribedFields: [],
     })
   }
 
@@ -31,7 +37,7 @@ export async function GET() {
     const admin = createAdminClient()
     const { data: connection, error: connectionError } = await admin
       .from('instagram_connections')
-      .select('id,instagram_username,token_expires_at,connected_at')
+      .select('id,instagram_professional_account_id,instagram_username,token_expires_at,connected_at')
       .eq('user_id', user.id)
       .order('connected_at', { ascending: false })
       .limit(1)
@@ -48,17 +54,38 @@ export async function GET() {
         instagramUsername: null,
         tokenExpiresAt: null,
         connectedAt: null,
+        webhookSubscribed: false,
+        subscribedFields: [],
       })
     }
 
     const { data: secret, error: secretError } = await admin
       .from('instagram_connection_secrets')
-      .select('id')
+      .select('id,access_token_ciphertext')
       .eq('instagram_connection_id', connection.id)
       .maybeSingle()
 
     if (secretError) {
       throw new Error('Instagram connection credential state could not be loaded')
+    }
+
+    let webhookSubscribed = false
+    let subscribedFields: string[] = []
+
+    if (secret?.access_token_ciphertext) {
+      try {
+        const accessToken = decryptInstagramAccessToken(secret.access_token_ciphertext)
+        const subscription = await getInstagramAccountWebhookSubscriptions({
+          instagramProfessionalAccountId: connection.instagram_professional_account_id,
+          accessToken,
+        })
+
+        webhookSubscribed = subscription.webhookSubscribed
+        subscribedFields = subscription.subscribedFields
+      } catch {
+        webhookSubscribed = false
+        subscribedFields = []
+      }
     }
 
     return NextResponse.json({
@@ -67,6 +94,8 @@ export async function GET() {
       instagramUsername: connection.instagram_username,
       tokenExpiresAt: connection.token_expires_at,
       connectedAt: connection.connected_at,
+      webhookSubscribed,
+      subscribedFields,
     })
   } catch {
     return NextResponse.json(
@@ -76,6 +105,8 @@ export async function GET() {
         instagramUsername: null,
         tokenExpiresAt: null,
         connectedAt: null,
+        webhookSubscribed: false,
+        subscribedFields: [],
         error: 'Connection status is unavailable',
       },
       { status: 500 }

@@ -137,13 +137,24 @@ These app-level fields must be selected in the Meta Dashboard. After OAuth
 completes, Posty also subscribes the connected Instagram Professional account
 itself by calling:
 
-- `POST https://graph.instagram.com/v25.0/me/subscribed_apps`
+- `POST https://graph.instagram.com/v25.0/{ig_user_id}/subscribed_apps`
 - `subscribed_fields=comments,messages`
+
+Posty uses the explicit Instagram Professional account ID returned by the
+metadata lookup, not the `/me` alias. After the POST succeeds, the OAuth
+callback verifies the subscription with:
+
+- `GET https://graph.instagram.com/v25.0/{ig_user_id}/subscribed_apps`
 
 Existing connected accounts that were linked before this account-level
 subscription step was added should be reconnected from `/auto-dm` with the
 reconnect action. Reconnecting runs the OAuth callback again and applies the
 account-level webhook subscription before the connection metadata is saved.
+
+The `/auto-dm` connection card also checks this read-only subscription state.
+Dashboard test sends only verify that the callback endpoint is reachable; they
+do not prove that a real connected account is subscribed to receive comment
+events.
 
 The comment payload parser currently accepts the documented comments and
 live-comments change shape, including object or array values. Actual payload

@@ -20,6 +20,8 @@ type InstagramConnectionStatus = {
   instagramUsername: string | null
   tokenExpiresAt: string | null
   connectedAt: string | null
+  webhookSubscribed: boolean
+  subscribedFields: string[]
 }
 
 const EMPTY_CONNECTION_STATUS: InstagramConnectionStatus = {
@@ -28,6 +30,8 @@ const EMPTY_CONNECTION_STATUS: InstagramConnectionStatus = {
   instagramUsername: null,
   tokenExpiresAt: null,
   connectedAt: null,
+  webhookSubscribed: false,
+  subscribedFields: [],
 }
 
 const INSTAGRAM_QUERY_MESSAGES: Record<string, string> = {
@@ -69,6 +73,10 @@ export default function AutoDmPage() {
               typeof data.tokenExpiresAt === 'string' ? data.tokenExpiresAt : null,
             connectedAt:
               typeof data.connectedAt === 'string' ? data.connectedAt : null,
+            webhookSubscribed: data.webhookSubscribed === true,
+            subscribedFields: Array.isArray(data.subscribedFields)
+              ? data.subscribedFields.filter((field): field is string => typeof field === 'string')
+              : [],
           })
         }
       } catch {
@@ -113,6 +121,12 @@ export default function AutoDmPage() {
       ? `연결일 ${formatDateTime(connection.connectedAt)} · 토큰 만료 ${formatDateTime(connection.tokenExpiresAt)}`
       : '자동 DM을 사용하려면 Instagram 프로페셔널 계정 연결이 필요합니다'
 
+  const webhookDescription = connection.connected
+    ? connection.webhookSubscribed
+      ? `Webhook 연결됨 · ${connection.subscribedFields.join(', ')}`
+      : 'Webhook 재연결 필요 · 다시 연결하기를 완료해주세요'
+    : null
+
   function startInstagramConnection() {
     window.location.assign('/api/meta/instagram/oauth/start')
   }
@@ -149,6 +163,18 @@ export default function AutoDmPage() {
             <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
               {connectionDescription}
             </p>
+            {webhookDescription ? (
+              <p
+                className={clsx(
+                  'mt-1 text-xs leading-5',
+                  connection.webhookSubscribed
+                    ? 'text-[var(--color-text-muted)]'
+                    : 'text-[var(--color-danger)]'
+                )}
+              >
+                {webhookDescription}
+              </p>
+            ) : null}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">

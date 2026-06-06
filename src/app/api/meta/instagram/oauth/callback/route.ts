@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import {
   exchangeCodeForShortLivedToken,
   exchangeForLongLivedToken,
+  getInstagramAccountWebhookSubscriptions,
   getInstagramProfessionalAccount,
   hasInstagramOAuthConfiguration,
   subscribeInstagramAccountToWebhooks,
@@ -56,7 +57,19 @@ export async function GET(request: NextRequest) {
     const shortLivedToken = await exchangeCodeForShortLivedToken(code)
     const longLivedToken = await exchangeForLongLivedToken(shortLivedToken)
     const account = await getInstagramProfessionalAccount(longLivedToken.accessToken)
-    await subscribeInstagramAccountToWebhooks(longLivedToken.accessToken)
+    await subscribeInstagramAccountToWebhooks({
+      instagramProfessionalAccountId: account.accountId,
+      accessToken: longLivedToken.accessToken,
+    })
+    const webhookSubscription = await getInstagramAccountWebhookSubscriptions({
+      instagramProfessionalAccountId: account.accountId,
+      accessToken: longLivedToken.accessToken,
+    })
+
+    if (!webhookSubscription.webhookSubscribed) {
+      throw new Error('Instagram webhook subscription could not be verified')
+    }
+
     const encryptedToken = encryptInstagramAccessToken(longLivedToken.accessToken)
     const admin = createAdminClient()
     const now = new Date().toISOString()

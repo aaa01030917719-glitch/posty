@@ -40,6 +40,17 @@ type InstagramWebhookSubscriptionResponse = {
   success?: boolean
 }
 
+type InstagramWebhookSubscriptionListResponse = {
+  data?: Array<{
+    subscribed_fields?: unknown
+  }>
+}
+
+type InstagramWebhookSubscriptionState = {
+  webhookSubscribed: boolean
+  subscribedFields: string[]
+}
+
 type PrivateReplyResponse = {
   message_id?: string
   recipient_id?: string
@@ -213,22 +224,69 @@ export async function getInstagramProfessionalAccount(accessToken: string) {
   }
 }
 
-export async function subscribeInstagramAccountToWebhooks(accessToken: string) {
+function normalizeSubscribedFields(data: InstagramWebhookSubscriptionListResponse) {
+  const allowedFields = new Set<string>(INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS)
+  const fields = new Set<string>()
+
+  for (const subscription of data.data ?? []) {
+    if (!Array.isArray(subscription.subscribed_fields)) continue
+
+    for (const field of subscription.subscribed_fields) {
+      if (typeof field === 'string' && allowedFields.has(field)) {
+        fields.add(field)
+      }
+    }
+  }
+
+  return [...fields]
+}
+
+function toWebhookSubscriptionState(
+  subscribedFields: string[]
+): InstagramWebhookSubscriptionState {
+  return {
+    webhookSubscribed: INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS.every((field) =>
+      subscribedFields.includes(field)
+    ),
+    subscribedFields,
+  }
+}
+
+export async function subscribeInstagramAccountToWebhooks(input: {
+  instagramProfessionalAccountId: string
+  accessToken: string
+}) {
   const url = new URL(
-    `/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/me/subscribed_apps`,
+    `/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/${encodeURIComponent(input.instagramProfessionalAccountId)}/subscribed_apps`,
     INSTAGRAM_GRAPH_ENDPOINT
   )
 
   url.searchParams.set('subscribed_fields', INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS.join(','))
+  url.searchParams.set('access_token', input.accessToken)
 
   const data = await fetchInstagramJson<InstagramWebhookSubscriptionResponse>(url.toString(), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
   })
 
   if (data.success !== true) {
     throw new InstagramMetaError('Instagram webhook subscription response is incomplete')
   }
+}
+
+export async function getInstagramAccountWebhookSubscriptions(input: {
+  instagramProfessionalAccountId: string
+  accessToken: string
+}) {
+  const url = new URL(
+    `/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/${encodeURIComponent(input.instagramProfessionalAccountId)}/subscribed_apps`,
+    INSTAGRAM_GRAPH_ENDPOINT
+  )
+
+  url.searchParams.set('access_token', input.accessToken)
+
+  const data = await fetchInstagramJson<InstagramWebhookSubscriptionListResponse>(url.toString())
+
+  return toWebhookSubscriptionState(normalizeSubscribedFields(data))
 }
 
 export async function sendInstagramPrivateReply(input: {
