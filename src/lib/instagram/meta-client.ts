@@ -81,6 +81,11 @@ type TextMessageResponse = {
 
 type InstagramMediaListResponse = {
   data?: InstagramMediaResponse[]
+  paging?: {
+    cursors?: {
+      after?: string
+    }
+  }
 }
 
 type InstagramMediaResponse = {
@@ -332,32 +337,49 @@ export async function listInstagramRecentMedia(input: {
   instagramProfessionalAccountId: string
   accessToken: string
   limit?: number
+  maxPages?: number
 }) {
-  const url = new URL(
-    `/${INSTAGRAM_MEDIA_API_VERSION}/${encodeURIComponent(input.instagramProfessionalAccountId)}/media`,
-    INSTAGRAM_GRAPH_ENDPOINT
-  )
+  const media: InstagramMediaResponse[] = []
+  const fields = [
+    'id',
+    'caption',
+    'media_type',
+    'media_product_type',
+    'permalink',
+    'thumbnail_url',
+    'media_url',
+    'timestamp',
+  ].join(',')
+  const limit = input.limit ?? 25
+  const maxPages = input.maxPages ?? 1
+  let after: string | null = null
 
-  url.searchParams.set(
-    'fields',
-    [
-      'id',
-      'caption',
-      'media_type',
-      'media_product_type',
-      'permalink',
-      'thumbnail_url',
-      'media_url',
-      'timestamp',
-    ].join(',')
-  )
-  url.searchParams.set('limit', String(input.limit ?? 25))
+  for (let page = 0; page < maxPages; page += 1) {
+    const url = new URL(
+      `/${INSTAGRAM_MEDIA_API_VERSION}/${encodeURIComponent(input.instagramProfessionalAccountId)}/media`,
+      INSTAGRAM_GRAPH_ENDPOINT
+    )
 
-  const data = await fetchInstagramJson<InstagramMediaListResponse>(url.toString(), {
-    headers: { Authorization: `Bearer ${input.accessToken}` },
-  })
+    url.searchParams.set('fields', fields)
+    url.searchParams.set('limit', String(limit))
 
-  return (data.data ?? [])
+    if (after) {
+      url.searchParams.set('after', after)
+    }
+
+    const data = await fetchInstagramJson<InstagramMediaListResponse>(url.toString(), {
+      headers: { Authorization: `Bearer ${input.accessToken}` },
+    })
+
+    media.push(...(data.data ?? []))
+    after = data.paging?.cursors?.after ?? null
+
+    if (!after || (data.data ?? []).length === 0) {
+      break
+    }
+  }
+
+  return media
     .flatMap((media): InstagramRecentMedia[] => {
       if (!media.id) return []
 

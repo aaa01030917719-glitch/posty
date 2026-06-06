@@ -288,9 +288,48 @@ Quick Reply feasibility test order:
 
 ## Rule Media Picker
 
-When creating or editing an auto-DM rule, Posty loads the connected Instagram
-Professional account's recent media server-side and returns only safe list
-metadata to the browser. The server uses:
+When creating or editing an auto-DM rule, the primary input is the Instagram
+post or Reel URL. Posty normalizes the submitted URL by removing query strings
+and hashes, accepting only `instagram.com` or `www.instagram.com`, and accepting
+only `/p/` and `/reel/` paths. Posty does not scrape Instagram pages and does
+not decode shortcodes into media IDs.
+
+The URL resolve endpoint is:
+
+- `POST /api/auto-dm/media/resolve`
+
+The server verifies the logged-in user, loads the user's connected Instagram
+Professional account, decrypts the server-only token, fetches owned recent
+media, and compares normalized permalinks. It returns only safe metadata:
+
+- `id`
+- `mediaType`
+- `apiMediaType`
+- `permalink`
+- `thumbnailUrl`
+- `captionPreview`
+- `timestamp`
+
+The resolver searches at most three pages of 25 media items, so the current
+bounded search limit is 75 recent media items. This keeps the operation
+predictable and avoids unbounded pagination. If an older post is outside that
+range, use the recent media picker or the collapsed troubleshooting fields.
+
+The rule modal stores the existing rule payload fields unchanged:
+
+- `mediaId`
+- `mediaType`
+- `mediaPermalink`
+- `mediaPreviewUrl`
+
+Users no longer enter Media ID, media type, or thumbnail URL as primary fields.
+Those values are filled from URL resolve or from the recent media picker. The
+collapsed troubleshooting section keeps direct entry available for operator
+recovery only.
+
+As a secondary helper, Posty also loads the connected Instagram Professional
+account's recent media server-side and returns only safe list metadata to the
+browser. The server uses:
 
 - `GET https://graph.instagram.com/v25.0/{ig_user_id}/media`
 - fields: `id`, `caption`, `media_type`, `media_product_type`, `permalink`,

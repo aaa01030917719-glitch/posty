@@ -1,7 +1,13 @@
 'use client'
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { AlertCircle, CheckCircle2, ImageIcon, LoaderCircle, RefreshCw } from 'lucide-react'
+import {
+  AlertCircle,
+  CheckCircle2,
+  ImageIcon,
+  LoaderCircle,
+  RefreshCw,
+} from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 
@@ -55,6 +61,8 @@ type RuleForm = {
   enabled: boolean
 }
 
+type ResolveStatus = 'idle' | 'loading' | 'success' | 'error'
+
 const DEFAULT_FORM: RuleForm = {
   title: '',
   mediaType: 'REEL',
@@ -63,9 +71,10 @@ const DEFAULT_FORM: RuleForm = {
   mediaPreviewUrl: '',
   keyword: '',
   shareLinkId: '',
-  initialPrivateReplyMessage: '자료는 팔로우 확인 후 보내드려요🙂 계정을 팔로우한 뒤 DM으로 팔로우완료라고 답장해주세요',
+  initialPrivateReplyMessage:
+    '자료는 팔로우 확인 후 보내드려요🙂 아래 자료 받기 버튼을 눌러주세요',
   publicCommentReplyMessage: 'DM 보내드렸어요🙂 메시지 요청함도 확인해주세요',
-  followRequiredMessage: '아직 팔로우가 확인되지 않았어요🙂 팔로우 후 팔로우완료라고 다시 답장해주세요',
+  followRequiredMessage: '계정을 팔로우한 뒤 아래 버튼을 눌러주세요🙂',
   materialDeliveryMessage: '요청하신 자료를 보내드릴게요🙂 {link}',
   enabled: true,
 }
@@ -85,31 +94,41 @@ export function AutoDmRuleModal({
   onClose,
   onSaved,
 }: AutoDmRuleModalProps) {
-  const [form, setForm] = useState(DEFAULT_FORM)
+  const [form, setForm] = useState<RuleForm>({ ...DEFAULT_FORM })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mediaOptions, setMediaOptions] = useState<InstagramMediaOption[]>([])
   const [mediaLoading, setMediaLoading] = useState(false)
   const [mediaError, setMediaError] = useState<string | null>(null)
+  const [resolveStatus, setResolveStatus] = useState<ResolveStatus>('idle')
+  const [resolveMessage, setResolveMessage] = useState<string | null>(null)
+  const [lastResolvedUrl, setLastResolvedUrl] = useState('')
 
   useEffect(() => {
     if (!isOpen) return
 
-    setForm(rule ? {
-      title: rule.title,
-      mediaType: rule.mediaType,
-      mediaId: rule.mediaId,
-      mediaPermalink: rule.mediaPermalink ?? '',
-      mediaPreviewUrl: rule.mediaPreviewUrl ?? '',
-      keyword: rule.keyword,
-      shareLinkId: rule.shareLinkId ?? '',
-      initialPrivateReplyMessage: rule.initialPrivateReplyMessage,
-      publicCommentReplyMessage: rule.publicCommentReplyMessage,
-      followRequiredMessage: rule.followRequiredMessage,
-      materialDeliveryMessage: rule.materialDeliveryMessage,
-      enabled: rule.enabled,
-    } : DEFAULT_FORM)
+    const nextForm = rule
+      ? {
+          title: rule.title,
+          mediaType: rule.mediaType,
+          mediaId: rule.mediaId,
+          mediaPermalink: rule.mediaPermalink ?? '',
+          mediaPreviewUrl: rule.mediaPreviewUrl ?? '',
+          keyword: rule.keyword,
+          shareLinkId: rule.shareLinkId ?? '',
+          initialPrivateReplyMessage: rule.initialPrivateReplyMessage,
+          publicCommentReplyMessage: rule.publicCommentReplyMessage,
+          followRequiredMessage: rule.followRequiredMessage,
+          materialDeliveryMessage: rule.materialDeliveryMessage,
+          enabled: rule.enabled,
+        }
+      : { ...DEFAULT_FORM }
+
+    setForm(nextForm)
     setError(null)
+    setResolveStatus(rule?.mediaId ? 'success' : 'idle')
+    setResolveMessage(rule?.mediaId ? '저장된 게시물 정보를 사용합니다' : null)
+    setLastResolvedUrl(nextForm.mediaPermalink)
   }, [isOpen, rule])
 
   useEffect(() => {
@@ -127,26 +146,76 @@ export function AutoDmRuleModal({
       const data = await response.json() as { media?: InstagramMediaOption[]; error?: string }
 
       if (!response.ok) {
-        throw new Error(data.error ?? 'Instagram 게시물을 불러오지 못했습니다')
+        throw new Error(data.error ?? 'Instagram 게시물을 불러오지 못했어요')
       }
 
       setMediaOptions(data.media ?? [])
     } catch (loadError) {
-      setMediaError(loadError instanceof Error ? loadError.message : 'Instagram 게시물을 불러오지 못했습니다')
+      setMediaError(loadError instanceof Error ? loadError.message : 'Instagram 게시물을 불러오지 못했어요')
       setMediaOptions([])
     } finally {
       setMediaLoading(false)
     }
   }
 
-  function selectMedia(media: InstagramMediaOption) {
-    setForm({
-      ...form,
+  function applyMedia(media: InstagramMediaOption) {
+    setForm((current) => ({
+      ...current,
       mediaId: media.id,
       mediaType: media.mediaType,
       mediaPermalink: media.permalink ?? '',
       mediaPreviewUrl: media.thumbnailUrl ?? '',
-    })
+    }))
+    setResolveStatus('success')
+    setResolveMessage('게시물을 확인했어요')
+    setLastResolvedUrl(media.permalink ?? '')
+  }
+
+  function handlePermalinkChange(value: string) {
+    setForm((current) => ({
+      ...current,
+      mediaPermalink: value,
+      mediaId: '',
+      mediaPreviewUrl: '',
+    }))
+    setResolveStatus(value.trim() ? 'idle' : 'idle')
+    setResolveMessage(null)
+  }
+
+  async function resolveMediaUrl(url = form.mediaPermalink) {
+    const trimmedUrl = url.trim()
+
+    if (!trimmedUrl || resolveStatus === 'loading' || trimmedUrl === lastResolvedUrl) return
+
+    setResolveStatus('loading')
+    setResolveMessage('게시물을 확인하고 있어요')
+    setError(null)
+
+    try {
+      const response = await fetch('/api/auto-dm/media/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: trimmedUrl }),
+      })
+      const data = await response.json() as {
+        media?: InstagramMediaOption
+        error?: string
+        searchLimit?: number
+      }
+
+      if (!response.ok || !data.media) {
+        throw new Error(data.error ?? '연결된 Instagram 계정의 게시물을 찾지 못했어요')
+      }
+
+      applyMedia(data.media)
+    } catch (resolveError) {
+      setResolveStatus('error')
+      setResolveMessage(
+        resolveError instanceof Error
+          ? resolveError.message
+          : '연결된 Instagram 계정의 게시물을 찾지 못했어요'
+      )
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -157,7 +226,7 @@ export function AutoDmRuleModal({
     const keyword = form.keyword.trim()
 
     if (!mediaId || !keyword) {
-      setError('미디어와 감지 키워드를 선택 또는 입력해주세요')
+      setError('Instagram 게시물 URL을 확인하고 감지 키워드를 입력해주세요')
       return
     }
 
@@ -178,13 +247,13 @@ export function AutoDmRuleModal({
       const data = await response.json() as { rule?: AutoDmRule; error?: string }
 
       if (!response.ok || !data.rule) {
-        throw new Error(data.error ?? '자동 DM 규칙을 저장하지 못했습니다')
+        throw new Error(data.error ?? '자동 DM 규칙을 저장하지 못했어요')
       }
 
       onSaved(data.rule)
       onClose()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : '자동 DM 규칙을 저장하지 못했습니다')
+      setError(saveError instanceof Error ? saveError.message : '자동 DM 규칙을 저장하지 못했어요')
     } finally {
       setSaving(false)
     }
@@ -208,8 +277,12 @@ export function AutoDmRuleModal({
           mediaOptions={mediaOptions}
           mediaLoading={mediaLoading}
           mediaError={mediaError}
+          resolveStatus={resolveStatus}
+          resolveMessage={resolveMessage}
           onRefresh={loadMediaOptions}
-          onSelect={selectMedia}
+          onResolve={resolveMediaUrl}
+          onPermalinkChange={handlePermalinkChange}
+          onSelect={applyMedia}
           onChange={setForm}
         />
 
@@ -248,7 +321,11 @@ function MediaPicker({
   mediaOptions,
   mediaLoading,
   mediaError,
+  resolveStatus,
+  resolveMessage,
   onRefresh,
+  onResolve,
+  onPermalinkChange,
   onSelect,
   onChange,
 }: {
@@ -257,54 +334,98 @@ function MediaPicker({
   mediaOptions: InstagramMediaOption[]
   mediaLoading: boolean
   mediaError: string | null
+  resolveStatus: ResolveStatus
+  resolveMessage: string | null
   onRefresh: () => void
+  onResolve: (url?: string) => void
+  onPermalinkChange: (value: string) => void
   onSelect: (media: InstagramMediaOption) => void
   onChange: (form: RuleForm) => void
 }) {
   return (
     <section className="space-y-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="text-xs font-semibold text-[var(--color-text-secondary)]">Instagram 게시물 선택 *</h3>
-          <p className="mt-1 text-[11px] leading-4 text-[var(--color-text-muted)]">
-            최근 게시물과 릴스 중 자동 DM을 적용할 대상을 선택하세요.
-          </p>
+      <Field label="Instagram 게시물 URL *">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            required={!form.mediaId}
+            type="url"
+            value={form.mediaPermalink}
+            placeholder="https://www.instagram.com/reel/..."
+            onChange={(event) => onPermalinkChange(event.target.value)}
+            onBlur={() => onResolve()}
+            onPaste={(event) => {
+              const pasted = event.clipboardData.getData('text')
+              if (pasted) {
+                window.setTimeout(() => onResolve(pasted), 0)
+              }
+            }}
+            className={inputClass}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={resolveStatus === 'loading' || !form.mediaPermalink.trim()}
+            onClick={() => onResolve()}
+            className="shrink-0"
+          >
+            {resolveStatus === 'loading' ? <LoaderCircle size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+            확인
+          </Button>
         </div>
-        <Button type="button" variant="secondary" size="sm" disabled={mediaLoading} onClick={onRefresh}>
-          <RefreshCw size={14} className={mediaLoading ? 'animate-spin' : undefined} />
-          새로고침
-        </Button>
+        {resolveMessage ? (
+          <span className={`font-normal ${resolveStatus === 'error' ? 'text-[var(--color-danger)]' : 'text-[var(--color-text-muted)]'}`}>
+            {resolveMessage}
+          </span>
+        ) : null}
+        {rule && form.mediaId && resolveStatus !== 'error' ? (
+          <span className="font-normal text-[var(--color-text-muted)]">
+            기존 게시물이 최근 검색 범위 밖이어도 저장된 값은 유지됩니다
+          </span>
+        ) : null}
+      </Field>
+
+      <div className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-xs font-semibold text-[var(--color-text-secondary)]">최근 게시물에서 선택</h3>
+            <p className="mt-1 text-[11px] leading-4 text-[var(--color-text-muted)]">
+              URL 입력이 어려울 때 연결된 계정의 최근 게시물에서 선택할 수 있습니다.
+            </p>
+          </div>
+          <Button type="button" variant="secondary" size="sm" disabled={mediaLoading} onClick={onRefresh}>
+            <RefreshCw size={14} className={mediaLoading ? 'animate-spin' : undefined} />
+            새로고침
+          </Button>
+        </div>
+
+        {mediaLoading ? (
+          <div className="flex min-h-36 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-soft)] text-[var(--color-text-muted)]">
+            <LoaderCircle className="animate-spin" size={18} />
+          </div>
+        ) : mediaError ? (
+          <div className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] px-3 py-2 text-xs leading-5 text-[var(--color-danger)]">
+            <AlertCircle size={14} className="mt-0.5 shrink-0" />
+            <span>{mediaError}</span>
+          </div>
+        ) : mediaOptions.length === 0 ? (
+          <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-soft)] px-3 py-6 text-center text-xs leading-5 text-[var(--color-text-muted)]">
+            최근 게시물 목록이 없습니다. Instagram에 게시물이 없거나 목록을 불러올 수 없습니다.
+          </div>
+        ) : (
+          <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+            {mediaOptions.map((media) => <MediaCard key={media.id} media={media} selected={form.mediaId === media.id} onSelect={onSelect} />)}
+          </div>
+        )}
       </div>
-
-      {mediaLoading ? (
-        <div className="flex min-h-36 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-soft)] text-[var(--color-text-muted)]">
-          <LoaderCircle className="animate-spin" size={18} />
-        </div>
-      ) : mediaError ? (
-        <div className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] px-3 py-2 text-xs leading-5 text-[var(--color-danger)]">
-          <AlertCircle size={14} className="mt-0.5 shrink-0" />
-          <span>{mediaError}</span>
-        </div>
-      ) : mediaOptions.length === 0 ? (
-        <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-soft)] px-3 py-6 text-center text-xs leading-5 text-[var(--color-text-muted)]">
-          최근 게시물 목록이 없습니다. Instagram에 게시물이 없거나 목록을 불러올 수 없습니다.
-        </div>
-      ) : (
-        <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-          {mediaOptions.map((media) => <MediaCard key={media.id} media={media} selected={form.mediaId === media.id} onSelect={onSelect} />)}
-        </div>
-      )}
-
-      {rule && !mediaOptions.some((media) => media.id === form.mediaId) && form.mediaId ? (
-        <p className="rounded-[var(--radius-md)] bg-[var(--color-bg-subtle)] px-3 py-2 text-[11px] leading-5 text-[var(--color-text-muted)]">
-          기존 규칙의 미디어가 최근 25개 목록에 없어 저장된 값을 유지합니다.
-        </p>
-      ) : null}
 
       <details className="rounded-[var(--radius-md)] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-3 py-2">
         <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-secondary)]">
-          직접 입력 값 확인
+          문제 해결용 직접 입력
         </summary>
+        <p className="mt-2 text-[11px] leading-5 text-[var(--color-text-muted)]">
+          최근 검색 범위에서 찾지 못한 게시물을 운영자가 확인해야 할 때만 사용합니다.
+        </p>
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           <Field label="미디어 유형 *">
             <select value={form.mediaType} onChange={(event) => onChange({ ...form, mediaType: event.target.value as RuleForm['mediaType'] })} className={inputClass}>
@@ -313,13 +434,10 @@ function MediaPicker({
             </select>
           </Field>
           <Field label="Instagram 미디어 ID *">
-            <input required value={form.mediaId} onChange={(event) => onChange({ ...form, mediaId: event.target.value })} className={inputClass} />
+            <input value={form.mediaId} onChange={(event) => onChange({ ...form, mediaId: event.target.value })} className={inputClass} />
           </Field>
         </div>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Field label="미디어 링크">
-            <input type="url" value={form.mediaPermalink} onChange={(event) => onChange({ ...form, mediaPermalink: event.target.value })} className={inputClass} />
-          </Field>
+        <div className="mt-4">
           <Field label="썸네일 URL">
             <input type="url" value={form.mediaPreviewUrl} onChange={(event) => onChange({ ...form, mediaPreviewUrl: event.target.value })} className={inputClass} />
           </Field>
@@ -342,7 +460,7 @@ function MediaCard({
     <button
       type="button"
       onClick={() => onSelect(media)}
-      className={`grid grid-cols-[64px_minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border p-2 text-left outline-none transition-colors focus-visible:[box-shadow:var(--focus-ring)] ${selected ? 'border-[var(--color-accent)] bg-[color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-surface))]' : 'border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] hover:bg-[var(--color-bg-subtle)]'}`}
+      className={`grid grid-cols-[64px_minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border p-2 text-left outline-none transition-colors focus-visible:[box-shadow:var(--focus-ring)] ${selected ? 'border-[var(--color-accent)] bg-[color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-surface))]' : 'border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] hover:bg-[var(--color-bg-surface)]'}`}
     >
       <span className="relative flex aspect-square overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)]">
         {media.thumbnailUrl ? (
@@ -378,7 +496,17 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="flex flex-col gap-1.5 text-xs font-medium text-[var(--color-text-secondary)]">{label}{children}</label>
 }
 
-function MessageField({ label, description, value, onChange }: { label: string; description?: string; value: string; onChange: (value: string) => void }) {
+function MessageField({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string
+  description?: string
+  value: string
+  onChange: (value: string) => void
+}) {
   return (
     <Field label={label}>
       <textarea required rows={3} value={value} onChange={(event) => onChange(event.target.value)} className={inputClass} />
