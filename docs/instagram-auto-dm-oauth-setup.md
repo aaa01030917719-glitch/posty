@@ -178,8 +178,8 @@ The first outbound step sends an Instagram Private Reply with:
 - `recipient.comment_id` set to the original Instagram comment ID
 - `message.text` set to the rule's initial Private Reply message
 - `message.quick_replies` includes one text quick reply:
-  - title: `팔로우 했어요`
-  - payload: `POSTY_FOLLOW_CONFIRMED`
+  - title: `자료 받기`
+  - payload: `POSTY_REQUEST_MATERIAL`
 
 Private Reply is limited to one message per comment and must be sent within
 Meta's allowed window. Do not manually retry uncertain network outcomes without
@@ -206,16 +206,31 @@ DM was already sent.
 
 ## Follow Confirmation Delivery
 
-The messages webhook subscription is used for inbound Instagram DM text and
-Quick Reply payloads. Echo, self, deleted, unsupported, and messages that have
-neither text nor a Quick Reply payload are ignored during payload
-normalization.
+The messages webhook subscription is used for inbound Instagram DM text,
+Quick Reply payloads, and postback payloads. Echo, self, deleted, unsupported,
+and messages that have neither text nor a Quick Reply or postback payload are
+ignored during payload normalization.
 
-When a user taps the `팔로우 했어요` Quick Reply, the messages webhook should
-include `message.quick_reply.payload = POSTY_FOLLOW_CONFIRMED`. The delivery
-processor checks that payload first. If no payload is present, it falls back to
-DM text by trimming the value and removing all whitespace, so these user-entered
-forms are accepted:
+When a user taps the `자료 받기` Quick Reply, the messages webhook should include
+`message.quick_reply.payload = POSTY_REQUEST_MATERIAL`. Posty then checks the
+user profile follow status. If the user is already following the connected
+Instagram account, Posty sends the share material link immediately.
+
+If the user is not following yet, Posty sends a regular Instagram DM Button
+Template with:
+
+- `recipient.id` set to the messaging webhook sender IGSID
+- template text from the rule's follow-required message
+- one postback button:
+  - title: `팔로우 했어요`
+  - payload: `POSTY_FOLLOW_CONFIRMED`
+
+When a user taps the `팔로우 했어요` button, the messages webhook should include
+`postback.payload = POSTY_FOLLOW_CONFIRMED`. The delivery processor checks
+payloads first. It also keeps the earlier Quick Reply fallback payload
+`POSTY_FOLLOW_CONFIRMED` for compatibility. If no payload is present, it falls
+back to DM text by trimming the value and removing all whitespace, so these
+user-entered forms are accepted:
 
 - `팔로우완료`
 - `팔로우 완료`
@@ -234,11 +249,14 @@ webhook IGSID with the minimal fields:
 - `is_user_follow_business`
 
 User consent is required by Meta before profile data is available. Consent is
-established when the Instagram user sends a message to the connected account.
+established when the Instagram user sends a message, taps the `자료 받기` Quick
+Reply, or taps the follow-confirmation postback in the connected account's DM
+conversation. Posty does not check follow status immediately after the comment
+webhook because the commenter may not have granted messaging/profile access yet.
 
-If `is_user_follow_business` is false, Posty sends the rule's follow-required
-message and leaves the event waiting for follow. If true, Posty revalidates the
-linked `content_share_links` row immediately before sending:
+If `is_user_follow_business` is false, Posty sends the follow-confirmation
+Button Template and leaves the event waiting for follow. If true, Posty
+revalidates the linked `content_share_links` row immediately before sending:
 
 - the link exists
 - `is_enabled = true`
@@ -259,10 +277,14 @@ Quick Reply feasibility test order:
    verified, then enable it only for an approved test.
 2. Use a Meta test account to write a new keyword comment.
 3. Confirm the initial Private Reply is received.
-4. Check whether the `팔로우 했어요` Quick Reply button is displayed.
+4. Check whether the `자료 받기` Quick Reply button is displayed.
 5. Tap the button and confirm the messages webhook contains
+   `POSTY_REQUEST_MATERIAL`.
+6. If the test user is not following, confirm the follow-confirmation Button
+   Template displays the `팔로우 했어요` postback button.
+7. Tap the button and confirm the messages webhook contains
    `POSTY_FOLLOW_CONFIRMED`.
-6. Confirm the follow-status branch and material-link DM behavior.
+8. Confirm the follow-status branch and material-link DM behavior.
 
 ## Rule Media Picker
 

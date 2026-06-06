@@ -6,7 +6,9 @@ import type { InstagramMessagingNotification } from './webhook'
 import {
   getInstagramUserProfile,
   INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD,
+  INSTAGRAM_MATERIAL_REQUEST_QUICK_REPLY_PAYLOAD,
   InstagramMetaError,
+  sendInstagramFollowConfirmationButtonTemplate,
   sendInstagramTextMessage,
 } from './meta-client'
 import { isInstagramAutoDmSendEnabled } from './auto-dm-delivery'
@@ -235,7 +237,7 @@ export async function processFollowConfirmationMessage(
   if (!profile.isUserFollowingBusiness) {
     try {
       const followRequiredMessageStartedAt = Date.now()
-      await sendInstagramTextMessage({
+      await sendInstagramFollowConfirmationButtonTemplate({
         instagramProfessionalAccountId: connection.instagram_professional_account_id,
         recipientInstagramScopedId: notification.senderInstagramScopedId,
         messageText: rule.follow_required_message,
@@ -448,7 +450,11 @@ function safeFailureCode(error: unknown, fallback: string) {
 }
 
 function isFollowConfirmationTrigger(notification: InstagramMessagingNotification) {
-  if (notification.quickReplyPayload === INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD) {
+  if (
+    notification.quickReplyPayload === INSTAGRAM_MATERIAL_REQUEST_QUICK_REPLY_PAYLOAD ||
+    notification.quickReplyPayload === INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD ||
+    notification.postbackPayload === INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD
+  ) {
     return true
   }
 

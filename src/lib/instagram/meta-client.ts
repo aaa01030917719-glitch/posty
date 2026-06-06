@@ -14,6 +14,8 @@ const INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS = [
 ] as const
 export const INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_TITLE = '팔로우 했어요'
 export const INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD = 'POSTY_FOLLOW_CONFIRMED'
+export const INSTAGRAM_MATERIAL_REQUEST_QUICK_REPLY_TITLE = '자료 받기'
+export const INSTAGRAM_MATERIAL_REQUEST_QUICK_REPLY_PAYLOAD = 'POSTY_REQUEST_MATERIAL'
 
 export const INSTAGRAM_OAUTH_SCOPES = [
   'instagram_business_basic',
@@ -150,8 +152,13 @@ async function fetchInstagramJson<T>(url: string, init?: RequestInit) {
   return response.json() as Promise<T>
 }
 
-async function postInstagramJson<T>(path: string, accessToken: string, body: unknown) {
-  const url = new URL(`/${INSTAGRAM_GRAPH_API_VERSION}${path}`, INSTAGRAM_GRAPH_ENDPOINT)
+async function postInstagramJson<T>(
+  path: string,
+  accessToken: string,
+  body: unknown,
+  apiVersion = INSTAGRAM_GRAPH_API_VERSION
+) {
+  const url = new URL(`/${apiVersion}${path}`, INSTAGRAM_GRAPH_ENDPOINT)
 
   return fetchInstagramJson<T>(url.toString(), {
     method: 'POST',
@@ -390,8 +397,8 @@ export async function sendInstagramPrivateReply(input: {
         quick_replies: [
           {
             content_type: 'text',
-            title: INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_TITLE,
-            payload: INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD,
+            title: INSTAGRAM_MATERIAL_REQUEST_QUICK_REPLY_TITLE,
+            payload: INSTAGRAM_MATERIAL_REQUEST_QUICK_REPLY_PAYLOAD,
           },
         ],
       },
@@ -465,6 +472,47 @@ export async function sendInstagramTextMessage(input: {
 
   if (!data.message_id) {
     throw new InstagramMetaError('Instagram text message response is incomplete')
+  }
+
+  return {
+    messageId: data.message_id,
+    recipientId: data.recipient_id ?? null,
+  }
+}
+
+export async function sendInstagramFollowConfirmationButtonTemplate(input: {
+  instagramProfessionalAccountId: string
+  recipientInstagramScopedId: string
+  messageText: string
+  accessToken: string
+}) {
+  const data = await postInstagramJson<TextMessageResponse>(
+    `/${encodeURIComponent(input.instagramProfessionalAccountId)}/messages`,
+    input.accessToken,
+    {
+      recipient: { id: input.recipientInstagramScopedId },
+      message: {
+        attachment: {
+          type: 'template',
+          payload: {
+            template_type: 'button',
+            text: input.messageText,
+            buttons: [
+              {
+                type: 'postback',
+                title: INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_TITLE,
+                payload: INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD,
+              },
+            ],
+          },
+        },
+      },
+    },
+    INSTAGRAM_MEDIA_API_VERSION
+  )
+
+  if (!data.message_id) {
+    throw new InstagramMetaError('Instagram follow confirmation button response is incomplete')
   }
 
   return {

@@ -13,12 +13,14 @@ export type InstagramCommentNotification = {
 }
 
 export type InstagramMessagingNotification = {
+  notificationType: 'message' | 'postback'
   instagramProfessionalAccountId: string
   senderInstagramScopedId: string
   recipientInstagramProfessionalAccountId: string
   messageId: string
   messageText: string
   quickReplyPayload: string | null
+  postbackPayload: string | null
   timestamp: string | null
 }
 
@@ -46,6 +48,7 @@ export type MessagingNormalizationResult =
         | 'ignored_deleted'
         | 'ignored_unsupported'
         | 'ignored_empty_text'
+        | 'ignored_empty_payload'
     }
 
 function safeEqual(left: string, right: string) {
@@ -203,40 +206,48 @@ export function normalizeInstagramMessagingNotifications(payload: unknown) {
       const sender = asRecord(item?.sender)
       const recipient = asRecord(item?.recipient)
       const message = asRecord(item?.message)
+      const postback = asRecord(item?.postback)
       const quickReply = asRecord(message?.quick_reply)
 
-      if (!message) {
+      if (!message && !postback) {
         results.push({ skipped: 'unsupported_payload' })
         continue
       }
 
-      if (message.is_echo === true) {
+      if (message?.is_echo === true || postback?.is_echo === true) {
         results.push({ skipped: 'ignored_echo' })
         continue
       }
 
-      if (message.is_self === true) {
+      if (message?.is_self === true || postback?.is_self === true) {
         results.push({ skipped: 'ignored_self' })
         continue
       }
 
-      if (message.is_deleted === true) {
+      if (message?.is_deleted === true) {
         results.push({ skipped: 'ignored_deleted' })
         continue
       }
 
-      if (message.is_unsupported === true) {
+      if (message?.is_unsupported === true) {
         results.push({ skipped: 'ignored_unsupported' })
         continue
       }
 
       const senderId = stringValue(sender?.id)
       const recipientId = stringValue(recipient?.id)
-      const messageId = stringValue(message?.mid)
-      const messageText = stringValue(message?.text)?.trim() ?? ''
+      const messageId = stringValue(message?.mid) ?? stringValue(postback?.mid)
+      const postbackPayload = stringValue(postback?.payload)
+      const postbackTitle = stringValue(postback?.title)?.trim() ?? ''
+      const messageText = stringValue(message?.text)?.trim() ?? postbackTitle
       const quickReplyPayload = stringValue(quickReply?.payload)
 
-      if (!messageText && !quickReplyPayload) {
+      if (postback && !postbackPayload) {
+        results.push({ skipped: 'ignored_empty_payload' })
+        continue
+      }
+
+      if (!messageText && !quickReplyPayload && !postbackPayload) {
         results.push({ skipped: 'ignored_empty_text' })
         continue
       }
@@ -248,12 +259,14 @@ export function normalizeInstagramMessagingNotifications(payload: unknown) {
 
       results.push({
         notification: {
+          notificationType: postback ? 'postback' : 'message',
           instagramProfessionalAccountId: professionalAccountId,
           senderInstagramScopedId: senderId,
           recipientInstagramProfessionalAccountId: recipientId,
           messageId,
           messageText,
           quickReplyPayload,
+          postbackPayload,
           timestamp: timestampValue(item?.timestamp),
         },
       })
