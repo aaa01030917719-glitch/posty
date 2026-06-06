@@ -4,10 +4,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublicSharePage = pathname.startsWith('/share/content/')
+  const isPublicLegalPage = pathname === '/privacy-policy' || pathname === '/data-deletion'
   const isInstagramOauthCallback = pathname === '/api/meta/instagram/oauth/callback'
   const isInstagramWebhook = pathname === '/api/meta/instagram/webhook'
 
-  if (isPublicSharePage || isInstagramOauthCallback || isInstagramWebhook) {
+  if (isPublicSharePage || isPublicLegalPage || isInstagramOauthCallback || isInstagramWebhook) {
     return NextResponse.next({ request })
   }
 
