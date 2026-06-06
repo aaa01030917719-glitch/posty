@@ -8,6 +8,8 @@ export type AutoDmCommentProcessResult =
   | { status: 'ignored_connection_not_found' }
   | { status: 'ignored_rule_not_found' }
   | { status: 'ignored_keyword_not_matched' }
+  | { status: 'ignored_owner_comment' }
+  | { status: 'ignored_comment_reply' }
   | { status: 'duplicate_skipped' }
   | {
       status: 'failed'
@@ -22,7 +24,7 @@ export async function processInstagramComment(
     const admin = createAdminClient()
     const { data: connection, error: connectionError } = await admin
       .from('instagram_connections')
-      .select('id,user_id')
+      .select('id,user_id,instagram_professional_account_id')
       .eq('instagram_professional_account_id', notification.instagramProfessionalAccountId)
       .limit(1)
       .maybeSingle()
@@ -39,9 +41,20 @@ export async function processInstagramComment(
       return { status: 'ignored_connection_not_found' }
     }
 
+    if (
+      notification.commenterInstagramScopedId === connection.instagram_professional_account_id ||
+      notification.commenterInstagramScopedId === notification.instagramProfessionalAccountId
+    ) {
+      return { status: 'ignored_owner_comment' }
+    }
+
+    if (notification.isReply) {
+      return { status: 'ignored_comment_reply' }
+    }
+
     const { data: rule, error: ruleError } = await admin
       .from('instagram_auto_dm_rules')
-      .select('id,keyword')
+      .select('id,keyword,comment_trigger_mode')
       .eq('instagram_connection_id', connection.id)
       .eq('media_id', notification.mediaId)
       .eq('enabled', true)
@@ -59,7 +72,12 @@ export async function processInstagramComment(
       return { status: 'ignored_rule_not_found' }
     }
 
-    if (!normalizeMatchText(notification.commentText).includes(normalizeMatchText(rule.keyword))) {
+    const triggerMode = rule.comment_trigger_mode ?? 'keyword'
+
+    if (
+      triggerMode !== 'all_comments' &&
+      !normalizeMatchText(notification.commentText).includes(normalizeMatchText(rule.keyword ?? ''))
+    ) {
       return { status: 'ignored_keyword_not_matched' }
     }
 

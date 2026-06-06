@@ -340,6 +340,39 @@ owner user IDs, and any secret values. Manual Media ID entry remains available
 only as a fallback inside the rule modal, primarily for existing rules whose
 saved media is no longer in the most recent 25 items.
 
+## Comment Trigger Mode
+
+Auto-DM rules support two comment trigger modes:
+
+- `keyword`: the existing default. A top-level user comment must contain the
+  saved keyword after trimming and lowercasing before an event is created.
+- `all_comments`: a top-level user comment on the selected media creates an
+  event without keyword matching.
+
+Existing rules remain `keyword` after the manual SQL migration because the new
+`comment_trigger_mode` column defaults to `keyword`. New rules also default to
+`keyword`. In `keyword` mode the keyword remains required. In `all_comments`
+mode the rule stores `keyword = null` and the UI hides the keyword field.
+
+To avoid loops in `all_comments` mode, the webhook processor ignores:
+
+- comments whose commenter ID matches the connected Instagram Professional
+  account ID
+- comment webhook payloads that include a parent comment ID, treated as replies
+- duplicate comments blocked by the existing `(instagram_connection_id,
+  comment_id)` unique constraint
+
+The parser currently recognizes `parent_id` and `parent_comment_id` as reply
+metadata. Meta's official comment webhook examples document the comment ID,
+commenter IGSID, username, text, and media ID; parent/reply variants still need
+to be confirmed with production payloads before relying on reply exclusion as
+the only loop defense. Posty does not compare public reply text because message
+copy can change.
+
+Before deploying code that uses this mode, manually run:
+
+- `docs/supabase/add_instagram_auto_dm_comment_trigger_mode.sql`
+
 ## Latency Diagnostics
 
 Posty emits safe operational timing logs with the prefix:

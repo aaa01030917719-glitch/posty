@@ -7,6 +7,7 @@ type RouteContext = {
 }
 
 const MEDIA_TYPES = ['POST', 'REEL'] as const
+const COMMENT_TRIGGER_MODES = ['keyword', 'all_comments'] as const
 const ALLOWED_FIELDS = new Set([
   'title',
   'mediaId',
@@ -14,6 +15,7 @@ const ALLOWED_FIELDS = new Set([
   'mediaPermalink',
   'mediaPreviewUrl',
   'keyword',
+  'commentTriggerMode',
   'shareLinkId',
   'initialPrivateReplyMessage',
   'publicCommentReplyMessage',
@@ -24,6 +26,10 @@ const ALLOWED_FIELDS = new Set([
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function hasOwn(value: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(value, key)
 }
 
 function safeRule(rule: Record<string, unknown>) {
@@ -42,7 +48,8 @@ function safeRule(rule: Record<string, unknown>) {
     mediaType: rule.media_type,
     mediaPermalink: rule.media_permalink,
     mediaPreviewUrl: rule.media_preview_url,
-    keyword: rule.keyword,
+    keyword: rule.keyword ?? '',
+    commentTriggerMode: rule.comment_trigger_mode ?? 'keyword',
     shareLinkId: rule.share_link_id,
     shareMaterialTitle: card?.title ?? null,
     initialPrivateReplyMessage: rule.initial_private_reply_message,
@@ -71,6 +78,7 @@ const RULE_SELECT = `
   media_permalink,
   media_preview_url,
   keyword,
+  comment_trigger_mode,
   share_link_id,
   initial_private_reply_message,
   public_comment_reply_message,
@@ -98,6 +106,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   const updates: Record<string, unknown> = {}
+  const requestedMode = text(body.commentTriggerMode)
 
   for (const key of Object.keys(body)) {
     if (!ALLOWED_FIELDS.has(key)) continue
@@ -110,10 +119,39 @@ export async function PATCH(request: Request, context: RouteContext) {
       continue
     }
 
+    if (key === 'commentTriggerMode') {
+      if (
+        !COMMENT_TRIGGER_MODES.includes(
+          requestedMode as (typeof COMMENT_TRIGGER_MODES)[number]
+        )
+      ) {
+        return NextResponse.json({ error: '댓글 감지 방식을 확인해주세요' }, { status: 400 })
+      }
+      updates.comment_trigger_mode = requestedMode
+      if (requestedMode === 'all_comments' && !hasOwn(body, 'keyword')) {
+        updates.keyword = null
+      }
+      continue
+    }
+
     const value = text(body[key])
 
     if (key === 'mediaPermalink' || key === 'mediaPreviewUrl') {
       updates[key === 'mediaPermalink' ? 'media_permalink' : 'media_preview_url'] = value || null
+      continue
+    }
+
+    if (key === 'keyword') {
+      if (requestedMode === 'all_comments') {
+        updates.keyword = null
+        continue
+      }
+
+      if (!value) {
+        return NextResponse.json({ error: '감지 키워드를 입력해주세요' }, { status: 400 })
+      }
+
+      updates.keyword = value
       continue
     }
 
@@ -125,7 +163,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       title: 'title',
       mediaId: 'media_id',
       mediaType: 'media_type',
-      keyword: 'keyword',
       shareLinkId: 'share_link_id',
       initialPrivateReplyMessage: 'initial_private_reply_message',
       publicCommentReplyMessage: 'public_comment_reply_message',
@@ -142,6 +179,14 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   if (updates.media_type && !MEDIA_TYPES.includes(updates.media_type as (typeof MEDIA_TYPES)[number])) {
     return NextResponse.json({ error: '미디어 유형을 확인해주세요' }, { status: 400 })
+  }
+
+  if (
+    updates.comment_trigger_mode === 'keyword' &&
+    hasOwn(body, 'keyword') &&
+    typeof updates.keyword !== 'string'
+  ) {
+    return NextResponse.json({ error: '감지 키워드를 입력해주세요' }, { status: 400 })
   }
 
   if (
@@ -172,12 +217,12 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (error) {
     if (error.code === '23505') {
       return NextResponse.json(
-        { error: '이미 이 영상에 등록된 자동 DM 규칙이 있습니다' },
+        { error: '이미 이 대상에 등록된 자동 DM 규칙이 있습니다' },
         { status: 409 }
       )
     }
 
-    return NextResponse.json({ error: '자동 DM 규칙을 수정하지 못했습니다' }, { status: 500 })
+    return NextResponse.json({ error: '자동 DM 규칙을 수정하지 못했어요' }, { status: 500 })
   }
 
   if (!data) {
@@ -205,7 +250,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
     .maybeSingle()
 
   if (error) {
-    return NextResponse.json({ error: '자동 DM 규칙을 삭제하지 못했습니다' }, { status: 500 })
+    return NextResponse.json({ error: '자동 DM 규칙을 삭제하지 못했어요' }, { status: 500 })
   }
 
   if (!data) {

@@ -10,6 +10,8 @@ export type InstagramCommentNotification = {
   commenterUsername: string | null
   commentText: string
   mediaType: string | null
+  parentCommentId: string | null
+  isReply: boolean
 }
 
 export type InstagramMessagingNotification = {
@@ -133,6 +135,9 @@ export function normalizeInstagramCommentNotifications(payload: unknown): Commen
         const media = asRecord(value?.media)
         const commentId = stringValue(value?.id) ?? stringValue(value?.comment_id)
         const mediaId = stringValue(media?.id) ?? stringValue(value?.media_id)
+        const parentCommentId =
+          stringValue(value?.parent_id) ??
+          stringValue(value?.parent_comment_id)
         const commenterId =
           stringValue(from?.id) ??
           stringValue(value?.from_id) ??
@@ -176,6 +181,8 @@ export function normalizeInstagramCommentNotifications(payload: unknown): Commen
             mediaType:
               stringValue(media?.media_product_type) ??
               stringValue(value?.media_product_type),
+            parentCommentId,
+            isReply: Boolean(parentCommentId),
           },
         })
       }

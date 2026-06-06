@@ -159,6 +159,7 @@ export type InstagramAutoDmLifecycleStatus =
 
 export type InstagramAutoDmInitialReplyStatus = 'pending' | 'sent' | 'failed'
 export type InstagramAutoDmPublicReplyStatus = 'not_attempted' | 'pending' | 'sent' | 'failed'
+export type InstagramAutoDmCommentTriggerMode = 'keyword' | 'all_comments'
 export type InstagramAutoDmFollowStatus =
   | 'unknown'
   | 'pending'
@@ -188,7 +189,8 @@ export interface InstagramAutoDmRule {
   media_type: string
   media_permalink: string | null
   media_preview_url: string | null
-  keyword: string
+  keyword: string | null
+  comment_trigger_mode: InstagramAutoDmCommentTriggerMode
   initial_private_reply_message: string
   public_comment_reply_message: string
   follow_required_message: string

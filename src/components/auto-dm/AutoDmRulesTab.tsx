@@ -141,7 +141,9 @@ export function AutoDmRulesTab({ canCreate }: AutoDmRulesTabProps) {
                   <h3 className="truncate text-sm font-semibold text-[var(--color-text-primary)]">{rule.title}</h3>
                   <span className="rounded-full bg-[var(--color-bg-subtle)] px-2 py-0.5 text-[11px] text-[var(--color-text-muted)]">{rule.mediaType === 'REEL' ? '릴스' : '게시물'}</span>
                 </div>
-                <p className="mt-1 truncate text-xs text-[var(--color-text-secondary)]">미디어 {rule.mediaId} · 키워드 {rule.keyword}</p>
+                <p className="mt-1 truncate text-xs text-[var(--color-text-secondary)]">
+                  미디어 {rule.mediaId} · {formatTriggerMode(rule)}
+                </p>
                 <p className="mt-1 truncate text-[11px] text-[var(--color-text-muted)]">공유자료 {rule.shareMaterialTitle ?? '연결 해제됨'} · 최근 수정 {formatDate(rule.updatedAt)}</p>
               </div>
               <div className="flex gap-1 md:justify-end">
@@ -161,4 +163,10 @@ export function AutoDmRulesTab({ canCreate }: AutoDmRulesTabProps) {
 function formatDate(value: string) {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? '확인되지 않음' : new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(date)
+}
+
+function formatTriggerMode(rule: AutoDmRule) {
+  return rule.commentTriggerMode === 'all_comments'
+    ? '모든 댓글'
+    : `키워드 · ${rule.keyword}`
 }

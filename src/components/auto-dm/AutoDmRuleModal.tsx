@@ -19,6 +19,7 @@ export type AutoDmRule = {
   mediaPermalink: string | null
   mediaPreviewUrl: string | null
   keyword: string
+  commentTriggerMode?: 'keyword' | 'all_comments'
   shareLinkId: string | null
   shareMaterialTitle: string | null
   initialPrivateReplyMessage: string
@@ -53,6 +54,7 @@ type RuleForm = {
   mediaPermalink: string
   mediaPreviewUrl: string
   keyword: string
+  commentTriggerMode: 'keyword' | 'all_comments'
   shareLinkId: string
   initialPrivateReplyMessage: string
   publicCommentReplyMessage: string
@@ -70,6 +72,7 @@ const DEFAULT_FORM: RuleForm = {
   mediaPermalink: '',
   mediaPreviewUrl: '',
   keyword: '',
+  commentTriggerMode: 'keyword',
   shareLinkId: '',
   initialPrivateReplyMessage:
     '자료는 팔로우 확인 후 보내드려요🙂 아래 자료 받기 버튼을 눌러주세요',
@@ -115,6 +118,7 @@ export function AutoDmRuleModal({
           mediaPermalink: rule.mediaPermalink ?? '',
           mediaPreviewUrl: rule.mediaPreviewUrl ?? '',
           keyword: rule.keyword,
+          commentTriggerMode: rule.commentTriggerMode ?? 'keyword',
           shareLinkId: rule.shareLinkId ?? '',
           initialPrivateReplyMessage: rule.initialPrivateReplyMessage,
           publicCommentReplyMessage: rule.publicCommentReplyMessage,
@@ -225,8 +229,13 @@ export function AutoDmRuleModal({
     const mediaId = form.mediaId.trim()
     const keyword = form.keyword.trim()
 
-    if (!mediaId || !keyword) {
-      setError('Instagram 게시물 URL을 확인하고 감지 키워드를 입력해주세요')
+    if (!mediaId) {
+      setError('Instagram 게시물 URL을 확인해주세요')
+      return
+    }
+
+    if (form.commentTriggerMode === 'keyword' && !keyword) {
+      setError('감지 키워드를 입력해주세요')
       return
     }
 
@@ -286,9 +295,17 @@ export function AutoDmRuleModal({
           onChange={setForm}
         />
 
-        <Field label="감지 키워드 1개 *">
-          <input required value={form.keyword} onChange={(event) => setForm({ ...form, keyword: event.target.value })} className={inputClass} />
-        </Field>
+        <TriggerModeField form={form} onChange={setForm} />
+
+        {form.commentTriggerMode === 'keyword' ? (
+          <Field label="감지 키워드 1개 *">
+            <input required value={form.keyword} onChange={(event) => setForm({ ...form, keyword: event.target.value })} className={inputClass} />
+          </Field>
+        ) : (
+          <p className="rounded-[var(--radius-md)] bg-[var(--color-bg-subtle)] px-3 py-2 text-xs leading-5 text-[var(--color-text-muted)]">
+            이 게시물에 달린 일반 사용자 댓글을 감지해 자동 DM을 보냅니다.
+          </p>
+        )}
         <Field label="발송할 공유자료 *">
           <select required value={form.shareLinkId} onChange={(event) => setForm({ ...form, shareLinkId: event.target.value })} className={inputClass}>
             <option value="">공유자료 선택</option>
@@ -494,6 +511,64 @@ function MediaCard({
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="flex flex-col gap-1.5 text-xs font-medium text-[var(--color-text-secondary)]">{label}{children}</label>
+}
+
+function TriggerModeField({
+  form,
+  onChange,
+}: {
+  form: RuleForm
+  onChange: (form: RuleForm) => void
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-xs font-medium text-[var(--color-text-secondary)]">
+        댓글 감지 방식
+      </legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <TriggerModeOption
+          checked={form.commentTriggerMode === 'keyword'}
+          title="지정 키워드가 포함된 댓글만"
+          description="댓글 본문에 키워드가 포함될 때만 자동 DM을 시작합니다."
+          onChange={() => onChange({ ...form, commentTriggerMode: 'keyword' })}
+        />
+        <TriggerModeOption
+          checked={form.commentTriggerMode === 'all_comments'}
+          title="모든 댓글"
+          description="이 게시물에 달린 일반 사용자 댓글을 감지합니다."
+          onChange={() => onChange({ ...form, commentTriggerMode: 'all_comments', keyword: '' })}
+        />
+      </div>
+    </fieldset>
+  )
+}
+
+function TriggerModeOption({
+  checked,
+  title,
+  description,
+  onChange,
+}: {
+  checked: boolean
+  title: string
+  description: string
+  onChange: () => void
+}) {
+  return (
+    <label className={`flex cursor-pointer gap-2 rounded-[var(--radius-md)] border p-3 text-left transition-colors ${checked ? 'border-[var(--color-accent)] bg-[color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-surface))]' : 'border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]'}`}>
+      <input
+        type="radio"
+        name="commentTriggerMode"
+        checked={checked}
+        onChange={onChange}
+        className="mt-0.5"
+      />
+      <span>
+        <span className="block text-xs font-semibold text-[var(--color-text-primary)]">{title}</span>
+        <span className="mt-1 block text-[11px] leading-4 text-[var(--color-text-muted)]">{description}</span>
+      </span>
+    </label>
+  )
 }
 
 function MessageField({

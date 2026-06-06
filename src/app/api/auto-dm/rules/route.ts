@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 const MEDIA_TYPES = ['POST', 'REEL'] as const
+const COMMENT_TRIGGER_MODES = ['keyword', 'all_comments'] as const
 
 type RuleInput = {
   title?: unknown
@@ -13,6 +14,7 @@ type RuleInput = {
   mediaPermalink?: unknown
   mediaPreviewUrl?: unknown
   keyword?: unknown
+  commentTriggerMode?: unknown
   shareLinkId?: unknown
   initialPrivateReplyMessage?: unknown
   publicCommentReplyMessage?: unknown
@@ -31,13 +33,15 @@ function optionalText(value: unknown) {
 }
 
 function validateRuleInput(input: RuleInput) {
+  const commentTriggerMode = text(input.commentTriggerMode) || 'keyword'
   const values = {
     title: text(input.title),
     mediaId: text(input.mediaId),
     mediaType: text(input.mediaType),
     mediaPermalink: optionalText(input.mediaPermalink),
     mediaPreviewUrl: optionalText(input.mediaPreviewUrl),
-    keyword: text(input.keyword),
+    keyword: commentTriggerMode === 'all_comments' ? null : text(input.keyword),
+    commentTriggerMode,
     shareLinkId: text(input.shareLinkId),
     initialPrivateReplyMessage: text(input.initialPrivateReplyMessage),
     publicCommentReplyMessage: text(input.publicCommentReplyMessage),
@@ -46,12 +50,24 @@ function validateRuleInput(input: RuleInput) {
     enabled: input.enabled !== false,
   }
 
-  if (!values.title || !values.mediaId || !values.keyword || !values.shareLinkId) {
-    return { error: '규칙명, 미디어 ID, 키워드, 공유자료는 필수입니다' } as const
+  if (!values.title || !values.mediaId || !values.shareLinkId) {
+    return { error: '규칙명, 미디어, 공유자료는 필수입니다' } as const
   }
 
   if (!MEDIA_TYPES.includes(values.mediaType as (typeof MEDIA_TYPES)[number])) {
     return { error: '미디어 유형을 확인해주세요' } as const
+  }
+
+  if (
+    !COMMENT_TRIGGER_MODES.includes(
+      values.commentTriggerMode as (typeof COMMENT_TRIGGER_MODES)[number]
+    )
+  ) {
+    return { error: '댓글 감지 방식을 확인해주세요' } as const
+  }
+
+  if (values.commentTriggerMode === 'keyword' && !values.keyword) {
+    return { error: '감지 키워드를 입력해주세요' } as const
   }
 
   if (
@@ -86,7 +102,8 @@ function safeRule(rule: Record<string, unknown>) {
     mediaType: rule.media_type,
     mediaPermalink: rule.media_permalink,
     mediaPreviewUrl: rule.media_preview_url,
-    keyword: rule.keyword,
+    keyword: rule.keyword ?? '',
+    commentTriggerMode: rule.comment_trigger_mode ?? 'keyword',
     shareLinkId: rule.share_link_id,
     shareMaterialTitle: card?.title ?? null,
     initialPrivateReplyMessage: rule.initial_private_reply_message,
@@ -133,6 +150,7 @@ const RULE_SELECT = `
   media_permalink,
   media_preview_url,
   keyword,
+  comment_trigger_mode,
   share_link_id,
   initial_private_reply_message,
   public_comment_reply_message,
@@ -159,7 +177,7 @@ export async function GET() {
     .order('created_at', { ascending: false })
 
   if (error) {
-    return NextResponse.json({ error: '자동 DM 규칙을 불러오지 못했습니다' }, { status: 500 })
+    return NextResponse.json({ error: '자동 DM 규칙을 불러오지 못했어요' }, { status: 500 })
   }
 
   return NextResponse.json({ rules: (data ?? []).map((rule) => safeRule(rule)) })
@@ -226,6 +244,7 @@ export async function POST(request: Request) {
       media_permalink: values.mediaPermalink,
       media_preview_url: values.mediaPreviewUrl,
       keyword: values.keyword,
+      comment_trigger_mode: values.commentTriggerMode,
       initial_private_reply_message: values.initialPrivateReplyMessage,
       public_comment_reply_message: values.publicCommentReplyMessage,
       follow_required_message: values.followRequiredMessage,
@@ -238,12 +257,12 @@ export async function POST(request: Request) {
   if (error) {
     if (error.code === '23505') {
       return NextResponse.json(
-        { error: '이미 이 영상에 등록된 자동 DM 규칙이 있습니다' },
+        { error: '이미 이 대상에 등록된 자동 DM 규칙이 있습니다' },
         { status: 409 }
       )
     }
 
-    return NextResponse.json({ error: '자동 DM 규칙을 저장하지 못했습니다' }, { status: 500 })
+    return NextResponse.json({ error: '자동 DM 규칙을 저장하지 못했어요' }, { status: 500 })
   }
 
   return NextResponse.json({ rule: safeRule(data) }, { status: 201 })
