@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { History, LoaderCircle, MessageCircle } from 'lucide-react'
+import { LoaderCircle, MessageCircle } from 'lucide-react'
 import { clsx } from 'clsx'
+import { AutoDmEventsTab } from '@/components/auto-dm/AutoDmEventsTab'
 import { AutoDmRulesTab } from '@/components/auto-dm/AutoDmRulesTab'
 import { Button } from '@/components/ui/Button'
 
@@ -35,14 +36,6 @@ const INSTAGRAM_QUERY_MESSAGES: Record<string, string> = {
   invalid_state: '연결 요청이 만료되었거나 유효하지 않습니다. 다시 시도해주세요',
   connection_failed: 'Instagram 계정을 연결하지 못했습니다. 잠시 후 다시 시도해주세요',
 }
-
-const EMPTY_CONTENT = {
-  history: {
-    icon: History,
-    title: '발송 이력이 없습니다',
-    description: '자동 DM이 실행되면 처리 결과가 여기에 표시됩니다',
-  },
-} as const
 
 export default function AutoDmPage() {
   const [activeTab, setActiveTab] = useState<TabId>('rules')
@@ -223,17 +216,7 @@ export default function AutoDmPage() {
           {activeTab === 'rules' ? (
             <AutoDmRulesTab canCreate={connection.connected && !connectionLoadFailed} />
           ) : (
-            <div className="flex min-h-56 flex-col items-center justify-center border-y border-[var(--color-border-soft)] px-4 py-12 text-center">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--color-bg-subtle)] text-[var(--color-text-muted-soft)]">
-                <History size={18} />
-              </span>
-              <h2 className="mt-3 text-sm font-semibold text-[var(--color-text-primary)]">
-                {EMPTY_CONTENT.history.title}
-              </h2>
-              <p className="mt-1 max-w-md text-xs leading-5 text-[var(--color-text-muted)]">
-                {EMPTY_CONTENT.history.description}
-              </p>
-            </div>
+            <AutoDmEventsTab />
           )}
         </div>
       </section>
