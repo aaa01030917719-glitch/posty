@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { AlertCircle, CheckCircle2, ImageIcon, LoaderCircle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 
@@ -27,6 +28,16 @@ export type ShareLinkOption = {
   shareLinkId: string
   cardId: string
   title: string
+}
+
+type InstagramMediaOption = {
+  id: string
+  mediaType: 'POST' | 'REEL'
+  apiMediaType: string | null
+  permalink: string | null
+  thumbnailUrl: string | null
+  captionPreview: string | null
+  timestamp: string | null
 }
 
 type RuleForm = {
@@ -77,6 +88,9 @@ export function AutoDmRuleModal({
   const [form, setForm] = useState(DEFAULT_FORM)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mediaOptions, setMediaOptions] = useState<InstagramMediaOption[]>([])
+  const [mediaLoading, setMediaLoading] = useState(false)
+  const [mediaError, setMediaError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -98,6 +112,43 @@ export function AutoDmRuleModal({
     setError(null)
   }, [isOpen, rule])
 
+  useEffect(() => {
+    if (!isOpen) return
+
+    void loadMediaOptions()
+  }, [isOpen])
+
+  async function loadMediaOptions() {
+    setMediaLoading(true)
+    setMediaError(null)
+
+    try {
+      const response = await fetch('/api/auto-dm/media')
+      const data = await response.json() as { media?: InstagramMediaOption[]; error?: string }
+
+      if (!response.ok) {
+        throw new Error(data.error ?? 'Instagram 게시물을 불러오지 못했습니다')
+      }
+
+      setMediaOptions(data.media ?? [])
+    } catch (loadError) {
+      setMediaError(loadError instanceof Error ? loadError.message : 'Instagram 게시물을 불러오지 못했습니다')
+      setMediaOptions([])
+    } finally {
+      setMediaLoading(false)
+    }
+  }
+
+  function selectMedia(media: InstagramMediaOption) {
+    setForm({
+      ...form,
+      mediaId: media.id,
+      mediaType: media.mediaType,
+      mediaPermalink: media.permalink ?? '',
+      mediaPreviewUrl: media.thumbnailUrl ?? '',
+    })
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (saving) return
@@ -106,7 +157,7 @@ export function AutoDmRuleModal({
     const keyword = form.keyword.trim()
 
     if (!mediaId || !keyword) {
-      setError('미디어 ID와 감지 키워드를 입력해주세요')
+      setError('미디어와 감지 키워드를 선택 또는 입력해주세요')
       return
     }
 
@@ -150,25 +201,18 @@ export function AutoDmRuleModal({
         <Field label="규칙명 *">
           <input required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} className={inputClass} />
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="미디어 유형 *">
-            <select value={form.mediaType} onChange={(event) => setForm({ ...form, mediaType: event.target.value as RuleForm['mediaType'] })} className={inputClass}>
-              <option value="POST">게시물</option>
-              <option value="REEL">릴스</option>
-            </select>
-          </Field>
-          <Field label="Instagram 미디어 ID *">
-            <input required value={form.mediaId} onChange={(event) => setForm({ ...form, mediaId: event.target.value })} className={inputClass} />
-          </Field>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="미디어 링크">
-            <input type="url" value={form.mediaPermalink} onChange={(event) => setForm({ ...form, mediaPermalink: event.target.value })} className={inputClass} />
-          </Field>
-          <Field label="썸네일 URL">
-            <input type="url" value={form.mediaPreviewUrl} onChange={(event) => setForm({ ...form, mediaPreviewUrl: event.target.value })} className={inputClass} />
-          </Field>
-        </div>
+
+        <MediaPicker
+          rule={rule}
+          form={form}
+          mediaOptions={mediaOptions}
+          mediaLoading={mediaLoading}
+          mediaError={mediaError}
+          onRefresh={loadMediaOptions}
+          onSelect={selectMedia}
+          onChange={setForm}
+        />
+
         <Field label="감지 키워드 1개 *">
           <input required value={form.keyword} onChange={(event) => setForm({ ...form, keyword: event.target.value })} className={inputClass} />
         </Field>
@@ -198,7 +242,139 @@ export function AutoDmRuleModal({
 
 const inputClass = 'w-full rounded-[var(--radius-md)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus-visible:[box-shadow:var(--focus-ring)]'
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function MediaPicker({
+  rule,
+  form,
+  mediaOptions,
+  mediaLoading,
+  mediaError,
+  onRefresh,
+  onSelect,
+  onChange,
+}: {
+  rule: AutoDmRule | null
+  form: RuleForm
+  mediaOptions: InstagramMediaOption[]
+  mediaLoading: boolean
+  mediaError: string | null
+  onRefresh: () => void
+  onSelect: (media: InstagramMediaOption) => void
+  onChange: (form: RuleForm) => void
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-xs font-semibold text-[var(--color-text-secondary)]">Instagram 게시물 선택 *</h3>
+          <p className="mt-1 text-[11px] leading-4 text-[var(--color-text-muted)]">
+            최근 게시물과 릴스 중 자동 DM을 적용할 대상을 선택하세요.
+          </p>
+        </div>
+        <Button type="button" variant="secondary" size="sm" disabled={mediaLoading} onClick={onRefresh}>
+          <RefreshCw size={14} className={mediaLoading ? 'animate-spin' : undefined} />
+          새로고침
+        </Button>
+      </div>
+
+      {mediaLoading ? (
+        <div className="flex min-h-36 items-center justify-center rounded-[var(--radius-md)] border border-[var(--color-border-soft)] text-[var(--color-text-muted)]">
+          <LoaderCircle className="animate-spin" size={18} />
+        </div>
+      ) : mediaError ? (
+        <div className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-danger)_28%,transparent)] bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] px-3 py-2 text-xs leading-5 text-[var(--color-danger)]">
+          <AlertCircle size={14} className="mt-0.5 shrink-0" />
+          <span>{mediaError}</span>
+        </div>
+      ) : mediaOptions.length === 0 ? (
+        <div className="rounded-[var(--radius-md)] border border-dashed border-[var(--color-border-soft)] px-3 py-6 text-center text-xs leading-5 text-[var(--color-text-muted)]">
+          최근 게시물 목록이 없습니다. Instagram에 게시물이 없거나 목록을 불러올 수 없습니다.
+        </div>
+      ) : (
+        <div className="grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+          {mediaOptions.map((media) => <MediaCard key={media.id} media={media} selected={form.mediaId === media.id} onSelect={onSelect} />)}
+        </div>
+      )}
+
+      {rule && !mediaOptions.some((media) => media.id === form.mediaId) && form.mediaId ? (
+        <p className="rounded-[var(--radius-md)] bg-[var(--color-bg-subtle)] px-3 py-2 text-[11px] leading-5 text-[var(--color-text-muted)]">
+          기존 규칙의 미디어가 최근 25개 목록에 없어 저장된 값을 유지합니다.
+        </p>
+      ) : null}
+
+      <details className="rounded-[var(--radius-md)] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-3 py-2">
+        <summary className="cursor-pointer text-xs font-medium text-[var(--color-text-secondary)]">
+          직접 입력 값 확인
+        </summary>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <Field label="미디어 유형 *">
+            <select value={form.mediaType} onChange={(event) => onChange({ ...form, mediaType: event.target.value as RuleForm['mediaType'] })} className={inputClass}>
+              <option value="POST">게시물</option>
+              <option value="REEL">릴스</option>
+            </select>
+          </Field>
+          <Field label="Instagram 미디어 ID *">
+            <input required value={form.mediaId} onChange={(event) => onChange({ ...form, mediaId: event.target.value })} className={inputClass} />
+          </Field>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Field label="미디어 링크">
+            <input type="url" value={form.mediaPermalink} onChange={(event) => onChange({ ...form, mediaPermalink: event.target.value })} className={inputClass} />
+          </Field>
+          <Field label="썸네일 URL">
+            <input type="url" value={form.mediaPreviewUrl} onChange={(event) => onChange({ ...form, mediaPreviewUrl: event.target.value })} className={inputClass} />
+          </Field>
+        </div>
+      </details>
+    </section>
+  )
+}
+
+function MediaCard({
+  media,
+  selected,
+  onSelect,
+}: {
+  media: InstagramMediaOption
+  selected: boolean
+  onSelect: (media: InstagramMediaOption) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(media)}
+      className={`grid grid-cols-[64px_minmax(0,1fr)] gap-3 rounded-[var(--radius-md)] border p-2 text-left outline-none transition-colors focus-visible:[box-shadow:var(--focus-ring)] ${selected ? 'border-[var(--color-accent)] bg-[color-mix(in_srgb,var(--color-accent)_8%,var(--color-bg-surface))]' : 'border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] hover:bg-[var(--color-bg-subtle)]'}`}
+    >
+      <span className="relative flex aspect-square overflow-hidden rounded-[var(--radius-sm)] bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)]">
+        {media.thumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={media.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center">
+            <ImageIcon size={18} />
+          </span>
+        )}
+        {selected ? (
+          <span className="absolute right-1 top-1 rounded-full bg-[var(--color-accent)] text-white">
+            <CheckCircle2 size={16} />
+          </span>
+        ) : null}
+      </span>
+      <span className="min-w-0">
+        <span className="inline-flex rounded-full bg-[var(--color-bg-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
+          {media.mediaType === 'REEL' ? '릴스' : '게시물'}
+        </span>
+        <span className="mt-1 block truncate text-xs font-medium text-[var(--color-text-primary)]">
+          {media.captionPreview ?? '캡션 없는 게시물'}
+        </span>
+        <span className="mt-1 block text-[11px] text-[var(--color-text-muted)]">
+          {formatDate(media.timestamp)}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return <label className="flex flex-col gap-1.5 text-xs font-medium text-[var(--color-text-secondary)]">{label}{children}</label>
 }
 
@@ -209,4 +385,14 @@ function MessageField({ label, description, value, onChange }: { label: string; 
       {description ? <span className="font-normal text-[var(--color-text-muted)]">{description}</span> : null}
     </Field>
   )
+}
+
+function formatDate(value: string | null) {
+  if (!value) return '날짜 없음'
+
+  const date = new Date(value)
+
+  return Number.isNaN(date.getTime())
+    ? '날짜 없음'
+    : new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(date)
 }

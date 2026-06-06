@@ -4,6 +4,7 @@ const INSTAGRAM_AUTHORIZE_ENDPOINT = 'https://www.instagram.com/oauth/authorize'
 const INSTAGRAM_TOKEN_ENDPOINT = 'https://api.instagram.com/oauth/access_token'
 const INSTAGRAM_GRAPH_ENDPOINT = 'https://graph.instagram.com'
 const INSTAGRAM_GRAPH_API_VERSION = 'v23.0'
+const INSTAGRAM_MEDIA_API_VERSION = 'v25.0'
 const INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION = 'v25.0'
 const FETCH_TIMEOUT_MS = 10_000
 const INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS = ['comments', 'messages'] as const
@@ -68,6 +69,31 @@ type InstagramUserProfileResponse = {
 type TextMessageResponse = {
   message_id?: string
   recipient_id?: string
+}
+
+type InstagramMediaListResponse = {
+  data?: InstagramMediaResponse[]
+}
+
+type InstagramMediaResponse = {
+  id?: string
+  caption?: string
+  media_type?: string
+  media_product_type?: string
+  permalink?: string
+  thumbnail_url?: string
+  media_url?: string
+  timestamp?: string
+}
+
+export type InstagramRecentMedia = {
+  id: string
+  mediaType: 'POST' | 'REEL'
+  apiMediaType: string | null
+  permalink: string | null
+  thumbnailUrl: string | null
+  captionPreview: string | null
+  timestamp: string | null
 }
 
 export class InstagramMetaError extends Error {
@@ -289,6 +315,59 @@ export async function getInstagramAccountWebhookSubscriptions(input: {
   return toWebhookSubscriptionState(normalizeSubscribedFields(data))
 }
 
+export async function listInstagramRecentMedia(input: {
+  instagramProfessionalAccountId: string
+  accessToken: string
+  limit?: number
+}) {
+  const url = new URL(
+    `/${INSTAGRAM_MEDIA_API_VERSION}/${encodeURIComponent(input.instagramProfessionalAccountId)}/media`,
+    INSTAGRAM_GRAPH_ENDPOINT
+  )
+
+  url.searchParams.set(
+    'fields',
+    [
+      'id',
+      'caption',
+      'media_type',
+      'media_product_type',
+      'permalink',
+      'thumbnail_url',
+      'media_url',
+      'timestamp',
+    ].join(',')
+  )
+  url.searchParams.set('limit', String(input.limit ?? 25))
+
+  const data = await fetchInstagramJson<InstagramMediaListResponse>(url.toString(), {
+    headers: { Authorization: `Bearer ${input.accessToken}` },
+  })
+
+  return (data.data ?? [])
+    .flatMap((media): InstagramRecentMedia[] => {
+      if (!media.id) return []
+
+      const mediaType = normalizeMediaType(media)
+
+      return [{
+        id: media.id,
+        mediaType,
+        apiMediaType: media.media_product_type ?? media.media_type ?? null,
+        permalink: media.permalink ?? null,
+        thumbnailUrl: media.thumbnail_url ?? media.media_url ?? null,
+        captionPreview: trimCaptionPreview(media.caption),
+        timestamp: media.timestamp ?? null,
+      }]
+    })
+    .sort((left, right) => {
+      const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : 0
+      const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : 0
+
+      return rightTime - leftTime
+    })
+}
+
 export async function sendInstagramPrivateReply(input: {
   instagramProfessionalAccountId: string
   commentId: string
@@ -377,4 +456,26 @@ export async function sendInstagramTextMessage(input: {
     messageId: data.message_id,
     recipientId: data.recipient_id ?? null,
   }
+}
+
+function normalizeMediaType(media: InstagramMediaResponse): InstagramRecentMedia['mediaType'] {
+  const apiType = `${media.media_product_type ?? media.media_type ?? ''}`.toUpperCase()
+
+  if (apiType === 'REELS' || apiType === 'REEL') {
+    return 'REEL'
+  }
+
+  if (media.permalink?.includes('/reel/')) {
+    return 'REEL'
+  }
+
+  return 'POST'
+}
+
+function trimCaptionPreview(caption: string | undefined) {
+  if (!caption) return null
+
+  const normalized = caption.replace(/\s+/g, ' ').trim()
+
+  return normalized.length > 80 ? `${normalized.slice(0, 80)}...` : normalized
 }
