@@ -163,6 +163,7 @@ export function AutoDmEventsTab() {
                     <Td>
                       <div className="font-medium text-[var(--color-text-primary)]">{formatDateTime(event.createdAt)}</div>
                       <div className="mt-1 text-[var(--color-text-muted)]">{displayLabel(event.lifecycleStatus, lifecycleLabels)}</div>
+                      <ProcessingTimeSummary event={event} />
                     </Td>
                     <Td>
                       <div className="max-w-36 truncate font-medium text-[var(--color-text-primary)]" title={event.ruleTitle ?? undefined}>
@@ -221,6 +222,7 @@ export function AutoDmEventsTab() {
                   <StatusItem label="팔로우" value={event.followStatus} />
                   <StatusItem label="자료 발송" value={event.deliveryStatus} />
                 </div>
+                <ProcessingTimeSummary event={event} />
                 {event.failureReason ? (
                   <p className="mt-3 rounded-[var(--radius-md)] bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] px-3 py-2 text-xs leading-5 text-[var(--color-danger)]">
                     {event.failureReason}
@@ -260,6 +262,29 @@ function StatusBadge({ value, map = actionLabels }: { value: string; map?: Recor
   )
 }
 
+function ProcessingTimeSummary({ event }: { event: AutoDmEvent }) {
+  const initialReplyDuration = formatDurationBetween(
+    event.createdAt,
+    event.initialPrivateReplySentAt
+  )
+  const materialDeliveryDuration = formatDurationBetween(
+    event.userRepliedAt,
+    event.materialSentAt
+  )
+
+  if (!initialReplyDuration && !materialDeliveryDuration) {
+    return null
+  }
+
+  return (
+    <p className="mt-2 text-[11px] leading-4 text-[var(--color-text-muted)]">
+      {initialReplyDuration ? `최초 DM ${initialReplyDuration}` : null}
+      {initialReplyDuration && materialDeliveryDuration ? ' · ' : null}
+      {materialDeliveryDuration ? `답장 후 자료 발송 ${materialDeliveryDuration}` : null}
+    </p>
+  )
+}
+
 function displayLabel(value: string, map: Record<string, string>) {
   return map[value] ?? value
 }
@@ -275,4 +300,24 @@ function formatDateTime(value: string | null) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(date)
+}
+
+function formatDurationBetween(startValue: string | null, endValue: string | null) {
+  if (!startValue || !endValue) return null
+
+  const start = new Date(startValue).getTime()
+  const end = new Date(endValue).getTime()
+
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return null
+
+  const totalSeconds = Math.round((end - start) / 1000)
+
+  if (totalSeconds < 60) {
+    return `${totalSeconds}초`
+  }
+
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+
+  return seconds > 0 ? `${minutes}분 ${seconds}초` : `${minutes}분`
 }

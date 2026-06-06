@@ -253,7 +253,7 @@ export function normalizeInstagramMessagingNotifications(payload: unknown) {
           messageId,
           messageText,
           quickReplyPayload: stringValue(quickReply?.payload),
-          timestamp: stringValue(item?.timestamp),
+          timestamp: timestampValue(item?.timestamp),
         },
       })
     }
@@ -276,4 +276,12 @@ function asArray(value: unknown) {
 
 function stringValue(value: unknown) {
   return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+function timestampValue(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value)
+  }
+
+  return stringValue(value)
 }

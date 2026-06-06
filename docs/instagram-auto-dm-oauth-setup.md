@@ -231,3 +231,54 @@ The material DM uses the Instagram text message endpoint with
 `recipient.id` and `message.text`. This phase does not test real Meta delivery,
 send live DMs, or modify existing Supabase rows outside production webhook
 execution with `INSTAGRAM_AUTO_DM_SEND_ENABLED=true`.
+
+## Rule Media Picker
+
+When creating or editing an auto-DM rule, Posty loads the connected Instagram
+Professional account's recent media server-side and returns only safe list
+metadata to the browser. The server uses:
+
+- `GET https://graph.instagram.com/v25.0/{ig_user_id}/media`
+- fields: `id`, `caption`, `media_type`, `media_product_type`, `permalink`,
+  `thumbnail_url`, `media_url`, `timestamp`
+
+The browser response excludes access tokens, ciphertext, raw Meta responses,
+owner user IDs, and any secret values. Manual Media ID entry remains available
+only as a fallback inside the rule modal, primarily for existing rules whose
+saved media is no longer in the most recent 25 items.
+
+## Latency Diagnostics
+
+Posty emits safe operational timing logs with the prefix:
+
+- `[instagram-latency]`
+
+These diagnostics do not print access tokens, app secrets, ciphertext, raw
+webhook payloads, raw Meta responses, comment text, message text, usernames,
+scoped IDs, media IDs, comment IDs, message IDs, share tokens, or share URLs.
+
+Message webhook ingress logs include:
+
+- `webhookDeliveryLagMs`
+- `afterScheduled`
+
+Follow-confirmation delivery logs include:
+
+- `afterStartDelayMs`
+- `connectionLookupMs`
+- `waitingEventLookupMs`
+- `secretLookupMs`
+- `decryptMs`
+- `profileFetchMs`
+- `shareLinkValidationMs`
+- `materialMessageSendMs`
+- `finalEventUpdateMs`
+- `totalProcessorMs`
+
+After deployment, reproduce the follow-confirmation flow once and inspect the
+`[instagram-latency]` entries to identify whether delay is happening before the
+webhook reaches Posty, while the Next.js `after()` callback waits to start,
+during Supabase lookups, during Meta profile fetch, during share-link
+validation, or during Meta message send. If delays remain consistently high,
+evaluate a dedicated queue or background job processor in a separate phase;
+this step only adds diagnostics and does not introduce a queue.

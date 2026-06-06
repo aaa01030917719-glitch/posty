@@ -26,6 +26,22 @@ export type FollowConfirmationDeliveryResult =
   | { status: 'share_link_unavailable' }
   | { status: 'failed' }
 
+type FollowConfirmationDeliveryOptions = {
+  scheduledAt?: number
+}
+
+type FollowDeliveryLatencyMetrics = {
+  afterStartDelayMs: number | null
+  connectionLookupMs?: number
+  waitingEventLookupMs?: number
+  secretLookupMs?: number
+  decryptMs?: number
+  profileFetchMs?: number
+  shareLinkValidationMs?: number
+  materialMessageSendMs?: number
+  finalEventUpdateMs?: number
+}
+
 type InstagramConnectionRow = {
   id: string
   instagram_professional_account_id: string
@@ -75,31 +91,47 @@ const FAILURE_REASON_BY_CODE: Record<string, string> = {
 }
 
 export async function processFollowConfirmationMessage(
-  notification: InstagramMessagingNotification
+  notification: InstagramMessagingNotification,
+  options: FollowConfirmationDeliveryOptions = {}
 ): Promise<FollowConfirmationDeliveryResult> {
+  const processorStartedAt = Date.now()
+  const metrics: FollowDeliveryLatencyMetrics = {
+    afterStartDelayMs:
+      typeof options.scheduledAt === 'number'
+        ? Math.max(0, processorStartedAt - options.scheduledAt)
+        : null,
+  }
+  const finish = <T extends FollowConfirmationDeliveryResult>(result: T): T => {
+    logFollowDeliveryLatency(result.status, metrics, processorStartedAt)
+    return result
+  }
+
   if (!isInstagramAutoDmSendEnabled()) {
-    return { status: 'disabled' }
+    return finish({ status: 'disabled' })
   }
 
   if (notification.messageText.trim() !== FOLLOW_CONFIRMATION_TEXT) {
-    return { status: 'ignored_message_text' }
+    return finish({ status: 'ignored_message_text' })
   }
 
   const admin = createAdminClient()
+  const connectionLookupStartedAt = Date.now()
   const { data: connection, error: connectionError } = await admin
     .from('instagram_connections')
     .select('id,instagram_professional_account_id')
     .eq('instagram_professional_account_id', notification.instagramProfessionalAccountId)
     .maybeSingle<InstagramConnectionRow>()
+  metrics.connectionLookupMs = elapsedSince(connectionLookupStartedAt)
 
   if (connectionError) {
-    return { status: 'failed' }
+    return finish({ status: 'failed' })
   }
 
   if (!connection) {
-    return { status: 'ignored_connection_not_found' }
+    return finish({ status: 'ignored_connection_not_found' })
   }
 
+  const waitingEventLookupStartedAt = Date.now()
   const { data: event, error: eventError } = await admin
     .from('instagram_auto_dm_events')
     .select('id,user_id,instagram_connection_id,rule_id,commenter_instagram_scoped_id,delivery_status,lifecycle_status')
@@ -110,26 +142,29 @@ export async function processFollowConfirmationMessage(
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle<WaitingEventRow>()
+  metrics.waitingEventLookupMs = elapsedSince(waitingEventLookupStartedAt)
 
   if (eventError) {
-    return { status: 'failed' }
+    return finish({ status: 'failed' })
   }
 
   if (!event) {
-    return { status: 'ignored_waiting_event_not_found' }
+    return finish({ status: 'ignored_waiting_event_not_found' })
   }
 
   if (event.delivery_status === 'sent' || event.lifecycle_status === 'material_sent') {
-    return { status: 'skipped_already_delivered' }
+    return finish({ status: 'skipped_already_delivered' })
   }
 
+  const secretLookupStartedAt = Date.now()
   const { rule, secret, failed } = await loadFollowDeliveryContext(
     event.rule_id,
     event.instagram_connection_id
   )
+  metrics.secretLookupMs = elapsedSince(secretLookupStartedAt)
 
   if (failed) {
-    return { status: 'failed' }
+    return finish({ status: 'failed' })
   }
 
   if (
@@ -141,14 +176,16 @@ export async function processFollowConfirmationMessage(
     rule.instagram_connection_id !== event.instagram_connection_id
   ) {
     await markFollowDeliveryFailed(event.id, 'follow_check', 'missing_data')
-    return { status: 'failed' }
+    return finish({ status: 'failed' })
   }
 
+  const decryptStartedAt = Date.now()
   const token = decryptDeliveryToken(secret.access_token_ciphertext)
+  metrics.decryptMs = elapsedSince(decryptStartedAt)
 
   if (!token) {
     await markFollowDeliveryFailed(event.id, 'follow_check', 'token_decrypt_failed')
-    return { status: 'failed' }
+    return finish({ status: 'failed' })
   }
 
   const now = new Date().toISOString()
@@ -165,22 +202,25 @@ export async function processFollowConfirmationMessage(
     .eq('id', event.id)
 
   if (pendingError) {
-    return { status: 'failed' }
+    return finish({ status: 'failed' })
   }
 
   let profile: { username: string | null; isUserFollowingBusiness: boolean }
+  const profileFetchStartedAt = Date.now()
 
   try {
     profile = await getInstagramUserProfile({
       instagramScopedId: notification.senderInstagramScopedId,
       accessToken: token,
     })
+    metrics.profileFetchMs = elapsedSince(profileFetchStartedAt)
   } catch (error) {
+    metrics.profileFetchMs = elapsedSince(profileFetchStartedAt)
     await markFollowDeliveryFailed(event.id, 'follow_check', safeFailureCode(error, 'follow_check_failed'), {
       follow_status: 'check_failed',
       lifecycle_status: 'waiting_for_user_reply',
     })
-    return { status: 'follow_check_failed' }
+    return finish({ status: 'follow_check_failed' })
   }
 
   if (profile.username) {
@@ -193,13 +233,16 @@ export async function processFollowConfirmationMessage(
 
   if (!profile.isUserFollowingBusiness) {
     try {
+      const followRequiredMessageStartedAt = Date.now()
       await sendInstagramTextMessage({
         instagramProfessionalAccountId: connection.instagram_professional_account_id,
         recipientInstagramScopedId: notification.senderInstagramScopedId,
         messageText: rule.follow_required_message,
         accessToken: token,
       })
+      metrics.materialMessageSendMs = elapsedSince(followRequiredMessageStartedAt)
 
+      const finalEventUpdateStartedAt = Date.now()
       await admin
         .from('instagram_auto_dm_events')
         .update({
@@ -212,8 +255,9 @@ export async function processFollowConfirmationMessage(
           failure_reason: null,
         })
         .eq('id', event.id)
+      metrics.finalEventUpdateMs = elapsedSince(finalEventUpdateStartedAt)
 
-      return { status: 'waiting_for_follow' }
+      return finish({ status: 'waiting_for_follow' })
     } catch (error) {
       await markFollowDeliveryFailed(
         event.id,
@@ -226,11 +270,13 @@ export async function processFollowConfirmationMessage(
           follow_checked_at: new Date().toISOString(),
         }
       )
-      return { status: 'failed' }
+      return finish({ status: 'failed' })
     }
   }
 
+  const shareLinkValidationStartedAt = Date.now()
   const materialMessage = await createMaterialDeliveryMessage(rule)
+  metrics.shareLinkValidationMs = elapsedSince(shareLinkValidationStartedAt)
 
   if (!materialMessage) {
     await markFollowDeliveryFailed(event.id, 'material_delivery', 'share_link_unavailable', {
@@ -239,17 +285,20 @@ export async function processFollowConfirmationMessage(
       delivery_status: 'failed',
       lifecycle_status: 'waiting_for_user_reply',
     })
-    return { status: 'share_link_unavailable' }
+    return finish({ status: 'share_link_unavailable' })
   }
 
   try {
+    const materialMessageSendStartedAt = Date.now()
     const message = await sendInstagramTextMessage({
       instagramProfessionalAccountId: connection.instagram_professional_account_id,
       recipientInstagramScopedId: notification.senderInstagramScopedId,
       messageText: materialMessage,
       accessToken: token,
     })
+    metrics.materialMessageSendMs = elapsedSince(materialMessageSendStartedAt)
 
+    const finalEventUpdateStartedAt = Date.now()
     const { error: sentError } = await admin
       .from('instagram_auto_dm_events')
       .update({
@@ -264,12 +313,13 @@ export async function processFollowConfirmationMessage(
         failure_reason: null,
       })
       .eq('id', event.id)
+    metrics.finalEventUpdateMs = elapsedSince(finalEventUpdateStartedAt)
 
     if (sentError) {
-      return { status: 'failed' }
+      return finish({ status: 'failed' })
     }
 
-    return { status: 'material_sent' }
+    return finish({ status: 'material_sent' })
   } catch (error) {
     await markFollowDeliveryFailed(
       event.id,
@@ -282,7 +332,7 @@ export async function processFollowConfirmationMessage(
         lifecycle_status: 'waiting_for_user_reply',
       }
     )
-    return { status: 'material_send_failed' }
+    return finish({ status: 'material_send_failed' })
   }
 }
 
@@ -394,4 +444,29 @@ function safeFailureCode(error: unknown, fallback: string) {
   }
 
   return fallback
+}
+
+function elapsedSince(startedAt: number) {
+  return Math.max(0, Date.now() - startedAt)
+}
+
+function logFollowDeliveryLatency(
+  outcome: FollowConfirmationDeliveryResult['status'],
+  metrics: FollowDeliveryLatencyMetrics,
+  processorStartedAt: number
+) {
+  console.info('[instagram-latency]', {
+    type: 'follow-delivery',
+    outcome,
+    afterStartDelayMs: metrics.afterStartDelayMs,
+    connectionLookupMs: metrics.connectionLookupMs,
+    waitingEventLookupMs: metrics.waitingEventLookupMs,
+    secretLookupMs: metrics.secretLookupMs,
+    decryptMs: metrics.decryptMs,
+    profileFetchMs: metrics.profileFetchMs,
+    shareLinkValidationMs: metrics.shareLinkValidationMs,
+    materialMessageSendMs: metrics.materialMessageSendMs,
+    finalEventUpdateMs: metrics.finalEventUpdateMs,
+    totalProcessorMs: elapsedSince(processorStartedAt),
+  })
 }

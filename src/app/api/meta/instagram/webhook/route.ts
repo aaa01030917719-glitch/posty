@@ -62,6 +62,53 @@ function countBy(values: string[]) {
   }, {})
 }
 
+function logMessageWebhookLatency({
+  messagingNotifications,
+  afterScheduled,
+}: {
+  messagingNotifications: ReturnType<typeof normalizeInstagramMessagingNotifications>
+  afterScheduled: boolean
+}) {
+  const normalizedNotifications = messagingNotifications.flatMap((result) =>
+    'notification' in result ? [result.notification] : []
+  )
+  const ignoredMessageCount = messagingNotifications.length - normalizedNotifications.length
+  const webhookDeliveryLagMs = maxTimestampLag(normalizedNotifications.map((notification) => notification.timestamp))
+
+  console.info('[instagram-latency]', {
+    type: 'message',
+    receivedNotificationCount: messagingNotifications.length,
+    normalizedMessageCount: normalizedNotifications.length,
+    ignoredMessageCount,
+    webhookDeliveryLagMs,
+    afterScheduled,
+  })
+}
+
+function maxTimestampLag(timestamps: Array<string | null>) {
+  const now = Date.now()
+  const lags = timestamps.flatMap((timestamp) => {
+    const parsed = parseWebhookTimestamp(timestamp)
+    return parsed === null ? [] : [Math.max(0, now - parsed)]
+  })
+
+  return lags.length > 0 ? Math.max(...lags) : null
+}
+
+function parseWebhookTimestamp(timestamp: string | null) {
+  if (!timestamp) return null
+
+  const numeric = Number(timestamp)
+
+  if (Number.isFinite(numeric)) {
+    return numeric > 9_999_999_999 ? numeric : numeric * 1000
+  }
+
+  const parsed = new Date(timestamp).getTime()
+
+  return Number.isNaN(parsed) ? null : parsed
+}
+
 export async function GET(request: NextRequest) {
   const expectedToken = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
 
@@ -132,7 +179,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: false }, { status: 500 })
   }
 
-  if (isInstagramAutoDmSendEnabled()) {
+  const sendEnabled = isInstagramAutoDmSendEnabled()
+  const messagingNotifications = normalizeInstagramMessagingNotifications(payload)
+  logMessageWebhookLatency({
+    messagingNotifications,
+    afterScheduled: sendEnabled && messagingNotifications.some((result) => 'notification' in result),
+  })
+
+  if (sendEnabled) {
     for (const result of processResults) {
       if (result.status === 'matched') {
         after(async () => {
@@ -141,12 +195,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const messagingNotifications = normalizeInstagramMessagingNotifications(payload)
-
     for (const result of messagingNotifications) {
       if ('notification' in result) {
+        const scheduledAt = Date.now()
+
         after(async () => {
-          await processFollowConfirmationMessage(result.notification)
+          await processFollowConfirmationMessage(result.notification, { scheduledAt })
         })
       }
     }
