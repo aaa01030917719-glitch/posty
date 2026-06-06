@@ -167,16 +167,12 @@ export async function exchangeCodeForShortLivedToken(code: string) {
 export async function exchangeForLongLivedToken(shortLivedAccessToken: string) {
   const { appSecret } = getOAuthConfig()
   const url = new URL('/access_token', INSTAGRAM_GRAPH_ENDPOINT)
-  const body = new URLSearchParams({
-    grant_type: 'ig_exchange_token',
-    client_secret: appSecret,
-    access_token: shortLivedAccessToken,
-  })
-  const data = await fetchInstagramJson<LongLivedTokenResponse>(url.toString(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
+
+  url.searchParams.set('grant_type', 'ig_exchange_token')
+  url.searchParams.set('client_secret', appSecret)
+  url.searchParams.set('access_token', shortLivedAccessToken)
+
+  const data = await fetchInstagramJson<LongLivedTokenResponse>(url.toString())
 
   if (!data.access_token) {
     throw new InstagramMetaError('Instagram long-lived token response is incomplete')
