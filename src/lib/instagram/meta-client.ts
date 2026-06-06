@@ -7,7 +7,13 @@ const INSTAGRAM_GRAPH_API_VERSION = 'v23.0'
 const INSTAGRAM_MEDIA_API_VERSION = 'v25.0'
 const INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION = 'v25.0'
 const FETCH_TIMEOUT_MS = 10_000
-const INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS = ['comments', 'messages'] as const
+const INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS = [
+  'comments',
+  'messages',
+  'messaging_postbacks',
+] as const
+export const INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_TITLE = '팔로우 했어요'
+export const INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD = 'POSTY_FOLLOW_CONFIRMED'
 
 export const INSTAGRAM_OAUTH_SCOPES = [
   'instagram_business_basic',
@@ -379,7 +385,16 @@ export async function sendInstagramPrivateReply(input: {
     input.accessToken,
     {
       recipient: { comment_id: input.commentId },
-      message: { text: input.messageText },
+      message: {
+        text: input.messageText,
+        quick_replies: [
+          {
+            content_type: 'text',
+            title: INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_TITLE,
+            payload: INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD,
+          },
+        ],
+      },
     }
   )
 

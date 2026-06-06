@@ -130,15 +130,14 @@ Planned webhook subscriptions:
 
 - `comments`
 - `messages`
-- Messaging postback-related fields if required after the Quick Reply
-  feasibility test
+- `messaging_postbacks`
 
 These app-level fields must be selected in the Meta Dashboard. After OAuth
 completes, Posty also subscribes the connected Instagram Professional account
 itself by calling:
 
 - `POST https://graph.instagram.com/v25.0/{ig_user_id}/subscribed_apps`
-- `subscribed_fields=comments,messages`
+- `subscribed_fields=comments,messages,messaging_postbacks`
 
 Posty uses the explicit Instagram Professional account ID returned by the
 metadata lookup, not the `/me` alias. After the POST succeeds, the OAuth
@@ -178,10 +177,22 @@ The first outbound step sends an Instagram Private Reply with:
 - `POST https://graph.instagram.com/v23.0/{ig_user_id}/messages`
 - `recipient.comment_id` set to the original Instagram comment ID
 - `message.text` set to the rule's initial Private Reply message
+- `message.quick_replies` includes one text quick reply:
+  - title: `팔로우 했어요`
+  - payload: `POSTY_FOLLOW_CONFIRMED`
 
 Private Reply is limited to one message per comment and must be sent within
 Meta's allowed window. Do not manually retry uncertain network outcomes without
 operator review.
+
+Meta documents Quick Replies for regular Instagram messages with
+`recipient.id` and `message.quick_replies`, while Private Reply examples use
+`recipient.comment_id` and `message.text`. Posty includes the Quick Reply in
+the initial Private Reply request as a feasibility foundation, but the button
+display must be verified with a Meta test account before relying on it in
+production. If Meta rejects or omits the button, Posty does not automatically
+send a second text-only Private Reply because the original comment can only
+receive one Private Reply.
 
 Only after the Private Reply succeeds, the delivery processor attempts the
 public comment reply with:
@@ -191,19 +202,29 @@ public comment reply with:
 
 If the Private Reply fails, the public reply is not attempted. If the public
 reply fails, the event remains in `waiting_for_user_reply` because the initial
-DM was already sent. Message-inbox webhook handling, follow checks, material
-link delivery, and Quick Reply support are still future phases.
+DM was already sent.
 
 ## Follow Confirmation Delivery
 
-The messages webhook subscription is used for inbound Instagram DM text. Echo,
-self, deleted, unsupported, and empty-text messages are ignored during payload
-normalization. The MVP text command is exactly `팔로우완료` after trimming leading
-and trailing whitespace.
+The messages webhook subscription is used for inbound Instagram DM text and
+Quick Reply payloads. Echo, self, deleted, unsupported, and messages that have
+neither text nor a Quick Reply payload are ignored during payload
+normalization.
 
-When a user sends `팔로우완료`, the delivery processor looks up the most recent
-waiting event for the same Instagram connection and sender IGSID. It only
-considers events whose initial Private Reply was sent and whose lifecycle is
+When a user taps the `팔로우 했어요` Quick Reply, the messages webhook should
+include `message.quick_reply.payload = POSTY_FOLLOW_CONFIRMED`. The delivery
+processor checks that payload first. If no payload is present, it falls back to
+DM text by trimming the value and removing all whitespace, so these user-entered
+forms are accepted:
+
+- `팔로우완료`
+- `팔로우 완료`
+- `팔로우했어요`
+- `팔로우 했어요`
+
+For either trigger, the delivery processor looks up the most recent waiting
+event for the same Instagram connection and sender IGSID. It only considers
+events whose initial Private Reply was sent and whose lifecycle is
 `waiting_for_user_reply` or `waiting_for_follow`.
 
 The processor then calls the Instagram User Profile API for the messaging
@@ -231,6 +252,17 @@ The material DM uses the Instagram text message endpoint with
 `recipient.id` and `message.text`. This phase does not test real Meta delivery,
 send live DMs, or modify existing Supabase rows outside production webhook
 execution with `INSTAGRAM_AUTO_DM_SEND_ENABLED=true`.
+
+Quick Reply feasibility test order:
+
+1. Keep `INSTAGRAM_AUTO_DM_SEND_ENABLED=false` until webhook payloads are
+   verified, then enable it only for an approved test.
+2. Use a Meta test account to write a new keyword comment.
+3. Confirm the initial Private Reply is received.
+4. Check whether the `팔로우 했어요` Quick Reply button is displayed.
+5. Tap the button and confirm the messages webhook contains
+   `POSTY_FOLLOW_CONFIRMED`.
+6. Confirm the follow-status branch and material-link DM behavior.
 
 ## Rule Media Picker
 

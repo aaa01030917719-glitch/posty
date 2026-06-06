@@ -234,8 +234,9 @@ export function normalizeInstagramMessagingNotifications(payload: unknown) {
       const recipientId = stringValue(recipient?.id)
       const messageId = stringValue(message?.mid)
       const messageText = stringValue(message?.text)?.trim() ?? ''
+      const quickReplyPayload = stringValue(quickReply?.payload)
 
-      if (!messageText) {
+      if (!messageText && !quickReplyPayload) {
         results.push({ skipped: 'ignored_empty_text' })
         continue
       }
@@ -252,7 +253,7 @@ export function normalizeInstagramMessagingNotifications(payload: unknown) {
           recipientInstagramProfessionalAccountId: recipientId,
           messageId,
           messageText,
-          quickReplyPayload: stringValue(quickReply?.payload),
+          quickReplyPayload,
           timestamp: timestampValue(item?.timestamp),
         },
       })

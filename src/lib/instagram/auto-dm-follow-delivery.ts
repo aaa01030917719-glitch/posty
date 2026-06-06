@@ -5,13 +5,14 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { InstagramMessagingNotification } from './webhook'
 import {
   getInstagramUserProfile,
+  INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD,
   InstagramMetaError,
   sendInstagramTextMessage,
 } from './meta-client'
 import { isInstagramAutoDmSendEnabled } from './auto-dm-delivery'
 import { decryptInstagramAccessToken } from './token-crypto'
 
-const FOLLOW_CONFIRMATION_TEXT = '팔로우완료'
+const FOLLOW_CONFIRMATION_TEXTS = new Set(['팔로우완료', '팔로우했어요'])
 
 export type FollowConfirmationDeliveryResult =
   | { status: 'disabled' }
@@ -110,7 +111,7 @@ export async function processFollowConfirmationMessage(
     return finish({ status: 'disabled' })
   }
 
-  if (notification.messageText.trim() !== FOLLOW_CONFIRMATION_TEXT) {
+  if (!isFollowConfirmationTrigger(notification)) {
     return finish({ status: 'ignored_message_text' })
   }
 
@@ -444,6 +445,18 @@ function safeFailureCode(error: unknown, fallback: string) {
   }
 
   return fallback
+}
+
+function isFollowConfirmationTrigger(notification: InstagramMessagingNotification) {
+  if (notification.quickReplyPayload === INSTAGRAM_FOLLOW_CONFIRMATION_QUICK_REPLY_PAYLOAD) {
+    return true
+  }
+
+  return FOLLOW_CONFIRMATION_TEXTS.has(normalizeFollowConfirmationText(notification.messageText))
+}
+
+function normalizeFollowConfirmationText(text: string) {
+  return text.trim().replace(/\s+/g, '')
 }
 
 function elapsedSince(startedAt: number) {
