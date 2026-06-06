@@ -1,11 +1,16 @@
 import { after, NextResponse, type NextRequest } from 'next/server'
-import { processInstagramComment } from '@/lib/instagram/auto-dm-processor'
+import {
+  processInstagramComment,
+  type AutoDmCommentProcessResult,
+} from '@/lib/instagram/auto-dm-processor'
 import {
   isInstagramAutoDmSendEnabled,
   processInitialPrivateReplyAndPublicCommentReply,
 } from '@/lib/instagram/auto-dm-delivery'
 import { processFollowConfirmationMessage } from '@/lib/instagram/auto-dm-follow-delivery'
 import {
+  type CommentNormalizationResult,
+  type CommentSkipReason,
   normalizeInstagramCommentNotifications,
   normalizeInstagramMessagingNotifications,
   parseWebhookPayload,
@@ -14,6 +19,48 @@ import {
 } from '@/lib/instagram/webhook'
 
 export const dynamic = 'force-dynamic'
+
+type CommentDiagnosticStatus =
+  | CommentSkipReason
+  | AutoDmCommentProcessResult['status']
+  | 'invalid_payload'
+
+function logCommentWebhookDiagnostics({
+  normalized,
+  processResults,
+}: {
+  normalized: CommentNormalizationResult[]
+  processResults: AutoDmCommentProcessResult[]
+}) {
+  const skipReasons = normalized.flatMap((result) =>
+    'skipped' in result ? [result.skipped] : []
+  )
+  const processorStatuses = processResults.map((result) => result.status)
+  const results: CommentDiagnosticStatus[] = [...skipReasons, ...processorStatuses]
+  const skipReasonCounts = countBy(skipReasons)
+  const matchedCount = processResults.filter((result) => result.status === 'matched').length
+  const duplicateCount = processResults.filter((result) => result.status === 'duplicate_skipped').length
+  const failedCount = processResults.filter((result) => result.status === 'failed').length
+
+  console.info('[instagram-webhook]', {
+    type: 'comment',
+    normalizedCount: normalized.filter((result) => 'notification' in result).length,
+    results,
+    skipReasonCounts,
+    invalidPayloadSkipCount: skipReasons.length,
+    matchedCount,
+    eventCreatedCount: matchedCount,
+    duplicateCount,
+    failedCount,
+  })
+}
+
+function countBy(values: string[]) {
+  return values.reduce<Record<string, number>>((counts, value) => {
+    counts[value] = (counts[value] ?? 0) + 1
+    return counts
+  }, {})
+}
 
 export async function GET(request: NextRequest) {
   const expectedToken = process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
@@ -57,6 +104,17 @@ export async function POST(request: NextRequest) {
   const payload = parseWebhookPayload(rawBody)
 
   if (payload === null) {
+    console.info('[instagram-webhook]', {
+      type: 'comment',
+      normalizedCount: 0,
+      results: ['invalid_payload'] satisfies CommentDiagnosticStatus[],
+      skipReasonCounts: { invalid_payload: 1 },
+      invalidPayloadSkipCount: 1,
+      matchedCount: 0,
+      eventCreatedCount: 0,
+      duplicateCount: 0,
+      failedCount: 0,
+    })
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
@@ -68,6 +126,7 @@ export async function POST(request: NextRequest) {
         : []
     )
   )
+  logCommentWebhookDiagnostics({ normalized, processResults })
 
   if (processResults.some((result) => result.status === 'failed')) {
     return NextResponse.json({ received: false }, { status: 500 })

@@ -22,9 +22,18 @@ export type InstagramMessagingNotification = {
   timestamp: string | null
 }
 
+export type CommentSkipReason =
+  | 'invalid_payload_shape'
+  | 'missing_entry_id'
+  | 'missing_comment_id'
+  | 'missing_media_id'
+  | 'missing_commenter_id'
+  | 'missing_comment_text'
+  | 'unsupported_field'
+
 export type CommentNormalizationResult =
   | { notification: InstagramCommentNotification }
-  | { skipped: 'unsupported_payload' | 'missing_required_fields' }
+  | { skipped: CommentSkipReason }
 
 export type MessagingNormalizationResult =
   | { notification: InstagramMessagingNotification }
@@ -80,13 +89,13 @@ export function parseWebhookPayload(rawBody: Uint8Array) {
   }
 }
 
-export function normalizeInstagramCommentNotifications(payload: unknown) {
+export function normalizeInstagramCommentNotifications(payload: unknown): CommentNormalizationResult[] {
   const results: CommentNormalizationResult[] = []
   const root = asRecord(payload)
   const entries = asArray(root?.entry)
 
   if (root?.object !== 'instagram' || entries.length === 0) {
-    return [{ skipped: 'unsupported_payload' }] as CommentNormalizationResult[]
+    return [{ skipped: 'invalid_payload_shape' }] as CommentNormalizationResult[]
   }
 
   for (const rawEntry of entries) {
@@ -94,12 +103,22 @@ export function normalizeInstagramCommentNotifications(payload: unknown) {
     const professionalAccountId = stringValue(entry?.id)
     const changes = asArray(entry?.changes)
 
+    if (!professionalAccountId) {
+      results.push({ skipped: 'missing_entry_id' })
+      continue
+    }
+
+    if (changes.length === 0) {
+      results.push({ skipped: 'invalid_payload_shape' })
+      continue
+    }
+
     for (const rawChange of changes) {
       const change = asRecord(rawChange)
       const field = stringValue(change?.field)
 
       if (field !== 'comments' && field !== 'live_comments') {
-        results.push({ skipped: 'unsupported_payload' })
+        results.push({ skipped: 'unsupported_field' })
         continue
       }
 
@@ -117,8 +136,28 @@ export function normalizeInstagramCommentNotifications(payload: unknown) {
           stringValue(value?.user_id)
         const commentText = stringValue(value?.text)
 
-        if (!professionalAccountId || !commentId || !mediaId || !commenterId || commentText === null) {
-          results.push({ skipped: 'missing_required_fields' })
+        if (!value) {
+          results.push({ skipped: 'invalid_payload_shape' })
+          continue
+        }
+
+        if (!commentId) {
+          results.push({ skipped: 'missing_comment_id' })
+          continue
+        }
+
+        if (!mediaId) {
+          results.push({ skipped: 'missing_media_id' })
+          continue
+        }
+
+        if (!commenterId) {
+          results.push({ skipped: 'missing_commenter_id' })
+          continue
+        }
+
+        if (commentText === null) {
+          results.push({ skipped: 'missing_comment_text' })
           continue
         }
 
@@ -142,7 +181,7 @@ export function normalizeInstagramCommentNotifications(payload: unknown) {
 
   return results.length > 0
     ? results
-    : [{ skipped: 'unsupported_payload' }]
+    : [{ skipped: 'invalid_payload_shape' }]
 }
 
 export function normalizeInstagramMessagingNotifications(payload: unknown) {

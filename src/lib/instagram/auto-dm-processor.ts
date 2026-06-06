@@ -9,7 +9,11 @@ export type AutoDmCommentProcessResult =
   | { status: 'ignored_rule_not_found' }
   | { status: 'ignored_keyword_not_matched' }
   | { status: 'duplicate_skipped' }
-  | { status: 'failed' }
+  | {
+      status: 'failed'
+      failureStage?: 'connection_lookup' | 'rule_lookup' | 'event_insert' | 'unexpected'
+      failureCode?: string
+    }
 
 export async function processInstagramComment(
   notification: InstagramCommentNotification
@@ -24,7 +28,11 @@ export async function processInstagramComment(
       .maybeSingle()
 
     if (connectionError) {
-      return { status: 'failed' }
+      return {
+        status: 'failed',
+        failureStage: 'connection_lookup',
+        failureCode: connectionError.code,
+      }
     }
 
     if (!connection) {
@@ -40,7 +48,11 @@ export async function processInstagramComment(
       .maybeSingle()
 
     if (ruleError) {
-      return { status: 'failed' }
+      return {
+        status: 'failed',
+        failureStage: 'rule_lookup',
+        failureCode: ruleError.code,
+      }
     }
 
     if (!rule) {
@@ -76,12 +88,16 @@ export async function processInstagramComment(
     }
 
     if (eventError || !event) {
-      return { status: 'failed' }
+      return {
+        status: 'failed',
+        failureStage: 'event_insert',
+        failureCode: eventError?.code,
+      }
     }
 
     return { status: 'matched', eventId: event.id }
   } catch {
-    return { status: 'failed' }
+    return { status: 'failed', failureStage: 'unexpected' }
   }
 }
 
