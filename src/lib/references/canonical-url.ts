@@ -66,9 +66,9 @@ function normalizePathname(pathname: string) {
   return withoutDuplicateSlashes.replace(/\/+$/, '')
 }
 
-function getInstagramShortcode(pathname: string, segment: 'reel' | 'p') {
+function getInstagramShortcode(pathname: string, segments: string[]) {
   const parts = pathname.split('/').filter(Boolean)
-  if (parts[0] !== segment || !parts[1]) return null
+  if (!segments.includes(parts[0]) || !parts[1]) return null
 
   return parts[1]
 }
@@ -111,14 +111,16 @@ export function canonicalizeReferenceUrl(rawUrl: string): CanonicalReferenceUrl 
   }
 
   if (url.hostname === 'www.instagram.com') {
-    const reelShortcode = getInstagramShortcode(url.pathname, 'reel')
-    const postShortcode = getInstagramShortcode(url.pathname, 'p')
+    const reelShortcode = getInstagramShortcode(url.pathname, ['reel', 'reels'])
+    const postShortcode = getInstagramShortcode(url.pathname, ['p'])
 
     if (reelShortcode) {
       platform = 'instagram_reel'
       url.pathname = `/reel/${encodeURIComponent(reelShortcode)}/`
       url.search = ''
     } else if (postShortcode) {
+      // /p/ can contain photos, carousels, or videos. Keep it as instagram_post
+      // until a manual analyze action or metadata enrichment can confirm video.
       platform = 'instagram_post'
       url.pathname = `/p/${encodeURIComponent(postShortcode)}/`
       url.search = ''
