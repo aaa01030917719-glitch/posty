@@ -8,13 +8,19 @@ export async function proxy(request: NextRequest) {
   const isInstagramOauthCallback = pathname === '/api/meta/instagram/oauth/callback'
   const isInstagramWebhook = pathname === '/api/meta/instagram/webhook'
   const isLinkkoReferenceEvent = pathname === '/api/integrations/linkko/events'
+  const isReferenceQueueProcessor = pathname === '/api/references/process-queue'
+  const isReferenceManusReconcile = pathname === '/api/references/reconcile-manus'
+  const isManusWebhook = pathname === '/api/webhooks/manus'
 
   if (
     isPublicSharePage ||
     isPublicLegalPage ||
     isInstagramOauthCallback ||
     isInstagramWebhook ||
-    isLinkkoReferenceEvent
+    isLinkkoReferenceEvent ||
+    isReferenceQueueProcessor ||
+    isReferenceManusReconcile ||
+    isManusWebhook
   ) {
     return NextResponse.next({ request })
   }
