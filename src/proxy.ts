@@ -7,8 +7,15 @@ export async function proxy(request: NextRequest) {
   const isPublicLegalPage = pathname === '/privacy-policy' || pathname === '/data-deletion'
   const isInstagramOauthCallback = pathname === '/api/meta/instagram/oauth/callback'
   const isInstagramWebhook = pathname === '/api/meta/instagram/webhook'
+  const isLinkkoReferenceEvent = pathname === '/api/integrations/linkko/events'
 
-  if (isPublicSharePage || isPublicLegalPage || isInstagramOauthCallback || isInstagramWebhook) {
+  if (
+    isPublicSharePage ||
+    isPublicLegalPage ||
+    isInstagramOauthCallback ||
+    isInstagramWebhook ||
+    isLinkkoReferenceEvent
+  ) {
     return NextResponse.next({ request })
   }
 
