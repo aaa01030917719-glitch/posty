@@ -1,5 +1,6 @@
 export type ChannelType = 'instagram' | 'threads' | 'youtube' | 'blog' | 'custom'
 export type ContentStatus = 'idea' | 'planning' | 'writing' | 'review' | 'scheduled' | 'published' | 'hold'
+export type ContentKind = 'content' | 'share_material'
 export type ContentMediaType = 'image' | 'video' | 'file'
 export type Priority = 'low' | 'normal' | 'high'
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
@@ -100,6 +101,7 @@ export interface ContentCard {
   checklist: ChecklistItem[]
   share_sections: ShareSection[]
   share_body_doc?: Json | null
+  content_kind: ContentKind
   idea_id: string | null
   project_id: string | null
   is_deleted: boolean

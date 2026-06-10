@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ClipboardEvent } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { Copy, ExternalLink, FileText, Plus, Save, Share2, Trash2, Upload } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Copy, FileText, Plus, Save, Share2, Trash2, Upload } from 'lucide-react'
 import { clsx } from 'clsx'
 import { createContentCard } from '@/components/content/createContentCard'
 import {
@@ -40,6 +40,7 @@ type ShareMaterialCard = {
   title: string
   share_sections: ShareSection[] | null
   share_body_doc?: Json | null
+  content_kind: 'share_material'
   is_deleted: boolean
   updated_at: string
 }
@@ -60,6 +61,11 @@ const EMPTY_MESSAGE = '아직 공유 자료가 없습니다.'
 const CREATE_ERROR = '공유 자료를 만들지 못했습니다. 잠시 후 다시 시도해주세요.'
 const SAVE_ERROR = '공유 자료를 저장하지 못했습니다. 잠시 후 다시 시도해주세요.'
 const DISABLE_ERROR = '공유를 중지하지 못했습니다. 잠시 후 다시 시도해주세요.'
+const DELETE_ERROR = '공유 자료를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.'
+const DELETE_LINK_DISABLE_ERROR =
+  '공유 자료는 삭제했지만 공유 링크 비활성화에 실패했습니다. 새로고침 후 확인해주세요.'
+const DELETE_CONFIRM =
+  '이 공유 자료를 삭제하시겠습니까? 삭제 후 공유 링크로는 더 이상 접근할 수 없습니다.'
 const COPY_ERROR = '링크를 복사하지 못했습니다. 직접 선택해서 복사해주세요.'
 
 const ATTACHMENT_SECTION_LABEL = '첨부파일'
@@ -150,7 +156,6 @@ function getShareUrl(token: string) {
 }
 
 export default function ShareMaterialsPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const sectionTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
   const [materials, setMaterials] = useState<ShareMaterialLink[]>([])
@@ -167,6 +172,7 @@ export default function ShareMaterialsPage() {
   const [mediaUploading, setMediaUploading] = useState(false)
   const [mediaDeletingIds, setMediaDeletingIds] = useState<string[]>([])
   const [disablingId, setDisablingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
   const selectedMaterial = useMemo(() => {
@@ -229,12 +235,14 @@ export default function ShareMaterialsPage() {
               title,
               share_sections,
               share_body_doc,
+              content_kind,
               is_deleted,
               updated_at
             )
           `
         )
         .eq('card.is_deleted', false)
+        .eq('card.content_kind', 'share_material')
         .order('created_at', { ascending: false })
 
       if (cancelled) return
@@ -351,7 +359,10 @@ export default function ShareMaterialsPage() {
       if (userError) throw userError
       if (!user) throw new Error('Authenticated user not found')
 
-      const cardId = await createContentCard({ title: NEW_MATERIAL_TITLE })
+      const cardId = await createContentCard({
+        title: NEW_MATERIAL_TITLE,
+        contentKind: 'share_material',
+      })
       const { data: shareLink, error: shareLinkError } = await supabase
         .from('content_share_links')
         .insert({
@@ -369,6 +380,7 @@ export default function ShareMaterialsPage() {
               title,
               share_sections,
               share_body_doc,
+              content_kind,
               is_deleted,
               updated_at
             )
@@ -599,7 +611,8 @@ export default function ShareMaterialsPage() {
         .from('content_cards')
         .update(payload)
         .eq('id', selectedCard.id)
-        .select('id, title, share_sections, share_body_doc, is_deleted, updated_at')
+        .eq('content_kind', 'share_material')
+        .select('id, title, share_sections, share_body_doc, content_kind, is_deleted, updated_at')
         .single()
 
       if (error) throw error
@@ -645,6 +658,74 @@ export default function ShareMaterialsPage() {
     } catch (error) {
       console.error('Failed to copy share material link', error)
       window.alert(COPY_ERROR)
+    }
+  }
+
+  const handleSoftDeleteMaterial = async () => {
+    if (!selectedMaterial || !selectedCard || deletingId) return
+    if (!window.confirm(DELETE_CONFIRM)) return
+
+    setDeletingId(selectedCard.id)
+
+    try {
+      const supabase = createClient()
+      const disabledAt = new Date().toISOString()
+      const { error: cardError } = await supabase
+        .from('content_cards')
+        .update({
+          is_deleted: true,
+          deleted_at: disabledAt,
+          deleted_reason: null,
+        })
+        .eq('id', selectedCard.id)
+        .eq('content_kind', 'share_material')
+
+      if (cardError) throw cardError
+
+      const { error: linkError } = await supabase
+        .from('content_share_links')
+        .update({
+          is_enabled: false,
+          disabled_at: disabledAt,
+        })
+        .eq('card_id', selectedCard.id)
+
+      if (linkError) {
+        console.error('Failed to disable deleted share material links', linkError)
+        window.alert(DELETE_LINK_DISABLE_ERROR)
+      }
+
+      setMaterials((prev) => {
+        const nextMaterials = prev.filter((material) => material.card_id !== selectedCard.id)
+        setSelectedLinkId(nextMaterials[0]?.id ?? null)
+        return nextMaterials
+      })
+      setTitleDrafts((prev) => {
+        const next = { ...prev }
+        delete next[selectedCard.id]
+        return next
+      })
+      setBodyDrafts((prev) => {
+        const next = { ...prev }
+        delete next[selectedCard.id]
+        return next
+      })
+      setBodyDocDrafts((prev) => {
+        const next = { ...prev }
+        delete next[selectedCard.id]
+        return next
+      })
+      setMediaItemsByCardId((prev) => {
+        const next = { ...prev }
+        delete next[selectedCard.id]
+        return next
+      })
+      setToastMessage('공유 자료가 삭제되었습니다.')
+    } catch (error) {
+      console.error('Failed to soft delete share material', error)
+      window.alert(DELETE_ERROR)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -790,15 +871,24 @@ export default function ShareMaterialsPage() {
                           링크 복사
                         </Button>
                       )}
-                      <Button
+                      <button
                         type="button"
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => router.push(`/content/${selectedCard.id}`)}
+                        onClick={handleSaveSections}
+                        disabled={saving || deletingId === selectedCard.id}
+                        className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-text-body)] transition-[background-color,color,border-color] hover:bg-[var(--color-bg-subtle)] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)] sm:px-3"
                       >
-                        <ExternalLink size={14} />
-                        콘텐츠에서 편집
-                      </Button>
+                        <Save size={13} className="shrink-0" />
+                        {saving ? '저장 중' : '저장'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSoftDeleteMaterial}
+                        disabled={saving || deletingId === selectedCard.id}
+                        className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-[5px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] px-2.5 text-[12px] font-semibold text-[var(--color-danger)] transition-[background-color,color,border-color] hover:bg-[color-mix(in_srgb,var(--color-danger)_8%,var(--color-bg-surface))] disabled:cursor-not-allowed disabled:text-[var(--color-text-muted)]"
+                      >
+                        <Trash2 size={13} className="shrink-0" />
+                        {deletingId === selectedCard.id ? '삭제 중' : '삭제'}
+                      </button>
                       <Button
                         type="button"
                         size="sm"

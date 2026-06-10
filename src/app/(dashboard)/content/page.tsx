@@ -179,6 +179,7 @@ export default function ContentPage() {
               '*, channel:channels(*), project:content_projects(id,title), scripts(body,caption,hashtags,thumbnail_text)'
             )
             .eq('is_deleted', false)
+            .eq('content_kind', 'content')
             .order('created_at', { ascending: false }),
           supabase
             .from('content_projects')
@@ -260,7 +261,10 @@ export default function ContentPage() {
 
     try {
       const nextProjectId = activeProjectFilter === 'all' ? null : activeProjectFilter
-      const nextId = await createContentCard({ projectId: nextProjectId })
+      const nextId = await createContentCard({
+        contentKind: 'content',
+        projectId: nextProjectId,
+      })
       router.push(`/content/${nextId}`)
     } catch (error) {
       console.error('Failed to create content card', error)

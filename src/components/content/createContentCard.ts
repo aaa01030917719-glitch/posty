@@ -2,13 +2,14 @@
 
 import { recordContentActivityLog } from '@/lib/content-activity-logs'
 import { createClient } from '@/lib/supabase/client'
-import type { Database } from '@/lib/types'
+import type { ContentKind, Database } from '@/lib/types'
 
 type ContentCardInsert = Database['public']['Tables']['content_cards']['Insert']
 
 type CreateContentCardOptions = {
   title?: string
   channelId?: string | null
+  contentKind?: ContentKind
   projectId?: string | null
   scheduledAt?: string | null
 }
@@ -46,6 +47,7 @@ export async function createContentCard(options: CreateContentCardOptions = {}) 
     title: options.title?.trim() || '새 콘텐츠',
     format: null,
     status: 'idea',
+    content_kind: options.contentKind ?? 'content',
     priority: 'normal',
     scheduled_at: options.scheduledAt ?? null,
     published_at: null,
@@ -59,7 +61,7 @@ export async function createContentCard(options: CreateContentCardOptions = {}) 
   const { data, error } = await supabase
     .from('content_cards')
     .insert(payload)
-    .select('id, user_id, title, status, project_id, channel_id, scheduled_at')
+    .select('id, user_id, title, status, content_kind, project_id, channel_id, scheduled_at')
     .single()
 
   if (error) {

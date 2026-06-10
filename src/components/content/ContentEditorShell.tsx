@@ -272,6 +272,7 @@ const SAMPLE_CARD: ContentCard = {
     { id: 'check-3', text: '캡션과 해시태그 정리', done: false },
   ],
   share_sections: [],
+  content_kind: 'content',
   idea_id: null,
   project_id: null,
   is_deleted: false,
@@ -1452,6 +1453,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const lastEditorMarkdownRef = useRef('')
   const lastEditorMediaKeyRef = useRef('')
   const hasUnsavedChangesRef = useRef(false)
+  const currentDirtyKeyRef = useRef('')
   const allowNavigationRef = useRef(false)
   const [card, setCard] = useState<ContentCard | null>(null)
   const [loading, setLoading] = useState(true)
@@ -1507,6 +1509,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const [bodyLinkUrlDraft, setBodyLinkUrlDraft] = useState('')
   const [bodyLinkError, setBodyLinkError] = useState<string | null>(null)
   const [savedDirtyKey, setSavedDirtyKey] = useState<string | null>(null)
+  const [baselineSyncNonce, setBaselineSyncNonce] = useState(0)
   const [leaveModalOpen, setLeaveModalOpen] = useState(false)
   const [pendingNavigationHref, setPendingNavigationHref] = useState<string | null>(null)
 
@@ -1605,8 +1608,22 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   )
 
   useEffect(() => {
+    currentDirtyKeyRef.current = currentDirtyKey
+  }, [currentDirtyKey])
+
+  useEffect(() => {
     hasUnsavedChangesRef.current = hasUnsavedChanges
   }, [hasUnsavedChanges])
+
+  useEffect(() => {
+    if (baselineSyncNonce === 0) return
+
+    const timer = window.setTimeout(() => {
+      setSavedDirtyKey(currentDirtyKeyRef.current)
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [baselineSyncNonce])
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -1729,24 +1746,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       setSceneDrafts(nextSceneDrafts)
       setChecklistDrafts(nextChecklistDrafts)
       setSelectedProjectId(nextSelectedProjectId)
-      setSavedDirtyKey(
-        createContentEditorDirtyKey({
-          title: nextCard?.title ?? '',
-          scheduledDate: nextScheduled.date,
-          scheduledTime: nextScheduled.time,
-          body: nextCard?.memo ?? '',
-          bodyDoc: shouldUseTiptap ? nextBodyDoc : null,
-          caption: nextScript?.caption ?? '',
-          hashtags: nextScript?.hashtags ?? '',
-          thumbnail: nextScript?.thumbnail_text ?? '',
-          memo: nextCard?.editor_memo ?? '',
-          panelTitle: nextPanelTitle,
-          sceneDrafts: nextSceneDrafts,
-          checklistDrafts: nextChecklistDrafts,
-          selectedProjectId: nextSelectedProjectId,
-          mediaItems: nextMediaItems,
-        })
-      )
+      setSavedDirtyKey(null)
+      setBaselineSyncNonce((prev) => prev + 1)
       setSaveState('idle')
       setSaveFeedbackLabel(null)
       setLoading(false)
@@ -1778,6 +1779,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           .from('content_cards')
           .select('*, channel:channels(*), project:content_projects(id,title)')
           .eq('id', cardId)
+          .eq('content_kind', 'content')
           .maybeSingle(),
         supabase.from('scripts').select('*').eq('card_id', cardId).maybeSingle(),
         supabase.from('content_projects').select('id, title').order('created_at', { ascending: false }),
@@ -1785,6 +1787,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           .from('content_cards')
           .select('id, title, project_id, status, scheduled_at, is_deleted, channel:channels(id,name,type,color)')
           .eq('is_deleted', false)
+          .eq('content_kind', 'content')
           .order('created_at', { ascending: false }),
         supabase
           .from('content_share_links')
@@ -1938,6 +1941,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
         .from('content_cards')
         .update(payload)
         .eq('id', card.id)
+        .eq('content_kind', 'content')
         .select('*, channel:channels(*), project:content_projects(id,title)')
         .single()
 
@@ -2122,6 +2126,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           deleted_reason: null,
         })
         .eq('id', card.id)
+        .eq('content_kind', 'content')
         .select('*, channel:channels(*), project:content_projects(id,title)')
         .single()
 
@@ -2183,6 +2188,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
           deleted_reason: null,
         })
         .eq('id', card.id)
+        .eq('content_kind', 'content')
         .select('*, channel:channels(*), project:content_projects(id,title)')
         .single()
 
