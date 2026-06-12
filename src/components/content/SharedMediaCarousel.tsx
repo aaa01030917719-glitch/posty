@@ -69,7 +69,7 @@ export function SharedMediaCarousel({ items }: SharedMediaCarouselProps) {
             {item.signedUrl && item.mediaType === 'image' ? (
               <img
                 src={item.signedUrl}
-                alt={item.fileName ?? ATTACHMENT_LABEL}
+                alt={ATTACHMENT_LABEL}
                 className="h-full w-auto max-w-none object-contain"
               />
             ) : item.signedUrl ? (

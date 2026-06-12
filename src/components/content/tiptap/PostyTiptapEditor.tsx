@@ -146,7 +146,7 @@ export function PostyTiptapEditor({
           .setPostyInlineMedia({
             mediaId: item.id,
             size: 'medium',
-            alt: item.fileName,
+            alt: '',
           })
           .run()
 
