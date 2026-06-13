@@ -136,14 +136,14 @@ These app-level fields must be selected in the Meta Dashboard. After OAuth
 completes, Posty also subscribes the connected Instagram Professional account
 itself by calling:
 
-- `POST https://graph.instagram.com/v25.0/{ig_user_id}/subscribed_apps`
+- `POST https://graph.instagram.com/v25.0/me/subscribed_apps`
 - `subscribed_fields=comments,messages,messaging_postbacks`
 
-Posty uses the explicit Instagram Professional account ID returned by the
-metadata lookup, not the `/me` alias. After the POST succeeds, the OAuth
-callback verifies the subscription with:
+Posty uses the long-lived Instagram access token returned by the Instagram
+Login flow, so the subscription endpoint uses the token owner's `/me` alias.
+After the POST succeeds, the OAuth callback verifies the subscription with:
 
-- `GET https://graph.instagram.com/v25.0/{ig_user_id}/subscribed_apps`
+- `GET https://graph.instagram.com/v25.0/me/subscribed_apps`
 
 Existing connected accounts that were linked before this account-level
 subscription step was added should be reconnected from `/auto-dm` with the

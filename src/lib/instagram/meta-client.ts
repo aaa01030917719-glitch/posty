@@ -7,7 +7,7 @@ const INSTAGRAM_GRAPH_API_VERSION = 'v23.0'
 const INSTAGRAM_MEDIA_API_VERSION = 'v25.0'
 const INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION = 'v25.0'
 const FETCH_TIMEOUT_MS = 10_000
-const INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS = [
+export const INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS = [
   'comments',
   'messages',
   'messaging_postbacks',
@@ -58,6 +58,17 @@ type InstagramWebhookSubscriptionListResponse = {
 type InstagramWebhookSubscriptionState = {
   webhookSubscribed: boolean
   subscribedFields: string[]
+  missingFields: string[]
+}
+
+type InstagramMetaErrorDetails = {
+  status?: number
+  metaCode?: string
+  metaType?: string
+  fbtraceId?: string
+  requestedFields?: string[]
+  returnedFields?: string[]
+  missingFields?: string[]
 }
 
 type PrivateReplyResponse = {
@@ -110,9 +121,56 @@ export type InstagramRecentMedia = {
 }
 
 export class InstagramMetaError extends Error {
-  constructor(message: string) {
+  status?: number
+  metaCode?: string
+  metaType?: string
+  fbtraceId?: string
+  requestedFields?: string[]
+  returnedFields?: string[]
+  missingFields?: string[]
+
+  constructor(message: string, details: InstagramMetaErrorDetails = {}) {
     super(message)
     this.name = 'InstagramMetaError'
+    this.status = details.status
+    this.metaCode = details.metaCode
+    this.metaType = details.metaType
+    this.fbtraceId = details.fbtraceId
+    this.requestedFields = details.requestedFields
+    this.returnedFields = details.returnedFields
+    this.missingFields = details.missingFields
+  }
+}
+
+function stringFromMetaValue(value: unknown) {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return String(value)
+  return undefined
+}
+
+async function readInstagramErrorDetails(response: Response): Promise<InstagramMetaErrorDetails & { message?: string }> {
+  try {
+    const text = await response.text()
+    const parsed = JSON.parse(text) as {
+      error?: {
+        message?: unknown
+        type?: unknown
+        code?: unknown
+        error_subcode?: unknown
+        fbtrace_id?: unknown
+      }
+    }
+    const error = parsed.error
+
+    return {
+      status: response.status,
+      message: stringFromMetaValue(error?.message),
+      metaCode: stringFromMetaValue(error?.code ?? error?.error_subcode),
+      metaType: stringFromMetaValue(error?.type),
+      fbtraceId: stringFromMetaValue(error?.fbtrace_id),
+    }
+  } catch {
+    return { status: response.status }
   }
 }
 
@@ -151,7 +209,12 @@ async function fetchInstagramJson<T>(url: string, init?: RequestInit) {
   })
 
   if (!response.ok) {
-    throw new InstagramMetaError(`Instagram request failed with status ${response.status}`)
+    const errorDetails = await readInstagramErrorDetails(response)
+
+    throw new InstagramMetaError(
+      errorDetails.message ?? `Instagram request failed with status ${response.status}`,
+      errorDetails
+    )
   }
 
   return response.json() as Promise<T>
@@ -269,14 +332,13 @@ export async function getInstagramProfessionalAccount(accessToken: string) {
 }
 
 function normalizeSubscribedFields(data: InstagramWebhookSubscriptionListResponse) {
-  const allowedFields = new Set<string>(INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS)
   const fields = new Set<string>()
 
   for (const subscription of data.data ?? []) {
     if (!Array.isArray(subscription.subscribed_fields)) continue
 
     for (const field of subscription.subscribed_fields) {
-      if (typeof field === 'string' && allowedFields.has(field)) {
+      if (typeof field === 'string') {
         fields.add(field)
       }
     }
@@ -285,14 +347,23 @@ function normalizeSubscribedFields(data: InstagramWebhookSubscriptionListRespons
   return [...fields]
 }
 
-function toWebhookSubscriptionState(
+export function getMissingInstagramWebhookSubscriptionFields(
+  subscribedFields: string[]
+): string[] {
+  return INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS.filter((field) =>
+    !subscribedFields.includes(field)
+  )
+}
+
+export function toWebhookSubscriptionState(
   subscribedFields: string[]
 ): InstagramWebhookSubscriptionState {
+  const missingFields = getMissingInstagramWebhookSubscriptionFields(subscribedFields)
+
   return {
-    webhookSubscribed: INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS.every((field) =>
-      subscribedFields.includes(field)
-    ),
+    webhookSubscribed: missingFields.length === 0,
     subscribedFields,
+    missingFields,
   }
 }
 
@@ -300,10 +371,7 @@ export async function subscribeInstagramAccountToWebhooks(input: {
   instagramProfessionalAccountId: string
   accessToken: string
 }) {
-  const url = new URL(
-    `/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/${encodeURIComponent(input.instagramProfessionalAccountId)}/subscribed_apps`,
-    INSTAGRAM_GRAPH_ENDPOINT
-  )
+  const url = new URL(`/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/me/subscribed_apps`, INSTAGRAM_GRAPH_ENDPOINT)
 
   url.searchParams.set('subscribed_fields', INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS.join(','))
   url.searchParams.set('access_token', input.accessToken)
@@ -313,7 +381,10 @@ export async function subscribeInstagramAccountToWebhooks(input: {
   })
 
   if (data.success !== true) {
-    throw new InstagramMetaError('Instagram webhook subscription response is incomplete')
+    throw new InstagramMetaError('Instagram webhook subscription response is incomplete', {
+      status: 200,
+      requestedFields: [...INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS],
+    })
   }
 }
 
@@ -321,16 +392,24 @@ export async function getInstagramAccountWebhookSubscriptions(input: {
   instagramProfessionalAccountId: string
   accessToken: string
 }) {
-  const url = new URL(
-    `/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/${encodeURIComponent(input.instagramProfessionalAccountId)}/subscribed_apps`,
-    INSTAGRAM_GRAPH_ENDPOINT
-  )
+  const url = new URL(`/${INSTAGRAM_WEBHOOK_SUBSCRIPTION_API_VERSION}/me/subscribed_apps`, INSTAGRAM_GRAPH_ENDPOINT)
 
   url.searchParams.set('access_token', input.accessToken)
 
   const data = await fetchInstagramJson<InstagramWebhookSubscriptionListResponse>(url.toString())
 
-  return toWebhookSubscriptionState(normalizeSubscribedFields(data))
+  const subscription = toWebhookSubscriptionState(normalizeSubscribedFields(data))
+
+  if (!subscription.webhookSubscribed) {
+    throw new InstagramMetaError('Instagram webhook subscription missing requested fields', {
+      status: 200,
+      requestedFields: [...INSTAGRAM_WEBHOOK_SUBSCRIBED_FIELDS],
+      returnedFields: subscription.subscribedFields,
+      missingFields: subscription.missingFields,
+    })
+  }
+
+  return subscription
 }
 
 export async function listInstagramRecentMedia(input: {
