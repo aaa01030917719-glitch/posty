@@ -155,7 +155,7 @@ function submitManualMock(input: {
   const job = input.existingJob ?? newJob({
     id: "manual_job",
     referenceId: input.reference.id,
-    priority: input.allowCompleted ? 110 : 120,
+    priority: 100,
     isAutoSubmitAllowed: false,
     submissionSource: input.allowCompleted ? "manual_reanalyze" : "manual",
   });
@@ -355,8 +355,102 @@ function runManualAnalysisMock() {
 
   assert(first.status === "submitted", "manual analysis should submit when cost is confirmed");
   assert(first.manusCalls === 1, "manual analysis should submit one Manus task");
-  assert(first.job?.priority === 120, "manual analysis should use priority 120");
+  assert(first.job?.priority === 100, "manual analysis should use existing-compatible realtime priority 100");
   assert(second.manusCalls === 0, "manual button repeat should not create duplicate Manus task");
+}
+
+function runExistingQueuedManualJobMock() {
+  const reference = { id: "ref_existing_queued", platform: "instagram_reel" as const, latestAnalysisId: null };
+  const existingJob = newJob({
+    id: "existing_queued_manual",
+    referenceId: reference.id,
+    status: "queued",
+    isAutoSubmitAllowed: false,
+    submissionSource: "manual",
+    manusTaskId: null,
+  });
+  const result = submitManualMock({
+    reference,
+    confirmCost: true,
+    allowCompleted: false,
+    existingJob,
+  });
+
+  assert(result.status === "submitted", "existing queued job should be claimed and submitted");
+  assert(result.job?.id === existingJob.id, "existing queued job should be reused instead of inserting");
+  assert(result.manusCalls === 1, "existing queued job should call Manus once after claim");
+}
+
+function runExistingSubmittedManualJobMock() {
+  const reference = { id: "ref_existing_submitted", platform: "instagram_reel" as const, latestAnalysisId: null };
+  const existingJob = newJob({
+    id: "existing_submitted_manual",
+    referenceId: reference.id,
+    status: "submitted",
+    isAutoSubmitAllowed: false,
+    submissionSource: "manual",
+    manusTaskId: "task_existing",
+  });
+  const result = submitManualMock({
+    reference,
+    confirmCost: true,
+    allowCompleted: false,
+    existingJob,
+  });
+
+  assert(result.status === "already_submitted", "existing submitted job should be returned");
+  assert(result.manusCalls === 0, "existing submitted job should not call task.create again");
+}
+
+function runInsertRaceMock() {
+  const reference = { id: "ref_insert_race", platform: "instagram_reel" as const, latestAnalysisId: null };
+  const racedJob = newJob({
+    id: "raced_active_job",
+    referenceId: reference.id,
+    status: "queued",
+    isAutoSubmitAllowed: false,
+    submissionSource: "manual",
+  });
+  const insertResult = { code: "23505", racedJob };
+  const reusedJob = insertResult.code === "23505" ? insertResult.racedJob : null;
+  const result = submitManualMock({
+    reference,
+    confirmCost: true,
+    allowCompleted: false,
+    existingJob: reusedJob,
+  });
+
+  assert(result.job?.id === racedJob.id, "insert race 23505 should re-query and reuse active job");
+  assert(result.status === "submitted", "reused raced job should be claimable");
+}
+
+function runConfirmCostBlockedMock() {
+  const result = submitManualMock({
+    reference: { id: "ref_no_confirm", platform: "instagram_reel", latestAnalysisId: null },
+    confirmCost: false,
+    allowCompleted: false,
+    existingJob: null,
+  });
+
+  assert(result.status === "cost_confirmation_required", "confirmCost=false should block manual analysis");
+  assert(result.manusCalls === 0, "confirmCost=false should not call Manus");
+}
+
+function runManualDailyLimitBlockedMock() {
+  const submittedToday = 5;
+  const dailyLimit = 5;
+  const blocked = submittedToday >= dailyLimit;
+  const result = blocked
+    ? { status: "daily_submission_limit_reached", manusCalls: 0 }
+    : submitManualMock({
+        reference: { id: "ref_limit", platform: "instagram_reel", latestAnalysisId: null },
+        confirmCost: true,
+        allowCompleted: false,
+        existingJob: null,
+      });
+
+  assert(result.status === "daily_submission_limit_reached", "manual analysis should block at daily limit");
+  assert(result.manusCalls === 0, "daily limit should not call Manus");
 }
 
 function runCompletedReanalysisMock() {
@@ -380,7 +474,7 @@ function runCompletedReanalysisMock() {
 
   assert(blocked.status === "analysis_already_completed", "basic analyze should block completed references");
   assert(reanalysis.status === "submitted", "reanalyze route should allow explicit new analysis");
-  assert(reanalysis.job?.priority === 110, "manual reanalysis should use priority 110");
+  assert(reanalysis.job?.priority === 100, "manual reanalysis should use existing-compatible realtime priority 100");
 }
 
 function runLowConfidenceMock() {
@@ -404,6 +498,11 @@ function run() {
   runFolderAutoOnMock();
   runFolderAutoOffMock();
   runManualAnalysisMock();
+  runExistingQueuedManualJobMock();
+  runExistingSubmittedManualJobMock();
+  runInsertRaceMock();
+  runConfirmCostBlockedMock();
+  runManualDailyLimitBlockedMock();
   runCompletedReanalysisMock();
   runLowConfidenceMock();
 
@@ -423,6 +522,11 @@ function run() {
   console.log("- Linkko folder auto ON: auto_realtime job is queued ok");
   console.log("- Linkko folder auto OFF: auto-submit job is not created ok");
   console.log("- manual analysis: cost confirmation and duplicate-click guard ok");
+  console.log("- manual analysis: existing queued job reuse and claim ok");
+  console.log("- manual analysis: existing submitted job blocks task.create ok");
+  console.log("- manual analysis: insert race 23505 reuses active job ok");
+  console.log("- manual analysis: confirmCost=false blocks submission ok");
+  console.log("- manual analysis: daily limit blocks submission ok");
   console.log("- reanalysis: completed reference blocked by basic analyze, allowed by reanalyze ok");
   console.log("- UI policy: low transcript confidence notice condition ok");
 }

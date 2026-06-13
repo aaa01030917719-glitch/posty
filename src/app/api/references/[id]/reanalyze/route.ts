@@ -46,9 +46,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       referenceId: id,
       confirmCost: body.confirmCost === true,
       allowCompletedAnalysis: true,
-      jobType: 'manual_reanalyze',
+      jobType: 'realtime',
       submissionSource: 'manual_reanalyze',
-      priority: 110,
+      priority: 100,
     })
 
     return NextResponse.json(result)

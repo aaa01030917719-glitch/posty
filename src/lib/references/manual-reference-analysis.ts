@@ -9,7 +9,7 @@ import {
 type AdminClient = ReturnType<typeof import('@/lib/supabase/admin').createAdminClient>
 
 type ManualSubmissionSource = 'manual' | 'manual_reanalyze'
-type ManualJobType = 'manual' | 'manual_reanalyze'
+type ManualJobType = 'realtime'
 
 type ReferenceForAnalysis = {
   id: string
@@ -27,6 +27,22 @@ type ActiveJob = {
   manus_task_id: string | null
   manus_task_url: string | null
   submission_source: string | null
+}
+
+type ManualJobInsertPayload = {
+  user_id: string
+  reference_id: string
+  job_type: ManualJobType
+  status: 'queued'
+  priority: number
+  available_at: string
+  is_auto_submit_allowed: false
+  submission_source: ManualSubmissionSource
+}
+
+type SafeSupabaseError = {
+  code?: string
+  message?: string
 }
 
 export class ManualReferenceAnalysisError extends Error {
@@ -51,6 +67,28 @@ function safeFailure(error: unknown) {
   }
 
   return { code: 'reference_analysis_submit_failed', reason: 'Unknown submission failure.' }
+}
+
+function shortMessage(message: string | undefined) {
+  return (message ?? 'No Supabase error message.').slice(0, 180)
+}
+
+function logManualJobInsertError(input: {
+  referenceId: string
+  error: SafeSupabaseError
+  payload: ManualJobInsertPayload
+  activeJobExists: boolean
+}) {
+  console.error('reference_analysis_manual_job_insert_failed', {
+    stage: 'manual_job_insert',
+    referenceId: input.referenceId,
+    supabaseErrorCode: input.error.code ?? 'unknown',
+    supabaseErrorMessage: shortMessage(input.error.message),
+    job_type: input.payload.job_type,
+    status: input.payload.status,
+    submission_source: input.payload.submission_source,
+    activeJobExists: input.activeJobExists,
+  })
 }
 
 async function getReferenceForAnalysis(
@@ -101,25 +139,36 @@ async function createManualJob(input: {
   jobType: ManualJobType
   submissionSource: ManualSubmissionSource
   priority: number
+  activeJobExists: boolean
 }) {
+  const payload: ManualJobInsertPayload = {
+    user_id: input.userId,
+    reference_id: input.referenceId,
+    job_type: input.jobType,
+    status: 'queued',
+    priority: input.priority,
+    available_at: new Date().toISOString(),
+    is_auto_submit_allowed: false,
+    submission_source: input.submissionSource,
+  }
   const { data, error } = await input.admin
     .from('reference_analysis_jobs')
-    .insert({
-      user_id: input.userId,
-      reference_id: input.referenceId,
-      job_type: input.jobType,
-      status: 'queued',
-      priority: input.priority,
-      is_auto_submit_allowed: false,
-      submission_source: input.submissionSource,
-    })
+    .insert(payload)
     .select('id,status,manus_task_id,manus_task_url,submission_source')
     .single()
 
   if (error) {
     if (error.code === '23505') {
-      return getActiveJob(input.admin, input.userId, input.referenceId)
+      const racedJob = await getActiveJob(input.admin, input.userId, input.referenceId)
+      if (racedJob) return racedJob
     }
+
+    logManualJobInsertError({
+      referenceId: input.referenceId,
+      error,
+      payload,
+      activeJobExists: input.activeJobExists,
+    })
 
     throw new ManualReferenceAnalysisError('analysis_job_insert_failed', 500)
   }
@@ -199,6 +248,7 @@ export async function submitManualReferenceAnalysis(input: {
     jobType: input.jobType,
     submissionSource: input.submissionSource,
     priority: input.priority,
+    activeJobExists: Boolean(existingJob),
   })
 
   if (!job) {
