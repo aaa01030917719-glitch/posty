@@ -12,6 +12,7 @@ export function ReferenceJobStatus({ job }: { job: ReferenceJobData | null }) {
 
   const fields = [
     ['작업 유형', job.job_type],
+    ['제출 출처', job.submission_source ?? '-'],
     ['상태', job.status],
     ['우선순위', String(job.priority)],
     ['시도 횟수', String(job.attempt_count)],

@@ -7,7 +7,6 @@ import {
 } from '@/lib/references/canonical-url'
 import type {
   LinkkoReferenceEvent,
-  LinkkoReferenceEventMode,
   LinkkoReferenceEventType,
 } from '@/lib/references/linkko-event-schema'
 
@@ -16,6 +15,11 @@ type AdminClient = ReturnType<typeof createAdminClient>
 type LinkkoConnection = {
   id: string
   posty_user_id: string
+}
+
+type LinkkoFolderIntegration = {
+  id: string
+  auto_analyze_new_links: boolean
 }
 
 type ExistingReference = {
@@ -53,14 +57,6 @@ function preferredTitle(event: LinkkoReferenceEvent, existing?: ExistingReferenc
 
 function preferredThumbnail(event: LinkkoReferenceEvent, existing?: ExistingReference | null) {
   return event.link.previewImage ?? existing?.thumbnail_url ?? null
-}
-
-function jobTypeForMode(mode: LinkkoReferenceEventMode) {
-  if (mode === 'backfill') {
-    return { jobType: 'backfill', priority: 50 } as const
-  }
-
-  return { jobType: 'realtime', priority: 100 } as const
 }
 
 async function getActiveConnection(admin: AdminClient, linkkoUserId: string) {
@@ -103,12 +99,12 @@ async function ensureFolderIntegration(
       return { error: 'folder_integration_required' } as const
     }
 
-    return { integrationId: null } as const
+    return { integration: null } as const
   }
 
   const { data, error } = await admin
     .from('linkko_folder_integrations')
-    .select('id')
+    .select('id,auto_analyze_new_links')
     .eq('posty_user_id', connection.posty_user_id)
     .eq('linkko_folder_id', folderId)
     .eq('is_enabled', true)
@@ -123,7 +119,7 @@ async function ensureFolderIntegration(
     return { error: 'folder_integration_required' } as const
   }
 
-  return { integrationId: data.id as string } as const
+  return { integration: data as LinkkoFolderIntegration } as const
 }
 
 async function getExistingSyncEvent(admin: AdminClient, event: LinkkoReferenceEvent) {
@@ -336,11 +332,13 @@ async function enqueueAnalysisJobIfNeeded(
   admin: AdminClient,
   event: LinkkoReferenceEvent,
   connection: LinkkoConnection,
+  integration: LinkkoFolderIntegration | null,
   reference: ExistingReference,
   platform: ReferencePlatform
 ) {
   if (!ANALYZABLE_PLATFORMS.has(platform)) return false
-  if (event.metadata.mode === 'reconcile') return false
+  if (event.metadata.mode !== 'realtime') return false
+  if (!integration?.auto_analyze_new_links) return false
   if (reference.latest_analysis_id) return false
 
   const hasActiveJob = await hasActiveAnalysisJob(
@@ -351,15 +349,16 @@ async function enqueueAnalysisJobIfNeeded(
 
   if (hasActiveJob) return false
 
-  const jobPolicy = jobTypeForMode(event.metadata.mode)
   const { error } = await admin
     .from('reference_analysis_jobs')
     .insert({
       user_id: connection.posty_user_id,
       reference_id: reference.id,
-      job_type: jobPolicy.jobType,
+      job_type: 'realtime',
       status: 'queued',
-      priority: jobPolicy.priority,
+      priority: 100,
+      is_auto_submit_allowed: true,
+      submission_source: 'auto_realtime',
     })
 
   if (error) {
@@ -393,6 +392,7 @@ async function processReferenceUpsert(
     admin,
     event,
     connection,
+    integration.integration,
     reference,
     platform
   )

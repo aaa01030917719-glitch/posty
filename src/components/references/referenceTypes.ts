@@ -42,6 +42,7 @@ export type ReferenceJobData = {
   status: string
   priority: number
   attempt_count: number
+  submission_source: string | null
   failure_code: string | null
   failure_reason: string | null
   created_at: string
@@ -56,5 +57,7 @@ export type ReferenceAnalysisData = {
   business_use_points: Json
   content_angles: Json
   risk_notes: Json
+  transcript_confidence: string | null
+  credits_used: number | null
   completed_at: string
 }

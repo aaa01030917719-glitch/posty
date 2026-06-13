@@ -1,12 +1,18 @@
 import 'server-only'
 
 import { createReferenceAnalysisTask, getReferencesQueueBatchSize, ManusApiError } from '@/lib/manus/client'
+import {
+  getReferenceAnalysisPolicyState,
+  REFERENCE_ANALYSIS_ESTIMATED_CREDITS,
+} from '@/lib/references/reference-analysis-policy'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 type QueueJob = {
   id: string
   user_id: string
   reference_id: string
+  is_auto_submit_allowed: boolean
+  submission_source: string
   attempt_count: number
   max_attempts: number
   manus_task_id: string | null
@@ -59,6 +65,8 @@ export async function processReferenceAnalysisQueue() {
       id,
       user_id,
       reference_id,
+      is_auto_submit_allowed,
+      submission_source,
       attempt_count,
       max_attempts,
       manus_task_id,
@@ -69,6 +77,8 @@ export async function processReferenceAnalysisQueue() {
       )
     `)
     .in('status', ['queued', 'retry_scheduled'])
+    .eq('is_auto_submit_allowed', true)
+    .is('manus_task_id', null)
     .or(`available_at.is.null,available_at.lte.${now}`)
     .order('priority', { ascending: false })
     .order('created_at', { ascending: true })
@@ -79,6 +89,23 @@ export async function processReferenceAnalysisQueue() {
   }
 
   for (const job of (jobs ?? []) as unknown as QueueJob[]) {
+    if (!job.is_auto_submit_allowed) {
+      results.push({ jobId: job.id, status: 'skipped', error: 'auto_submit_not_allowed' })
+      continue
+    }
+
+    if (job.manus_task_id) {
+      results.push({ jobId: job.id, status: 'skipped', error: 'manus_task_already_exists' })
+      continue
+    }
+
+    const policy = await getReferenceAnalysisPolicyState(admin, job.user_id)
+
+    if (policy.automaticBlockStatus) {
+      results.push({ jobId: job.id, status: policy.automaticBlockStatus })
+      continue
+    }
+
     const { data: claimed, error: claimError } = await admin
       .from('reference_analysis_jobs')
       .update({
@@ -89,6 +116,7 @@ export async function processReferenceAnalysisQueue() {
       })
       .eq('id', job.id)
       .in('status', ['queued', 'retry_scheduled'])
+      .eq('is_auto_submit_allowed', true)
       .is('manus_task_id', null)
       .select('id')
       .maybeSingle()
@@ -137,6 +165,8 @@ export async function processReferenceAnalysisQueue() {
           manus_request_id: task.requestId,
           task_create_request_id: task.requestId,
           submitted_at: new Date().toISOString(),
+          credits_used: null,
+          credit_usage: null,
           failure_code: null,
           failure_reason: null,
         })
@@ -185,5 +215,16 @@ export async function processReferenceAnalysisQueue() {
     }
   }
 
-  return { processed: results.length, results }
+  const submittedCount = results.filter((result) => result.status === 'submitted').length
+  const firstBlock = results.find((result) =>
+    result.status === 'auto_analysis_paused' ||
+    result.status === 'daily_submission_limit_reached'
+  )
+
+  return {
+    processed: submittedCount,
+    status: firstBlock?.status ?? (results.length > 0 ? 'processed' : 'no_due_jobs'),
+    estimatedCredits: REFERENCE_ANALYSIS_ESTIMATED_CREDITS,
+    results,
+  }
 }

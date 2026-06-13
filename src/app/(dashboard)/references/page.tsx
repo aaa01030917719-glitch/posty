@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { ReferenceRow } from '@/components/references/ReferenceRow'
 import type { ReferenceAnalysisStatus, ReferenceRowData } from '@/components/references/referenceTypes'
+import { getReferenceAnalysisDayRange } from '@/lib/references/reference-analysis-policy'
 import { createClient } from '@/lib/supabase/server'
 
 type ReferenceRecord = {
@@ -26,6 +28,11 @@ type JobRecord = {
   reference_id: string
   status: string
   created_at: string
+}
+
+type ReferenceAnalysisSettingsRecord = {
+  is_auto_analysis_paused: boolean
+  daily_submission_limit: number
 }
 
 function latestTimestamp(value: SourceRecord) {
@@ -128,16 +135,55 @@ export default async function ReferencesPage() {
     (sourcesResult.data ?? []) as SourceRecord[],
     (jobsResult.data ?? []) as JobRecord[]
   )
+  const dayRange = getReferenceAnalysisDayRange()
+  const [settingsResult, todayCountResult] = await Promise.all([
+    supabase
+      .from('reference_analysis_settings')
+      .select('is_auto_analysis_paused,daily_submission_limit')
+      .eq('user_id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('reference_analysis_jobs')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('submitted_at', dayRange.start)
+      .lt('submitted_at', dayRange.end),
+  ])
+
+  if (settingsResult.error || todayCountResult.error) {
+    throw new Error('Reference analysis settings could not be loaded')
+  }
+
+  const analysisSettings = settingsResult.data as ReferenceAnalysisSettingsRecord | null
+  const isAutoPaused = analysisSettings?.is_auto_analysis_paused ?? true
+  const dailyLimit = analysisSettings?.daily_submission_limit ?? 5
+  const todaySubmissionCount = todayCountResult.count ?? 0
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
-      <section className="space-y-1">
-        <h1 className="text-[24px] font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">
-          래퍼런스
-        </h1>
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Linkko에서 수집된 공개 래퍼런스와 분석 진행 상태를 확인합니다.
-        </p>
+      <section className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-[24px] font-bold tracking-[-0.03em] text-[var(--color-text-primary)]">
+            래퍼런스
+          </h1>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            Linkko에서 수집된 공개 래퍼런스와 분석 진행 상태를 확인합니다.
+          </p>
+          <div className="flex flex-wrap gap-2 text-xs text-[var(--color-text-muted)]">
+            <span className="rounded-[999px] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-2 py-1">
+              자동 분석 {isAutoPaused ? '일시정지' : '활성'}
+            </span>
+            <span className="rounded-[999px] border border-[var(--color-border-soft)] bg-[var(--color-bg-subtle)] px-2 py-1">
+              오늘 제출 {todaySubmissionCount} / {dailyLimit}
+            </span>
+          </div>
+        </div>
+        <Link
+          href="/references/settings"
+          className="inline-flex h-9 items-center justify-center rounded-[5px] border border-[var(--color-border-default)] px-3 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)]"
+        >
+          분석 설정
+        </Link>
       </section>
 
       <section className="overflow-hidden rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">

@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { ReferenceAnalyzeButton } from '@/components/references/ReferenceAnalyzeButton'
 import { ReferenceAnalysisSection } from '@/components/references/ReferenceAnalysisSection'
 import { ReferenceJobStatus } from '@/components/references/ReferenceJobStatus'
 import { ReferenceSourceList } from '@/components/references/ReferenceSourceList'
@@ -16,6 +17,7 @@ import type {
   ReferenceJobData,
   ReferenceSourceData,
 } from '@/components/references/referenceTypes'
+import { REFERENCE_ANALYSIS_ESTIMATED_CREDITS } from '@/lib/references/reference-analysis-policy'
 import { createClient } from '@/lib/supabase/server'
 
 type PageProps = {
@@ -99,6 +101,7 @@ export default async function ReferenceDetailPage({ params }: PageProps) {
         status,
         priority,
         attempt_count,
+        submission_source,
         failure_code,
         failure_reason,
         created_at,
@@ -120,6 +123,8 @@ export default async function ReferenceDetailPage({ params }: PageProps) {
             business_use_points,
             content_angles,
             risk_notes,
+            transcript_confidence,
+            credits_used,
             completed_at
           `)
           .eq('user_id', user.id)
@@ -136,6 +141,8 @@ export default async function ReferenceDetailPage({ params }: PageProps) {
             business_use_points,
             content_angles,
             risk_notes,
+            transcript_confidence,
+            credits_used,
             completed_at
           `)
           .eq('user_id', user.id)
@@ -153,6 +160,10 @@ export default async function ReferenceDetailPage({ params }: PageProps) {
   const sources = (sourcesResult.data ?? []) as ReferenceSourceData[]
   const latestJob = (jobResult.data ?? null) as ReferenceJobData | null
   const latestAnalysis = (latestAnalysisResult.data ?? null) as ReferenceAnalysisData | null
+  const activeJobStatus =
+    latestJob && ['queued', 'processing', 'submitted', 'retry_scheduled'].includes(latestJob.status)
+      ? latestJob.status
+      : null
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-5 bg-[var(--color-bg-canvas)] p-5 md:p-6">
@@ -197,15 +208,24 @@ export default async function ReferenceDetailPage({ params }: PageProps) {
             </div>
           </div>
 
-          <a
-            href={referenceRecord.canonical_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-[5px] border border-[var(--color-border-default)] px-3 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)]"
-          >
-            <ExternalLink size={15} />
-            원본 링크 열기
-          </a>
+          <div className="flex shrink-0 flex-col items-start gap-2 md:items-end">
+            <a
+              href={referenceRecord.canonical_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center justify-center gap-1 rounded-[5px] border border-[var(--color-border-default)] px-3 text-sm font-medium text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)]"
+            >
+              <ExternalLink size={15} />
+              원본 링크 열기
+            </a>
+            <ReferenceAnalyzeButton
+              referenceId={referenceRecord.id}
+              platform={referenceRecord.platform}
+              hasAnalysis={Boolean(latestAnalysis)}
+              activeJobStatus={activeJobStatus}
+              estimatedCredits={REFERENCE_ANALYSIS_ESTIMATED_CREDITS}
+            />
+          </div>
         </div>
       </section>
 
