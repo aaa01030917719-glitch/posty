@@ -1447,6 +1447,8 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const bodyEditorRef = useRef<HTMLDivElement | null>(null)
   const bodyEditorApiRef = useRef<RichTextEditorHandle | null>(null)
+  const editorWrapRef = useRef<HTMLDivElement | null>(null)
+  const stickyHeaderRef = useRef<HTMLDivElement | null>(null)
   const bodyImageUploadInputRef = useRef<HTMLInputElement | null>(null)
   const bodyEditorSelectionRef = useRef<Range | null>(null)
   const bodyLinkUrlInputRef = useRef<HTMLInputElement | null>(null)
@@ -1601,6 +1603,34 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
       isTiptapEditorEnabled,
     ]
   )
+
+  useEffect(() => {
+    const editorWrap = editorWrapRef.current
+    const stickyHeader = stickyHeaderRef.current
+
+    if (!editorWrap || !stickyHeader || loading || !card || card.is_deleted) return
+
+    const updateToolbarTop = () => {
+      const headerHeight = Math.ceil(stickyHeader.getBoundingClientRect().height)
+      editorWrap.style.setProperty('--posty-editor-toolbar-top', `${headerHeight}px`)
+    }
+
+    updateToolbarTop()
+
+    let resizeObserver: ResizeObserver | null = null
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateToolbarTop)
+      resizeObserver.observe(stickyHeader)
+    }
+
+    window.addEventListener('resize', updateToolbarTop)
+
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', updateToolbarTop)
+    }
+  }, [card, loading])
   const hasUnsavedChanges = savedDirtyKey !== null && currentDirtyKey !== savedDirtyKey
   const bodyTiptapDoc = useMemo(
     () => getTiptapDocForEditor(bodyDocDraft, bodyDraft),
@@ -3989,8 +4019,15 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
   return renderContentLayout(
     <>
       <div className="flex min-h-[620px] w-full flex-col bg-[var(--color-bg-surface)] xl:min-h-[640px] xl:flex-row">
-        <div className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]">
-          <div className="topbar sticky top-0 z-40 flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 sm:px-5">
+        <div
+          ref={editorWrapRef}
+          className="editor-wrap flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--color-bg-surface)]"
+        >
+          <div
+            ref={stickyHeaderRef}
+            className="sticky top-0 z-50 shrink-0 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] shadow-[var(--shadow-sm)]"
+          >
+            <div className="topbar flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 sm:px-5">
             <div className="breadcrumb flex min-w-0 flex-1 basis-[220px] items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
               <Link href="/content" className="transition-colors hover:text-[var(--color-text-body)]">
                 콘텐츠
@@ -4288,10 +4325,11 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
             )}
 
             {renderMediaAttachmentSection()}
+            </div>
           </div>
 
           {isTiptapEditorEnabled ? (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col">
               <PostyTiptapEditor
                 key={`${card.id}:${tiptapEditorRevision}`}
                 value={bodyTiptapDoc}
@@ -4312,6 +4350,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
                   }))
                 }}
                 uploadDisabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
+                toolbarStickyTop="calc(var(--posty-editor-toolbar-top, 0px) - 1px)"
               />
             </div>
           ) : (
@@ -4324,6 +4363,7 @@ export function ContentEditorShell({ cardId }: ContentEditorShellProps) {
               placeholder={EDITOR_PLACEHOLDER}
               onUploadMedia={(files) => uploadMediaFiles(files, 'inline')}
               uploadDisabled={isPreview || mediaUploading || !card || Boolean(card?.is_deleted)}
+              toolbarStickyTop="calc(var(--posty-editor-toolbar-top, 0px) - 1px)"
             />
           )}
         </div>

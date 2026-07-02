@@ -158,6 +158,8 @@ function getShareUrl(token: string) {
 export default function ShareMaterialsPage() {
   const searchParams = useSearchParams()
   const sectionTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
+  const editorSurfaceRef = useRef<HTMLElement | null>(null)
+  const stickyHeaderRef = useRef<HTMLDivElement | null>(null)
   const [materials, setMaterials] = useState<ShareMaterialLink[]>([])
   const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null)
   const [titleDrafts, setTitleDrafts] = useState<Record<string, string>>({})
@@ -217,6 +219,34 @@ export default function ShareMaterialsPage() {
 
     return () => window.clearTimeout(timer)
   }, [toastMessage])
+
+  useEffect(() => {
+    const editorSurface = editorSurfaceRef.current
+    const stickyHeader = stickyHeaderRef.current
+
+    if (!editorSurface || !stickyHeader || loading || !selectedMaterial || !selectedCard) return
+
+    const updateToolbarTop = () => {
+      const headerHeight = Math.ceil(stickyHeader.getBoundingClientRect().height)
+      editorSurface.style.setProperty('--posty-share-toolbar-top', `${headerHeight}px`)
+    }
+
+    updateToolbarTop()
+
+    let resizeObserver: ResizeObserver | null = null
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateToolbarTop)
+      resizeObserver.observe(stickyHeader)
+    }
+
+    window.addEventListener('resize', updateToolbarTop)
+
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', updateToolbarTop)
+    }
+  }, [loading, selectedCard, selectedMaterial])
 
   useEffect(() => {
     let cancelled = false
@@ -836,10 +866,16 @@ export default function ShareMaterialsPage() {
             </div>
           </aside>
 
-          <section className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+          <section
+            ref={editorSurfaceRef}
+            className="min-w-0 rounded-[var(--radius-xl)] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]"
+          >
             {selectedMaterial && selectedCard ? (
               <div className="flex min-h-full flex-col">
-                <div className="border-b border-[var(--color-border-soft)] px-5 py-4">
+                <div
+                  ref={stickyHeaderRef}
+                  className="sticky top-0 z-50 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-5 py-4 shadow-[var(--shadow-sm)]"
+                >
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-[var(--color-accent)]">공유 자료</p>
@@ -1021,7 +1057,7 @@ export default function ShareMaterialsPage() {
                     )}
                   </section>
 
-                  <div className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
+                  <div className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-visible rounded-[var(--radius-lg)] border border-[var(--color-border-soft)] bg-[var(--color-bg-surface)]">
                     {isTiptapOptIn ? (
                       <PostyTiptapEditor
                         key={selectedCard.id}
@@ -1045,6 +1081,7 @@ export default function ShareMaterialsPage() {
                         }}
                         uploadDisabled={mediaUploading || !selectedCard}
                         placeholder={'怨듭쑀???댁슜??泥섏쓬遺???앷퉴吏 ?댁뼱???묒꽦?대낫?몄슂...'}
+                        toolbarStickyTop="calc(var(--posty-share-toolbar-top, 0px) - 1px)"
                       />
                     ) : (
                     <RichTextEditor
@@ -1058,6 +1095,7 @@ export default function ShareMaterialsPage() {
                       className="flex min-h-0 flex-1 flex-col"
                       bodyClassName="editor-body-wrap flex min-h-0 flex-1 flex-col px-4 py-3 sm:px-6"
                       editorClassName="min-h-[460px]"
+                      toolbarStickyTop="calc(var(--posty-share-toolbar-top, 0px) - 1px)"
                     />
                     )}
                   </div>

@@ -11,6 +11,7 @@ import {
   Strikethrough,
   type LucideIcon,
 } from 'lucide-react'
+import type { CSSProperties } from 'react'
 
 export type MarkdownToolbarAction =
   | 'largeHeading'
@@ -38,6 +39,7 @@ type MarkdownToolbarProps = {
   className?: string
   toolbarClassName?: string
   showMediaAction?: boolean
+  stickyTop?: CSSProperties['top']
 }
 
 type MarkdownSelectionResult = {
@@ -290,9 +292,13 @@ export function MarkdownToolbar({
   className,
   toolbarClassName,
   showMediaAction = false,
+  stickyTop = 0,
 }: MarkdownToolbarProps) {
   return (
-    <div className={className ?? 'toolbar-wrap shrink-0 border-b border-[var(--color-border-soft)] px-4 sm:px-6 lg:px-11'}>
+    <div
+      className={className ?? 'toolbar-wrap sticky z-40 shrink-0 border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 shadow-[var(--shadow-sm)] sm:px-6 lg:px-11'}
+      style={{ top: stickyTop }}
+    >
       <div className={toolbarClassName ?? 'toolbar flex min-h-10 items-center gap-1 overflow-x-auto py-1'}>
         {MARKDOWN_TOOLBAR_ITEMS.filter((item) => !item.mediaOnly || showMediaAction).map((item) => {
           const Icon = item.icon

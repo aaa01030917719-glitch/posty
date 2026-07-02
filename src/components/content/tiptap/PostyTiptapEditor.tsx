@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import type { JSONContent } from '@tiptap/react'
 import { Fragment, Slice } from '@tiptap/pm/model'
@@ -23,6 +23,7 @@ type PostyTiptapEditorProps = {
   inlineMediaItems?: PostyInlineMediaItem[]
   onUploadInlineImages?: (files: File[]) => Promise<PostyInlineMediaItem[]>
   uploadDisabled?: boolean
+  toolbarStickyTop?: CSSProperties['top']
 }
 
 export function PostyTiptapEditor({
@@ -34,6 +35,7 @@ export function PostyTiptapEditor({
   inlineMediaItems = [],
   onUploadInlineImages,
   uploadDisabled = false,
+  toolbarStickyTop,
 }: PostyTiptapEditorProps) {
   const inlineMediaItemsRef = useRef<PostyInlineMediaItem[]>(inlineMediaItems)
   const uploadInlineImagesHandlerRef = useRef<(files: File[], position?: number) => void>(
@@ -169,7 +171,7 @@ export function PostyTiptapEditor({
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-w-0 flex-col">
       {bodyHeader}
       <PostyTiptapToolbar
         editor={editor}
@@ -177,6 +179,7 @@ export function PostyTiptapEditor({
         imageUploadDisabled={uploadDisabled || !onUploadInlineImages}
         imageUploading={inlineImageUploading}
         onUploadImages={(files) => uploadInlineImages(files)}
+        stickyTop={toolbarStickyTop}
       />
 
       <section className="posty-tiptap-editor min-w-0 px-4 pb-4 sm:px-6 lg:px-11">

@@ -9,6 +9,7 @@ import {
   useState,
   type ChangeEvent,
   type ClipboardEvent,
+  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react'
@@ -43,6 +44,7 @@ type RichTextEditorProps = {
   uploadDisabledMessage?: string
   uploadDisabled?: boolean
   showMediaAction?: boolean
+  toolbarStickyTop?: CSSProperties['top']
 }
 
 const RICH_TEXT_PLACEHOLDER = '\uD14D\uC2A4\uD2B8'
@@ -876,6 +878,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       uploadDisabled = false,
       uploadDisabledMessage = DEFAULT_UPLOAD_DISABLED_MESSAGE,
       showMediaAction = true,
+      toolbarStickyTop,
     },
     ref
   ) {
@@ -1409,6 +1412,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           onAction={handleToolbarAction}
           disabled={disabled}
           showMediaAction={showMediaAction}
+          stickyTop={toolbarStickyTop}
         />
         {linkPopoverOpen ? (
           <div className="border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 py-3 sm:px-6 lg:px-11">

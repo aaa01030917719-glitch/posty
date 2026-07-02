@@ -1,6 +1,13 @@
 'use client'
 
-import { useRef, useState, type ChangeEvent, type MouseEvent, type ReactNode } from 'react'
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type ChangeEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 import type { Editor } from '@tiptap/react'
 import {
   Bold,
@@ -29,6 +36,7 @@ type PostyTiptapToolbarProps = {
   imageUploadDisabled?: boolean
   imageUploading?: boolean
   onUploadImages?: (files: File[]) => void
+  stickyTop?: CSSProperties['top']
 }
 
 type OpenPopover = 'size' | 'color' | 'link' | 'table' | null
@@ -133,6 +141,7 @@ export function PostyTiptapToolbar({
   imageUploadDisabled = false,
   imageUploading = false,
   onUploadImages,
+  stickyTop = 0,
 }: PostyTiptapToolbarProps) {
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const [openPopover, setOpenPopover] = useState<OpenPopover>(null)
@@ -174,7 +183,10 @@ export function PostyTiptapToolbar({
   }
 
   return (
-    <div className="toolbar-wrap relative shrink-0 overflow-visible border-b border-[var(--color-border-soft)] px-4 sm:px-6 lg:px-11">
+    <div
+      className="toolbar-wrap sticky z-40 shrink-0 overflow-visible border-b border-[var(--color-border-soft)] bg-[var(--color-bg-surface)] px-4 shadow-[var(--shadow-sm)] sm:px-6 lg:px-11"
+      style={{ top: stickyTop }}
+    >
       <div className="toolbar flex min-h-10 min-w-max items-center gap-1 overflow-x-auto py-1">
         <ToolbarButton
           active={editor.isActive('heading', { level: 2 })}
