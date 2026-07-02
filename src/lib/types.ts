@@ -4,6 +4,28 @@ export type ContentKind = 'content' | 'share_material'
 export type ContentMediaType = 'image' | 'video' | 'file'
 export type Priority = 'low' | 'normal' | 'high'
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+export type ReelsAnalyticsScreenType =
+  | 'talking'
+  | 'site_video'
+  | 'photo'
+  | 'image'
+  | 'ai_image'
+  | 'subtitles'
+  | 'mixed'
+export type ReelsAnalyticsHookType =
+  | 'regret'
+  | 'top'
+  | 'recommendation'
+  | 'cost'
+  | 'comparison'
+  | 'insider_exposure'
+  | 'checklist'
+  | 'founder_opinion'
+  | 'counterintuitive'
+  | 'before_after'
+  | 'mistake_prevention'
+  | 'other'
+export type ReelsAnalyticsSnapshotType = '24h' | '7d' | '30d' | 'current'
 
 export interface Profile {
   id: string
@@ -259,6 +281,74 @@ export interface ContentActivityLog {
   project?: ContentProjectSummary | null
 }
 
+export interface ReelsAnalytics {
+  id: string
+  user_id: string
+  upload_date: string
+  title: string
+  topic: string | null
+  category: string | null
+  thumbnail_title: string | null
+  video_length_seconds: number | null
+  upload_time: string | null
+  upload_weekday: string | null
+  tags: string[]
+  script_original: string | null
+  first_sentence_hook: string | null
+  hook_char_count: number | null
+  twist_sentence: string | null
+  cta: string | null
+  comment_keyword: string | null
+  screen_type: ReelsAnalyticsScreenType | null
+  bgm: string | null
+  scene_change_interval_seconds: number | null
+  first_info_time_seconds: number | null
+  hook_types: ReelsAnalyticsHookType[]
+  info_density: number | null
+  has_product_name: boolean
+  product_name_count: number
+  has_brand_name: boolean
+  brand_name_count: number
+  has_model_name: boolean
+  model_name_count: number
+  has_cost: boolean
+  number_count: number
+  has_checklist: boolean
+  has_real_case: boolean
+  has_before_after: boolean
+  has_site_photo: boolean
+  success_reason: string | null
+  failure_reason: string | null
+  improvement_idea: string | null
+  next_content_idea: string | null
+  reusable: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ReelsAnalyticsSnapshot {
+  id: string
+  user_id: string
+  reel_id: string
+  snapshot_type: ReelsAnalyticsSnapshotType
+  views: number
+  reach: number
+  avg_watch_time_seconds: number
+  avg_watch_rate: number
+  completion_rate: number
+  likes: number
+  comments: number
+  saves: number
+  shares: number
+  profile_visits: number
+  follower_growth: number
+  dm_count: number
+  inquiry_count: number
+  contract_count: number
+  created_at: string
+  updated_at: string
+}
+
 export interface Scene {
   id: string
   script_id: string
@@ -468,6 +558,29 @@ export type Database = {
           id?: string; created_at?: string
         }
         Update: Partial<Omit<ContentActivityLog, 'id' | 'created_at' | 'card' | 'project'>>
+      }
+      reels_analytics: {
+        Row: ReelsAnalytics
+        Insert: Omit<ReelsAnalytics, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<Omit<ReelsAnalytics, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+      }
+      reels_analytics_snapshots: {
+        Row: ReelsAnalyticsSnapshot
+        Insert: Omit<ReelsAnalyticsSnapshot, 'id' | 'created_at' | 'updated_at'> & {
+          id?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: Partial<
+          Omit<
+            ReelsAnalyticsSnapshot,
+            'id' | 'user_id' | 'reel_id' | 'snapshot_type' | 'created_at' | 'updated_at'
+          >
+        >
       }
       ideas: {
         Row: Idea

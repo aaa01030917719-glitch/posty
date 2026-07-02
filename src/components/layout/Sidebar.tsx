@@ -22,6 +22,7 @@ import { createClient } from '@/lib/supabase/client'
 const NAV_ITEMS = [
   { href: '/schedule', label: '\uC77C\uC815', icon: Calendar },
   { href: '/content', label: '\uCF58\uD150\uCE20', icon: LayoutGrid },
+  { href: '/reels-analytics', label: '\uB9B4\uC2A4 \uBD84\uC11D', icon: BarChart2 },
   { href: '/ideas', label: '\uC544\uC774\uB514\uC5B4', icon: Lightbulb },
   { href: '/share-materials', label: '\uACF5\uC720 \uC790\uB8CC', icon: Share2 },
   { href: '/references', label: '\uB798\uD37C\uB7F0\uC2A4', icon: Library },
